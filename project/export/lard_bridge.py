@@ -83,7 +83,7 @@ def generate_frame_times(n_frames, fps):
     base_year = random.randint(2020, 2025)
     base_month = random.randint(1, 12)
     base_day = random.randint(1, 28)
-    base_hour = random.randint(6, 18)  # heures de jour
+    base_hour = random.randint(9, 16)  # heures de plein jour (evite crepuscule)
     base_minute = random.randint(0, 59)
     base_second = random.randint(0, 59)
 
@@ -143,8 +143,8 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
         scenario, _ = dataset.create_scenario(
             flight_data,
             fov_vertical=30,
-            width=3840,
-            height=2160,
+            width=2448,
+            height=2048,
             nb_frames=n_frames,
             fps=cfg.fps,
             times=times,

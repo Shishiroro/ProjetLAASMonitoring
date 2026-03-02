@@ -19,13 +19,13 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="10"
+                   min="12"
                    max="15"/>
 
         <parameter name="segment_start_m"
                    type="real"
-                   min="1000"
-                   max="5000"/>
+                   min="2000"
+                   max="6000"/>
 
         <parameter name="segment_end_m"
                    type="real"
@@ -34,7 +34,7 @@
 
         <parameter name="ground_speed_kts"
                    type="real"
-                   min="160"
+                   min="180"
                    max="180"/>
 
         <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
@@ -42,7 +42,7 @@
         <parameter name="correlation_time_s"
                    type="real"
                    min="3"
-                   max="12"/>
+                   max="8"/>
 
         <parameter name="turbulence_intensity"
                    type="real"
@@ -65,8 +65,8 @@
 
         <parameter name="stabilization_distance_m"
                    type="real"
-                   min="400"
-                   max="1000"/>
+                   min="600"
+                   max="1500"/>
 
         <!-- ===== Piste cible (format ICAO_RWY) ===== -->
 
@@ -93,6 +93,29 @@
         <!-- La stabilisation commence avant le debut d'approche -->
         <constraint name="stab_lt_start"
                     expressions="scenario[i]\segment_start_m SUPEQ scenario[i]\stabilization_distance_m"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+        <!-- Couplage turbulence / correlation_time :
+             Forte turbulence → tau petit (fluctuations rapides)
+             Temps calme → tau grand (deviations lentes)
+             correlation_time + 5 * turbulence <= 10
+               turb=0   → tau<=10
+               turb=0.5 → tau<=7.5
+               turb=1   → tau<=5  -->
+        <constraint name="turb_tau_coupling"
+                    expressions="scenario[i]\correlation_time_s + 5 * scenario[i]\turbulence_intensity INFEQ 10"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+        <!-- Marge entre stabilisation et fin d'approche :
+             La zone de convergence doit etre assez large pour que
+             la trajectoire ait le temps de se stabiliser naturellement.
+             stab >= end + 200  -->
+        <constraint name="stab_margin"
+                    expressions="scenario[i]\stabilization_distance_m SUPEQ scenario[i]\segment_end_m + 200"
                     quantifiers="i"
                     ranges="[0, 0]"
                     types="forall"/>

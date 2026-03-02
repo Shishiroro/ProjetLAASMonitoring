@@ -51,11 +51,11 @@ class OUParams:
     yaw_deg: float = 0.0            # yaw moyen (deviation)
     roll_deg: float = 0.0           # roll moyen
 
-    std_alpha_v_deg: float = 0.4    # ecart-type vertical
-    std_alpha_h_deg: float = 2.0    # ecart-type horizontal
-    std_yaw_deg: float = 5.0        # ecart-type yaw
-    std_pitch_deg: float = 2.0      # ecart-type pitch
-    std_roll_deg: float = 5.0       # ecart-type roll
+    std_alpha_v_deg: float = 0.4    # ecart-type vertical (LARDv2: 0.4)
+    std_alpha_h_deg: float = 2.0    # ecart-type horizontal (LARDv2: 2.0)
+    std_yaw_deg: float = 5.0        # ecart-type yaw (LARDv2: 5.0)
+    std_pitch_deg: float = 2.0      # ecart-type pitch (LARDv2: 2.0)
+    std_roll_deg: float = 5.0       # ecart-type roll (LARDv2: 5.0)
 
     dist_ap_m: float = 300.0        # distance aiming point depuis LTP
 
@@ -93,18 +93,24 @@ def compute_spatial_timeline(cfg: TrajectoryConfig):
 # Processus Ornstein-Uhlenbeck a dt variable
 # ---------------------------------------------------------------------------
 
-def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0):
+def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
+                        conv_factors=None):
     """
-    Processus OU discret avec pas de temps variables.
+    Processus OU discret avec pas de temps variables et convergence integree.
 
     x[i+1] = mean + (x[i] - mean) * exp(-dt/tau) + sigma_d * N(0,1)
-    ou sigma_d = std * sqrt(1 - exp(-2*dt/tau))
+    ou sigma_d = std_i * sqrt(1 - exp(-2*dt/tau))
+
+    Si conv_factors est fourni, le std varie par pas (std_i = std * conv[i]).
+    Le processus OU converge alors naturellement vers mean car le bruit
+    injecte diminue progressivement, tout en gardant la correlation temporelle.
 
     :param n_steps: nombre de pas
     :param dt_array: array de dt (n_steps-1,)
     :param correlation_time: tau du processus OU (secondes)
-    :param std: ecart-type stationnaire
+    :param std: ecart-type stationnaire de base
     :param mean: moyenne de reversion
+    :param conv_factors: ndarray (n_steps,) facteurs de convergence [0,1]
     :return: ndarray (n_steps,)
     """
     if n_steps <= 0:
@@ -112,12 +118,15 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0):
 
     tau = max(correlation_time, 1e-6)
     x = np.zeros(n_steps)
-    x[0] = mean + std * np.random.randn()
+
+    std_0 = std * (conv_factors[0] if conv_factors is not None else 1.0)
+    x[0] = mean + std_0 * np.random.randn()
 
     for i in range(1, n_steps):
         dt = dt_array[min(i - 1, len(dt_array) - 1)]
         decay = np.exp(-dt / tau)
-        sigma_d = std * np.sqrt(max(1.0 - np.exp(-2.0 * dt / tau), 0.0))
+        std_i = std * (conv_factors[i] if conv_factors is not None else 1.0)
+        sigma_d = std_i * np.sqrt(max(1.0 - np.exp(-2.0 * dt / tau), 0.0))
         x[i] = mean + (x[i - 1] - mean) * decay + sigma_d * np.random.randn()
 
     return x
@@ -128,13 +137,17 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0):
 # ---------------------------------------------------------------------------
 
 def compute_convergence_factors(distances_m, segment_end_m,
-                                stabilization_distance_m, exponent=2.0):
+                                stabilization_distance_m,
+                                exponent=0.5, residual=0.08):
     """
-    Facteurs de convergence : 1.0 loin, → 0.0 pres de la piste.
+    Facteurs de convergence : 1.0 loin, → residual pres de la piste.
 
-    conv(d) = clamp((d - end) / (stab - end), 0, 1) ^ exponent
+    conv(d) = residual + (1 - residual) * clamp((d - end) / (stab - end), 0, 1) ^ exponent
 
-    :return: ndarray (len(distances_m),) dans [0, 1]
+    Le residual (defaut 8%) empeche les deviations de tomber a zero,
+    gardant un bruit realiste meme en courte finale.
+
+    :return: ndarray (len(distances_m),) dans [residual, 1]
     """
     factors = np.ones(len(distances_m))
     if stabilization_distance_m <= segment_end_m:
@@ -143,7 +156,8 @@ def compute_convergence_factors(distances_m, segment_end_m,
     for i, d in enumerate(distances_m):
         if d < stabilization_distance_m:
             ratio = (d - segment_end_m) / (stabilization_distance_m - segment_end_m)
-            factors[i] = np.clip(ratio, 0.0, 1.0) ** exponent
+            raw = np.clip(ratio, 0.0, 1.0) ** exponent
+            factors[i] = residual + (1.0 - residual) * raw
 
     return factors
 
@@ -193,9 +207,17 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     n_frames = len(distances_m)
 
     # --- Scaling turbulence ---
-    turb_scale = 0.2 + 0.8 * max(0.0, cfg.turbulence_intensity)
+    # turb=0 → scale=0.1 (quasi ILS), turb=0.5 → scale=0.55, turb=1 → scale=1.0
+    turb_scale = 0.1 + 0.9 * max(0.0, cfg.turbulence_intensity)
 
-    # --- OU deviations par canal ---
+    # --- Convergence (integree dans l'OU) ---
+    conv = compute_convergence_factors(
+        distances_m, cfg.segment_end_m, cfg.stabilization_distance_m
+    )
+
+    # --- OU deviations par canal (avec convergence integree) ---
+    # Le std diminue progressivement via conv_factors, ce qui fait
+    # converger le processus OU naturellement vers 0 sans "snap".
     def _ou(std, mean=0.0):
         return generate_ou_process(
             n_steps=n_frames,
@@ -203,6 +225,7 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
             correlation_time=cfg.correlation_time_s,
             std=std * turb_scale,
             mean=mean,
+            conv_factors=conv,
         )
 
     alpha_v_dev = _ou(ou.std_alpha_v_deg)
@@ -210,16 +233,6 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     yaw_dev     = _ou(ou.std_yaw_deg)
     pitch_dev   = _ou(ou.std_pitch_deg)
     roll_dev    = _ou(ou.std_roll_deg)
-
-    # --- Convergence ---
-    conv = compute_convergence_factors(
-        distances_m, cfg.segment_end_m, cfg.stabilization_distance_m
-    )
-    alpha_v_dev *= conv
-    alpha_h_dev *= conv
-    yaw_dev     *= conv
-    pitch_dev   *= conv
-    roll_dev    *= conv
 
     # --- Crab angle par frame ---
     crab_angles = np.array([
@@ -230,18 +243,33 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
         for i in range(n_frames)
     ])
 
+    # --- Calcul altitudes brutes puis lissage monotone ---
+    raw_alts = np.zeros(n_frames)
+    for i in range(n_frames):
+        alpha_v = ou.alpha_v_deg + alpha_v_dev[i]
+        alpha_v = np.clip(alpha_v, -6.0, -0.5)  # toujours en descente, range realiste
+        raw_alts[i] = ltp_alt + (-np.tan(np.deg2rad(alpha_v))
+                                  * (distances_m[i] + ou.dist_ap_m))
+        raw_alts[i] = max(raw_alts[i], ltp_alt + 1.0)
+
+    # Enforce quasi-monotone descent : on autorise de petites remontees
+    # mais on plafonne le taux de montee a une valeur physique realiste.
+    # ~1.5 m/s ≈ 300 ft/min : limite haute d'une rafale verticale en approche.
+    # Converti en par-frame via dt reel (depend de vitesse + fps).
+    max_climb_rate_ms = 1.5
+    dt_frame = dt_array[0]  # constant (vitesse constante)
+    max_climb_per_frame = max_climb_rate_ms * dt_frame
+    for i in range(1, n_frames):
+        if raw_alts[i] > raw_alts[i - 1] + max_climb_per_frame:
+            raw_alts[i] = raw_alts[i - 1] + max_climb_per_frame
+
     # --- Assemblage des poses ---
     g = pyproj.Geod(ellps='WGS84')
     flight_data = []
 
     for i in range(n_frames):
         dist = distances_m[i]
-
-        # Altitude via angle vertical + deviation OU
-        alpha_v = ou.alpha_v_deg + alpha_v_dev[i]
-        alpha_v = np.clip(alpha_v, -6.0, -0.5)
-        alt = ltp_alt + (-np.tan(np.deg2rad(alpha_v)) * (dist + ou.dist_ap_m))
-        alt = max(alt, ltp_alt + 1.0)
+        alt = raw_alts[i]
 
         # Position horizontale via angle horizontal + deviation OU
         alpha_h = ou.alpha_h_deg + alpha_h_dev[i]

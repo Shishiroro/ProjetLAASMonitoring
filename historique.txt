@@ -1,0 +1,81 @@
+================================================================
+HISTORIQUE DU PROJET LARD-LAAS-TAF
+================================================================
+Resume des decisions et features implementees.
+
+================================================================
+Phase 0 — Travail sur LARDv2 (projet precedent)
+================================================================
+Repo : C:\Users\Sr-Sh\Desktop\LARDV2\
+Branch : trajectoireRealiste
+
+Ce qui a ete fait :
+- Mode sequentiel ajoute dans LARD : trajectoires d'approche
+  temporellement correlees (au lieu de poses independantes)
+- Processus Ornstein-Uhlenbeck a dt variable pour :
+  alpha_v, alpha_h, yaw, pitch, roll
+- Formule : x[i+1] = mean + (x[i] - mean) * exp(-dt/tau) + sigma_d * N(0,1)
+- Timeline spatiale : frames uniformes en distance, dt variable
+  (l'avion decelere → dt augmente entre les frames)
+- Convergence en finale : les deviations OU tendent vers 0
+  pres de la piste. conv(d) = clamp((d-end)/(stab-end), 0, 1)^2
+- Crab angle : angle de correction vent, converge aussi
+- Profils d'approche (ILS, visual, windy, unstabilized) — RETIRE
+  dans le nouveau projet, on garde les parametres OU bruts
+- Clamp altitude >= ltp_alt + 1.0 (jamais sous la piste)
+
+Fichiers cles crees/modifies :
+- LARD/src/trajectory/sequence_generator.py (nouveau)
+- LARD/src/trajectory/ou_process.py (nouveau)
+- LARD/src/trajectory/approach_profiles.py (nouveau)
+- LARD/src/scenario/default_scenario_values.py (modifie)
+- LARD/pages/step2_Scenario_Generation.py (modifie)
+
+Probleme identifie :
+- Les parametres utilisateur etaient melanges au code LARD de base
+- Streamlit ajoutait de la complexite inutile
+- Pas de separation claire entre generation de scenarios et calcul
+
+================================================================
+Phase 1 — Decouplage et migration vers LARD-LAAS-TAF
+================================================================
+Date : 2026-02-28
+Repo : C:\Users\Sr-Sh\Desktop\LARD-LAAS-TAF\
+
+Decisions :
+- Nouveau projet independant
+- LARD clone vierge, importe comme bibliotheque (geo, export .esp/.yaml)
+- TAF (LAAS) utilise pour le sampling de scenarios sous contraintes
+- Pas de Streamlit, tout via code/CLI
+- Profils d'approche retires (parametres OU directement)
+- Vitesse constante ~137 kts (Vref approche standard)
+- fps entre 1 et 15
+- Distance fin approche minimum 280m
+
+Architecture choisie :
+- XML template → TAF Generation (z3 solver) → Export.py (notre code) → .esp/.yaml
+- Style : dataclasses pour configs, fonctions pures pour algorithmes
+- Voir CLAUDE.md pour la structure complete
+
+Ce qui a ete fait :
+- [x] CLAUDE.md cree
+- [x] historique.txt cree 
+- [x] Structure project/ creee
+- [x] trajectory_template.xml ecrit (10 params, 3 contraintes z3)
+- [x] trajectory_builder.py migre depuis LARDv2
+      - Fonctions pures : compute_spatial_timeline, generate_ou_process,
+        compute_convergence_factors, compute_crab_angle, build_trajectory
+      - Dataclasses : TrajectoryConfig (params XML), OUParams (hyperparams)
+- [x] lard_bridge.py cree
+      - get_runway_geometry, export_scenario (.esp + .yaml)
+      - Contournement CWD pour template.json LARD (_lard_cwd)
+- [x] Export.py implemente (point d'entree TAF)
+      - Lit parametres z3, construit configs, genere trajectoire, exporte
+- [x] main.py + Generate.py + settings.xml crees
+      - Pre-creation dossiers (contournement mkdir -p Windows)
+      - sys.path : project/export/ avant taf/src/ pour Export.py
+- [x] Tests de bout en bout — 3 scenarios generes avec succes
+      - Diversite z3 validee (aeroports, fps, distances, vent)
+      - .esp (~800KB) et .yaml (metadonnees propres) generes
+
+================================================================
