@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!--
+    trajectory_template.xml — Contraintes utilisateur pour TAF
+    ==========================================================
+    TAF (z3 solver) echantillonne des scenarios d'approche valides
+    a partir de ces parametres et contraintes.
+
+    L'utilisateur modifie les min/max/values selon ses besoins.
+    TAF genere nb_test_cases scenarios (voir settings.xml).
+
+    airport_runway : format "ICAO_RWY" (ex: "LFPO_06").
+    Voir LARD/data/filtered_runways_database_Final.json pour la liste.
+-->
+<root name="test_case">
+
+    <node name="scenario" nb_instances="1">
+
+        <!-- ===== Parametres temporels / spatiaux ===== -->
+
+        <parameter name="fps"
+                   type="integer"
+                   min="10"
+                   max="15"/>
+
+        <parameter name="segment_start_m"
+                   type="real"
+                   min="1000"
+                   max="5000"/>
+
+        <parameter name="segment_end_m"
+                   type="real"
+                   min="280"
+                   max="1000"/>
+
+        <parameter name="ground_speed_kts"
+                   type="real"
+                   min="160"
+                   max="180"/>
+
+        <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
+
+        <parameter name="correlation_time_s"
+                   type="real"
+                   min="3"
+                   max="12"/>
+
+        <parameter name="turbulence_intensity"
+                   type="real"
+                   min="0"
+                   max="1"/>
+
+        <!-- ===== Vent ===== -->
+
+        <parameter name="wind_speed_kts"
+                   type="real"
+                   min="20"
+                   max="20"/>
+
+        <parameter name="wind_direction_deg"
+                   type="real"
+                   min="0"
+                   max="359"/>
+
+        <!-- ===== Convergence finale ===== -->
+
+        <parameter name="stabilization_distance_m"
+                   type="real"
+                   min="400"
+                   max="1000"/>
+
+        <!-- ===== Piste cible (format ICAO_RWY) ===== -->
+
+        <parameter name="airport_runway"
+                   type="string"
+                   values="LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R"/>
+
+        <!-- ===== Contraintes ===== -->
+
+        <!-- Le debut d'approche doit etre plus loin que la fin -->
+        <constraint name="start_gt_end"
+                    expressions="scenario[i]\segment_start_m SUP scenario[i]\segment_end_m"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+        <!-- La stabilisation commence apres la fin d'approche -->
+        <constraint name="stab_gt_end"
+                    expressions="scenario[i]\stabilization_distance_m SUP scenario[i]\segment_end_m"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+        <!-- La stabilisation commence avant le debut d'approche -->
+        <constraint name="stab_lt_start"
+                    expressions="scenario[i]\segment_start_m SUPEQ scenario[i]\stabilization_distance_m"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+    </node>
+
+</root>

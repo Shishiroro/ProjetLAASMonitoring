@@ -1,0 +1,639 @@
+================================================================
+DOCUMENTATION COMPLETE — LARD-LAAS-TAF
+================================================================
+Date : 2026-02-28
+Auteurs : ONERA, IRT Saint Exupery, Airbus, DGA
+
+Ce document explique en detail tout ce qui a ete fait dans ce
+projet, fichier par fichier, avec les liens entre les composants.
+
+
+================================================================
+1. CONTEXTE ET ORIGINE
+================================================================
+
+Ce projet vient de LARDv2 (C:\Users\Sr-Sh\Desktop\LARDV2\).
+
+Dans LARDv2, on avait ajoute un mode "sequentiel" pour generer
+des trajectoires d'approche realistes (au lieu des poses
+independantes du LARD original). Le probleme : tout etait
+melange dans le code LARD + une interface Streamlit lourde.
+
+Decision : decoupler dans un projet independant qui :
+  - Utilise TAF (Testing Automation Framework du LAAS) pour
+    echantillonner des scenarios sous contraintes (solveur z3)
+  - Importe LARD comme bibliotheque (sans le modifier) pour
+    l'export vers Google Earth Studio (.esp) et le labeling (.yaml)
+  - Fonctionne en pur code/CLI (pas de Streamlit)
+
+
+================================================================
+2. LE PIPELINE COMPLET
+================================================================
+
+Le pipeline se lit de haut en bas :
+
+  trajectory_template.xml   (contraintes utilisateur)
+          |
+          v
+  TAF / z3 solver           (genere N jeux de parametres valides)
+          |
+          v
+  Export.py                 (point d'entree appele par TAF)
+          |
+          v
+  trajectory_builder.py     (calcul de la trajectoire OU)
+          |
+          v
+  lard_bridge.py            (conversion en .esp/.yaml via LARD)
+          |
+          v
+  output/                   (.esp + .yaml par scenario)
+
+En une phrase : l'utilisateur definit des plages de parametres
+dans le XML, TAF genere des combinaisons valides via z3, et
+pour chaque combinaison notre code calcule une trajectoire
+d'approche realiste puis l'exporte.
+
+
+================================================================
+3. STRUCTURE DES FICHIERS
+================================================================
+
+LARD-LAAS-TAF/
+|
+|-- LARD/                          # Clone vierge de LARD
+|   |-- data/
+|   |   |-- filtered_runways_      # Base de donnees de 3200 aeroports
+|   |   |   database_Final.json    # avec coordonnees des pistes
+|   |   |-- template.json          # Template .esp pour Google Earth Studio
+|   |-- src/
+|       |-- geo/
+|       |   |-- geo_utils.py       # Conversions ECEF/LLH, geodesie
+|       |   |-- geo_dataset.py     # compute_aiming_point, GEODataset
+|       |-- scenario/
+|           |-- scenario_config.py # ScenarioConfig
+|           |-- write_scenario.py  # Pipeline export LARD original
+|
+|-- taf/                           # Clone du framework TAF (LAAS)
+|   |-- src/
+|       |-- Taf.py                 # CLI + Settings + Path
+|       |-- Generator.py           # Solveur z3
+|       |-- Tree.py                # Arbre de donnees, appel export()
+|       |-- Node.py                # Node + Container
+|       |-- Parameter.py           # Types de parametres
+|       |-- Constraint.py          # Contraintes z3
+|       |-- Export.py              # Stub minimal (remplace par le notre)
+|
+|-- project/                       # *** NOTRE CODE ***
+|   |-- templates/
+|   |   |-- trajectory_template.xml  # Contraintes utilisateur
+|   |-- export/
+|   |   |-- Export.py              # Point d'entree TAF
+|   |   |-- trajectory_builder.py  # Algorithme OU complet
+|   |   |-- lard_bridge.py        # Interface avec LARD
+|   |   |-- __init__.py            # Package Python
+|   |-- Generate.py                # Script de lancement TAF
+|   |-- settings.xml               # Config TAF (chemins, nb scenarios)
+|
+|-- output/                        # Scenarios generes (cree automatiquement)
+|   |-- scenario_0/
+|   |   |-- scenario_0.xml         # Parametres generes par z3 (TAF)
+|   |   |-- artifact_0/
+|   |       |-- LFPO_06.esp        # Fichier Google Earth Studio
+|   |       |-- LFPO_06.yaml       # Metadonnees du scenario
+|   |-- scenario_1/
+|   |   |-- ...
+|
+|-- main.py                        # Point d'entree CLI
+|-- CLAUDE.md                      # Contexte pour Claude
+|-- historique.txt                 # Journal de bord
+|-- DOCUMENTATION.txt              # Ce fichier
+
+
+================================================================
+4. DETAIL FICHIER PAR FICHIER
+================================================================
+
+----------------------------------------------------------------
+4.1  trajectory_template.xml
+     project/templates/trajectory_template.xml
+----------------------------------------------------------------
+
+C'est le fichier que l'utilisateur modifie pour definir ses
+scenarios. TAF (via z3) echantillonne des valeurs dans les
+plages definies ici, en respectant les contraintes.
+
+PARAMETRES EXPOSES (10) :
+
+  Nom                       Type     Min    Max    Description
+  -------------------------+--------+------+------+---------------------------
+  fps                       integer  1      15     Frames par seconde
+  segment_start_m           real     1000   6000   Debut approche (metres)
+  segment_end_m             real     280    1000   Fin approche (metres)
+  ground_speed_kts          real     130    145    Vitesse sol (noeuds)
+  correlation_time_s        real     3      20     Tau du processus OU (s)
+  turbulence_intensity      real     0      1      Intensite turbulence
+  wind_speed_kts            real     0      30     Vitesse vent (noeuds)
+  wind_direction_deg        real     0      359    Direction vent (degres)
+  stabilization_distance_m  real     400    2000   Distance de convergence
+  airport_runway            string   -      -      Format "ICAO_RWY"
+
+  Valeurs airport_runway disponibles par defaut :
+    LFPO_06, LFPO_24       (Paris-Orly)
+    LFPG_27L, LFPG_27R     (Paris-CDG)
+    LFPG_09L, LFPG_09R     (Paris-CDG)
+    LFBO_32L, LFBO_32R     (Toulouse-Blagnac)
+    EGLL_27L, EGLL_27R     (London-Heathrow)
+
+  La DB LARD contient 3200 aeroports — on peut ajouter
+  n'importe quel combo ICAO_RWY dans la liste "values".
+
+CONTRAINTES z3 (3) :
+
+  1. start_gt_end    : segment_start_m > segment_end_m
+     → Le debut d'approche est plus loin que la fin.
+
+  2. stab_gt_end     : stabilization_distance_m > segment_end_m
+     → La stabilisation commence apres la fin d'approche.
+
+  3. stab_lt_start   : segment_start_m >= stabilization_distance_m
+     → La stabilisation est dans le segment d'approche.
+
+  Ces contraintes garantissent que chaque scenario genere par
+  z3 est geometriquement valide. Sans elles, on pourrait avoir
+  segment_end > segment_start (pas de sens physique).
+
+SYNTAXE DES CONTRAINTES TAF :
+
+  <constraint name="start_gt_end"
+      expressions="scenario[i]\segment_start_m SUP scenario[i]\segment_end_m"
+      quantifiers="i"
+      ranges="[0, 0]"
+      types="forall"/>
+
+  - expressions : l'expression z3 (SUP = superieur strict)
+  - quantifiers : variable d'iteration
+  - ranges : [0, 0] car nb_instances=1 (un seul scenario par test case)
+  - types : forall (pour tout i dans le range)
+  - Operateurs disponibles : EQ, DIF, SUP, SUPEQ, INF, INFEQ,
+    AND(), OR(), NOT(), IMPLIES()
+
+
+----------------------------------------------------------------
+4.2  trajectory_builder.py
+     project/export/trajectory_builder.py
+----------------------------------------------------------------
+
+C'est le coeur algorithmique. Migre depuis LARDv2
+(LARD/src/trajectory/sequence_generator.py).
+
+DATACLASSES :
+
+  TrajectoryConfig — Parametres utilisateur (viennent du XML)
+    fps, segment_start_m, segment_end_m, ground_speed_kts,
+    correlation_time_s, turbulence_intensity, wind_speed_kts,
+    wind_direction_deg, stabilization_distance_m
+
+  OUParams — Hyperparametres (dans le code, PAS dans le XML)
+    alpha_v_deg = -3.0      angle vertical moyen (glide slope ILS)
+    alpha_h_deg = 0.0       angle horizontal moyen (axe piste)
+    pitch_deg   = -4.0      pitch camera moyen
+    yaw_deg     = 0.0       yaw moyen
+    roll_deg    = 0.0       roll moyen
+    std_alpha_v_deg = 0.4   ecart-type deviation verticale
+    std_alpha_h_deg = 2.0   ecart-type deviation horizontale
+    std_yaw_deg     = 5.0   ecart-type yaw
+    std_pitch_deg   = 2.0   ecart-type pitch
+    std_roll_deg    = 5.0   ecart-type roll
+    dist_ap_m       = 300.0 distance aiming point / LTP
+
+  Pour modifier le comportement des trajectoires sans toucher
+  au XML, c'est ici qu'on change les valeurs par defaut.
+
+FONCTIONS :
+
+  compute_spatial_timeline(cfg)
+  --------------------------------
+  Calcule la timeline spatiale : les frames sont repartis
+  uniformement en distance (pas en temps). Avec vitesse
+  constante, dt est constant aussi, mais la structure a dt
+  variable est conservee pour pouvoir reintroduire la
+  deceleration plus tard.
+
+  Entree : TrajectoryConfig
+  Sortie : (distances_m, dt_array)
+    - distances_m : array decroissant de segment_start a segment_end
+    - dt_array : temps entre chaque frame (en secondes)
+
+  Le nombre de frames est calcule automatiquement :
+    n_frames = round(distance_totale / vitesse * fps)
+
+
+  generate_ou_process(n_steps, dt_array, correlation_time, std, mean)
+  -------------------------------------------------------------------
+  Processus Ornstein-Uhlenbeck discret a pas de temps variable.
+
+  Formule exacte :
+    x[i+1] = mean + (x[i] - mean) * exp(-dt/tau) + sigma_d * N(0,1)
+    sigma_d = std * sqrt(1 - exp(-2*dt/tau))
+
+  C'est un processus stochastique qui :
+    - Revient toujours vers sa moyenne (mean-reverting)
+    - A une autocorrelation temporelle (tau = temps de correlation)
+    - Plus tau est grand, plus les deviations sont lentes/lisses
+    - Plus std est grand, plus les deviations sont amples
+
+  On l'utilise sur 5 canaux independants :
+    alpha_v (vertical), alpha_h (horizontal), yaw, pitch, roll
+
+
+  compute_convergence_factors(distances_m, segment_end_m,
+                              stabilization_distance_m, exponent)
+  ---------------------------------------------------------------
+  Calcule les facteurs de convergence pour chaque frame.
+
+  Formule : conv(d) = clamp((d - end) / (stab - end), 0, 1) ^ 2
+
+  Effet :
+    - Loin de la piste (d > stab) : conv = 1.0 (deviations pleines)
+    - Pres de la piste (d → end)  : conv → 0.0 (deviations nulles)
+    - Transition quadratique (exponent=2) pour un lissage naturel
+
+  Applique a toutes les deviations OU : la trajectoire se
+  "stabilise" en approche finale, comme un vrai pilote.
+
+
+  compute_crab_angle(wind_speed_kts, wind_direction_deg,
+                     runway_heading_deg, groundspeed_kts,
+                     pilot_correction)
+  ---------------------------------------------------------
+  Calcule l'angle de crabe pour compenser le vent traversier.
+
+  Formule :
+    crosswind = wind_speed * sin(wind_direction - runway_heading)
+    crab = arcsin(crosswind / groundspeed) * (1 - pilot_correction)
+
+  pilot_correction = 0.30 : le pilote corrige 30% du crab
+  (transition progressive vers l'alignement piste en finale).
+
+  Le crab est aussi multiplie par conv[i] : on "de-crabe"
+  progressivement en approche finale.
+
+
+  build_trajectory(cfg, ou, ltp_lat, ltp_lon, ltp_alt,
+                   runway_heading_deg, runway_back_azimuth_deg)
+  -------------------------------------------------------------
+  Fonction principale. Orchestre tout le pipeline :
+
+  1. Calcule la timeline spatiale
+  2. Scale la turbulence : turb_scale = 0.2 + 0.8 * intensity
+     (meme avec intensity=0, il reste 20% de bruit residuel)
+  3. Genere les 5 processus OU (alpha_v, alpha_h, yaw, pitch, roll)
+  4. Applique la convergence (multiplie les deviations par conv)
+  5. Calcule le crab angle par frame
+  6. Assemble les poses : pour chaque frame :
+     - Altitude = ltp_alt + tan(alpha_v) * (distance + 300m)
+       (le 300m vient du dist_ap_m, distance aiming point / LTP)
+     - Position = projection geodesique depuis le LTP
+       (via pyproj.Geod WGS84, azimut arriere + deviation horizontale)
+     - Yaw = heading piste + crab + deviation OU
+     - Pitch = 90 + pitch_moyen + deviation OU
+       (le +90 vient du repere Google Earth Studio)
+     - Roll = roll_moyen + deviation OU
+
+  Sortie : liste de tuples (lon, lat, alt, yaw, pitch, roll)
+  C'est le format attendu par LARD/GEODataset.create_scenario().
+
+
+----------------------------------------------------------------
+4.3  lard_bridge.py
+     project/export/lard_bridge.py
+----------------------------------------------------------------
+
+Interface entre notre code et LARD. On importe LARD comme une
+bibliotheque sans le modifier.
+
+CE QU'ON IMPORTE DE LARD :
+  - compute_aiming_point(db, airport, runway, dist_m)
+    → Renvoie la geometrie de la piste (LTP, azimuts)
+  - GEODataset(path, name).create_scenario(flight_data, ...)
+    → Convertit nos poses en format .esp Google Earth Studio
+  - ecef2llh(x, y, z)
+    → Convertit les coordonnees ECEF en lat/lon/alt
+
+PROBLEME TECHNIQUE : create_scenario() de LARD ouvre
+  'data/template.json' en chemin RELATIF au CWD.
+  Solution : on change temporairement le CWD vers LARD/
+  avec un context manager (_lard_cwd).
+
+FONCTIONS :
+
+  get_runway_geometry(airport, runway, dist_ap_m)
+  ------------------------------------------------
+  Wrapper autour de compute_aiming_point. Retourne un dict :
+    ltp_lat, ltp_lon, ltp_alt    (position du seuil de piste)
+    runway_heading_deg            (azimut avant)
+    runway_back_azimuth_deg       (azimut arriere = direction approche)
+
+
+  generate_frame_times(n_frames, fps)
+  ------------------------------------
+  LARD/GES a besoin d'un timestamp par frame (pour la lumiere
+  dans Google Earth Studio). On genere une date/heure de base
+  aleatoire (entre 2020-2025, heures de jour 6h-18h) puis
+  on incremente de 1/fps secondes par frame.
+
+
+  export_scenario(flight_data, cfg, ou_params, airport, runway,
+                  output_dir, scenario_name)
+  ---------------------------------------------------------------
+  Fonction d'export complete :
+
+  1. Genere les timestamps
+  2. Cree un GEODataset et appelle create_scenario()
+     (sous _lard_cwd pour le template.json)
+  3. Ecrit le .esp (JSON, ~800KB par scenario)
+     → Importable directement dans Google Earth Studio
+  4. Ecrit le .yaml (metadonnees) contenant :
+     - airport, runway, n_frames
+     - Tous les parametres TrajectoryConfig
+     - Tous les hyperparametres OUParams
+     - Premier et dernier point de la trajectoire
+
+  Les numpy scalaires sont convertis en types Python natifs
+  pour eviter les artifacts YAML (!!python/object/apply...).
+
+
+----------------------------------------------------------------
+4.4  Export.py
+     project/export/Export.py
+----------------------------------------------------------------
+
+Point d'entree que TAF appelle. Signature imposee par TAF :
+  def export(root_node, path)
+
+TAF appelle cette fonction apres chaque generation z3. Elle :
+
+  1. Lit les 10 parametres depuis le node TAF :
+     root_node.get_child_n("scenario").get_parameter_n("fps").values[0]
+
+  2. Parse airport_runway (split sur "_") :
+     "LFPO_06" → airport="LFPO", runway="06"
+
+  3. Construit TrajectoryConfig (parametres XML) + OUParams (defauts)
+
+  4. Recupere la geometrie piste via lard_bridge.get_runway_geometry()
+
+  5. Genere la trajectoire via trajectory_builder.build_trajectory()
+
+  6. Exporte via lard_bridge.export_scenario()
+
+COMMENT TAF TROUVE NOTRE Export.py :
+  TAF fait "from Export import export" dans Tree.py.
+  Generate.py insere project/export/ en premier dans sys.path,
+  donc Python trouve notre Export.py avant le stub de taf/src/.
+
+
+----------------------------------------------------------------
+4.5  Generate.py
+     project/Generate.py
+----------------------------------------------------------------
+
+Script de lancement qui configure l'environnement pour TAF.
+
+CE QU'IL FAIT :
+
+  1. Change le CWD vers project/ (TAF lit ./settings.xml)
+  2. Met project/export/ en premier dans sys.path (notre Export.py)
+  3. Met taf/src/ en second dans sys.path (modules TAF)
+  4. Si -n est passe : modifie nb_test_cases dans settings.xml
+     AVANT l'import de Taf (car SETTINGS est cree au module-level)
+  5. Pre-cree les dossiers de sortie (_precreate_output_dirs)
+     → Contournement : TAF utilise "mkdir -p" (Unix)
+       qui ne marche pas sur Windows
+  6. Lance TAF : parse_template() puis generate()
+  7. Nettoie le stub Export.py que TAF cree dans le CWD
+
+
+----------------------------------------------------------------
+4.6  settings.xml
+     project/settings.xml
+----------------------------------------------------------------
+
+Configuration TAF. Les chemins sont relatifs au CWD (= project/).
+
+  template_path           = templates/
+  template_file_name      = trajectory_template.xml
+  experiment_path         = ../          (remonte a la racine)
+  experiment_folder_name  = output
+  nb_test_cases           = 3            (modifiable via -n)
+  test_case_folder_name   = scenario
+  nb_test_artifacts       = 1
+  test_artifact_folder_name = artifact
+
+  Structure de sortie generee :
+    ../output/scenario_0/scenario_0.xml     (parametres z3)
+    ../output/scenario_0/artifact_0/        (.esp + .yaml)
+    ../output/scenario_1/scenario_1.xml
+    ../output/scenario_1/artifact_0/
+    ...
+
+  Parametres z3 avances (rarement a modifier) :
+    max_backtracking = 100   (retours arriere si conflit)
+    max_diversity    = 10    (diversite entre scenarios)
+    z3_timeout       = 10000 (timeout en ms)
+
+
+----------------------------------------------------------------
+4.7  main.py
+     main.py (a la racine)
+----------------------------------------------------------------
+
+Point d'entree CLI. Delegue tout a Generate.run().
+
+  Usage :
+    python main.py              → 3 scenarios (defaut)
+    python main.py -n 10        → 10 scenarios
+    python main.py -n 5 -q      → 5 scenarios, mode silencieux
+
+
+================================================================
+5. LIENS ET FLUX DE DONNEES
+================================================================
+
+  main.py
+    |  importe project/Generate.py
+    |  appelle run(nb_test_cases, verbose)
+    v
+  Generate.py
+    |  configure CWD, sys.path
+    |  importe taf/src/Taf.py
+    |  appelle taf.do_parse_template() → lit trajectory_template.xml
+    |  appelle taf.do_generate() → pour chaque scenario :
+    |    |  z3 resoud les contraintes → genere des valeurs
+    |    |  ecrit scenario_i.xml
+    |    |  appelle tree.export(path) →
+    |    v
+    |  Export.py  (project/export/)
+    |    |  lit les parametres du node TAF
+    |    |  construit TrajectoryConfig + OUParams
+    |    |  appelle get_runway_geometry(airport, runway)
+    |    |    |  → lard_bridge.py → LARD/compute_aiming_point
+    |    |    v  retourne ltp_lat, ltp_lon, ltp_alt, heading, back_azimuth
+    |    |  appelle build_trajectory(cfg, ou, ltp_*, heading, back_az)
+    |    |    |  → trajectory_builder.py
+    |    |    |  compute_spatial_timeline → distances, dt
+    |    |    |  generate_ou_process x5 → deviations
+    |    |    |  compute_convergence_factors → conv
+    |    |    |  compute_crab_angle → crab par frame
+    |    |    v  retourne flight_data [(lon,lat,alt,yaw,pitch,roll), ...]
+    |    |  appelle export_scenario(flight_data, cfg, ou, airport, ...)
+    |    |    |  → lard_bridge.py
+    |    |    |  generate_frame_times → timestamps
+    |    |    |  GEODataset.create_scenario(flight_data, times, ...)
+    |    |    |    → LARD/ (CWD temporairement change vers LARD/)
+    |    |    |    → lit data/template.json, remplit les keyframes
+    |    |    |  ecrit .esp (JSON ~800KB)
+    |    |    v  ecrit .yaml (metadonnees)
+    v
+  output/scenario_i/artifact_0/
+    AIRPORT_RWY.esp    → ouvrir dans Google Earth Studio
+    AIRPORT_RWY.yaml   → metadonnees pour post-traitement
+
+
+================================================================
+6. ALGORITHME EN DETAIL
+================================================================
+
+6.1  PROCESSUS ORNSTEIN-UHLENBECK
+
+  Le processus OU est un processus stochastique mean-reverting.
+  Il modelise les deviations naturelles d'un avion en approche :
+  le pilote corrige constamment, mais avec un delai (inertie).
+
+  Equation discrete a dt variable :
+    x[i+1] = mean + (x[i] - mean) * exp(-dt / tau) + sigma_d * N(0,1)
+
+  ou :
+    tau     = correlation_time_s (temps de relaxation)
+    sigma_d = std * sqrt(1 - exp(-2*dt/tau))  (bruit discretise)
+    N(0,1)  = variable aleatoire gaussienne standard
+
+  Proprietes :
+    - Si tau est grand (20s) : deviations lentes, trajectoire lisse
+    - Si tau est petit (3s)  : deviations rapides, trajectoire agitee
+    - std controle l'amplitude maximale des deviations
+    - Le processus revient TOUJOURS vers mean (stabilite garantie)
+
+  On applique ce processus sur 5 canaux independants :
+    alpha_v  (deviation verticale, std=0.4°)
+    alpha_h  (deviation horizontale, std=2.0°)
+    yaw      (deviation yaw camera, std=5.0°)
+    pitch    (deviation pitch camera, std=2.0°)
+    roll     (deviation roll camera, std=5.0°)
+
+
+6.2  CONVERGENCE FINALE
+
+  En vraie approche, le pilote stabilise l'avion avant le seuil.
+  On simule ca avec un facteur de convergence multiplicatif :
+
+    conv(d) = clamp((d - end) / (stab - end), 0, 1) ^ 2
+
+  Ou d est la distance au seuil, end = segment_end_m,
+  stab = stabilization_distance_m.
+
+  Toutes les deviations OU sont multipliees par conv :
+    deviation_effective[i] = deviation_brute[i] * conv[i]
+
+  Resultat : la trajectoire oscille librement loin de la piste,
+  puis se stabilise progressivement en finale.
+
+
+6.3  CRAB ANGLE
+
+  Le crab angle compense le vent traversier. L'avion pointe
+  dans une direction differente de sa trajectoire pour ne pas
+  deriver lateralement.
+
+  Formule :
+    crosswind = wind_speed * sin(wind_dir - runway_heading)
+    crab = arcsin(crosswind / groundspeed) * (1 - 0.30)
+
+  Le 0.30 = pilot_correction : le pilote corrige 30% du crab
+  (en realite il aligne progressivement avant le toucher).
+
+  Le crab est aussi multiplie par conv[i] pour simuler le
+  "de-crabbing" en courte finale.
+
+
+6.4  CALCUL D'ALTITUDE
+
+  L'altitude est derivee de l'angle vertical (glide slope) :
+
+    alpha_v = -3.0° + deviation_OU  (clamp entre -6° et -0.5°)
+    altitude = ltp_alt + tan(-alpha_v) * (distance + 300m)
+
+  Le +300m vient de dist_ap_m : l'aiming point est a 300m
+  du seuil (LTP). La tangente donne l'altitude sur le plan
+  de descente. Clamp final : altitude >= ltp_alt + 1.0m
+  (jamais sous l'elevation de la piste).
+
+
+================================================================
+7. FICHIERS DE SORTIE
+================================================================
+
+7.1  FICHIER .esp
+
+  Format JSON importe par Google Earth Studio.
+  Contient les keyframes pour chaque frame :
+    - position (longitude, latitude, altitude) normalisee [0,1]
+    - rotation (yaw, pitch, roll) normalisee [0,1]
+    - FOV (field of view) vertical
+    - timestamp (pour la lumiere/ombres)
+    - cloud cover, buildings (actives)
+
+  Taille typique : 500KB - 1.5MB selon le nombre de frames.
+  Un scenario de 500 frames a 10fps = 50 secondes de video.
+
+
+7.2  FICHIER .yaml
+
+  Metadonnees du scenario au format YAML lisible :
+    airport: LFPO
+    runway: 06
+    n_frames: 456
+    trajectory_config:
+      fps: 11
+      segment_start_m: 3674.32
+      segment_end_m: 763.09
+      ground_speed_kts: 136.61
+      ...
+    ou_params:
+      alpha_v_deg: -3.0
+      std_alpha_v_deg: 0.4
+      ...
+    flight_data_sample:
+      first: [lon, lat, alt, yaw, pitch, roll]  (premiere pose)
+      last:  [lon, lat, alt, yaw, pitch, roll]  (derniere pose)
+
+
+================================================================
+8. DEPENDANCES
+================================================================
+
+  Python 3.10+
+  numpy         (calculs numeriques)
+  pyproj        (projection geodesique WGS84)
+  pyyaml        (ecriture .yaml)
+  z3-solver     (solveur SMT pour TAF)
+  timezonefinder (timezone pour timestamps GES)
+  pytz          (timezone)
+
+  Installation :
+    pip install numpy pyproj pyyaml z3-solver timezonefinder pytz
+
+
+================================================================
