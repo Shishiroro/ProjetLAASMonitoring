@@ -20,6 +20,10 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Docs internes
+CLAUDE.md
+DOCUMENTATION.txt
+historique.txt
 
 # Claude Code
 .claude/
