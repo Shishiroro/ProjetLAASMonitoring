@@ -1,5 +1,5 @@
 """
-Export.py — Point d'entree TAF
+Export.py — Point d'entree TAF (PONT TAF -> LE CODE)
 ===============================
 TAF appelle export(root_node, path) apres chaque generation de test case.
 Ce module fait le lien entre les parametres TAF et notre pipeline.
@@ -18,7 +18,7 @@ if str(_export_dir) not in sys.path:
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario
 
-
+ 
 def _read_param(node, name):
     """Lit un parametre TAF depuis un node (instance 0)."""
     return node.get_parameter_n(name).values[0]
@@ -81,7 +81,7 @@ def export(root_node, path):
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
-    # --- Exporter .esp + .yaml + .csv ---
+    # --- Exporter .esp + .yaml + .csv --- / à noter que .csv debug pas .csv lardv2 
     export_scenario(
         flight_data, cfg, ou,
         airport, runway,

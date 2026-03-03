@@ -10,6 +10,8 @@ Note : create_scenario lit 'data/template.json' relativement au CWD,
        donc on change temporairement vers LARD_ROOT.
 """
 
+#Fais le lien entre les parametres TAF et notre pipeline d'export vers LARD/GES.
+
 import os
 import sys
 import csv
@@ -55,6 +57,8 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
+    #  interroge la base de données de pistes LARD (filtered_runways_database_Final.json), 
+    # retourne lat/lon/alt du LTP + cap piste (heading et back azimuth) pour l'aéroport/piste donnés.
     _, _, rwy_psi, ltp, _ = compute_aiming_point(
         RUNWAY_DB, airport, runway, dist_ap_m
     )
@@ -70,7 +74,7 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
 
 
 # ---------------------------------------------------------------------------
-# Generation de timestamps pour chaque frame
+# Generation de timestamps pour chaque frame (au format attendu par LARD/GES)
 # ---------------------------------------------------------------------------
 
 def generate_frame_times(n_frames, fps):
@@ -111,7 +115,7 @@ def generate_frame_times(n_frames, fps):
 
 
 # ---------------------------------------------------------------------------
-# Export .esp + .yaml
+# Export .esp + .yaml + ( .csv (debug là))
 # ---------------------------------------------------------------------------
 
 def export_scenario(flight_data, cfg, ou_params, airport, runway,
