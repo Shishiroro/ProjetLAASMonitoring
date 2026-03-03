@@ -45,8 +45,8 @@ class TrajectoryConfig:
 @dataclass
 class OUParams:
     """Hyperparametres OU (dans le code, pas dans le XML)."""
-    alpha_v_deg: float = -3.0       # angle vertical moyen (glide slope ~3°)
-    alpha_h_deg: float = 0.0        # angle horizontal moyen (axe piste)
+    alpha_v_deg: float = -3.0       # angle vertical moyen (glide slope ~3°), pente de descente standard
+    alpha_h_deg: float = 0.0        # angle horizontal moyen (axe piste), l'avion viste la piste
     pitch_deg: float = -4.0         # pitch moyen
     yaw_deg: float = 0.0            # yaw moyen (deviation)
     roll_deg: float = 0.0           # roll moyen
@@ -57,7 +57,7 @@ class OUParams:
     std_pitch_deg: float = 2.0      # ecart-type pitch (LARDv2: 2.0)
     std_roll_deg: float = 5.0       # ecart-type roll (LARDv2: 5.0)
 
-    dist_ap_m: float = 300.0        # distance aiming point depuis LTP
+    dist_ap_m: float = 300.0        # distance aiming point depuis LTP (où l'avion vise)
 
 
 # ---------------------------------------------------------------------------
