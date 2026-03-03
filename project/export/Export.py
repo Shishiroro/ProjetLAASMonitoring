@@ -46,9 +46,9 @@ def export(root_node, path):
 
     # airport_runway : format "ICAO_RWY" (ex: "LFPO_06")
     airport_runway = str(_read_param(scenario_node, "airport_runway"))
-    parts = airport_runway.split("_", 1)
-    airport = parts[0]
-    runway = parts[1] if len(parts) > 1 else "06"
+    if "_" not in airport_runway:
+        raise ValueError(f"Format airport_runway invalide : '{airport_runway}' (attendu: ICAO_RWY)")
+    airport, runway = airport_runway.split("_", 1)
 
     # --- Construire les configs ---
     cfg = TrajectoryConfig(
