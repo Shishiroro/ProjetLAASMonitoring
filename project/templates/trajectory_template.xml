@@ -24,18 +24,18 @@
 
         <parameter name="segment_start_m"
                    type="real"
-                   min="2000"
+                   min="5000"
                    max="6000"/>
 
         <parameter name="segment_end_m"
                    type="real"
                    min="280"
-                   max="1000"/>
+                   max="280"/>
 
         <parameter name="ground_speed_kts"
                    type="real"
-                   min="180"
-                   max="180"/>
+                   min="130"
+                   max="145"/>
 
         <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
 
@@ -53,8 +53,8 @@
 
         <parameter name="wind_speed_kts"
                    type="real"
-                   min="20"
-                   max="20"/>
+                   min="0"
+                   max="30"/>
 
         <parameter name="wind_direction_deg"
                    type="real"

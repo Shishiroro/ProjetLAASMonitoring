@@ -14,6 +14,7 @@ Ce script :
 
 import sys
 import os
+import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -51,10 +52,14 @@ def run(nb_test_cases=None, verbose=True):
     # CWD = project/ (TAF lit ./settings.xml depuis le CWD)
     os.chdir(project_dir)
 
-    # sys.path : notre Export.py d'abord, puis TAF
+    # Copier notre Export.py dans taf/src/ (point d'extension prevu par TAF)
+    src_export = project_dir / "export" / "Export.py"
+    taf_export = root_dir / "taf" / "src" / "Export.py"
+    shutil.copy2(src_export, taf_export)
+
+    # sys.path : TAF + nos modules
     export_dir = str(project_dir / "export")
     taf_src = str(root_dir / "taf" / "src")
-
     if export_dir not in sys.path:
         sys.path.insert(0, export_dir)
     if taf_src not in sys.path:
@@ -89,10 +94,13 @@ def run(nb_test_cases=None, verbose=True):
     taf.do_parse_template()
     taf.do_generate()
 
-    # Nettoyage : TAF cree un stub Export.py dans le CWD
+    # Nettoyage : TAF cree parfois un stub Export.py dans le CWD
     stub = project_dir / "Export.py"
     if stub.exists() and stub.stat().st_size <= 50:
         stub.unlink()
+
+    # Restaurer le placeholder dans taf/src/ (garder taf/ propre)
+    taf_export.write_text("def export(root_node, path):\n\tpass\n")
 
     print("\n[Generate] Termine.")
 

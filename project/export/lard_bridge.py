@@ -64,8 +64,8 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
         "ltp_lat": ltp_lat,
         "ltp_lon": ltp_lon,
         "ltp_alt": ltp_alt,
-        "runway_heading_deg": rwy_psi[0],      # forward azimuth
-        "runway_back_azimuth_deg": rwy_psi[1],  # back azimuth (direction approche)
+        "runway_heading_deg": rwy_psi[0],      # azimut LTP→FPAP (cap camera)
+        "runway_back_azimuth_deg": rwy_psi[1],  # azimut FPAP→LTP (positionnement)
     }
 
 

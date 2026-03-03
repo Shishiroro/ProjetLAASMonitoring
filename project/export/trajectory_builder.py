@@ -52,8 +52,8 @@ class OUParams:
     roll_deg: float = 0.0           # roll moyen
 
     std_alpha_v_deg: float = 0.4    # ecart-type vertical (LARDv2: 0.4)
-    std_alpha_h_deg: float = 2.0    # ecart-type horizontal (LARDv2: 2.0)
-    std_yaw_deg: float = 5.0        # ecart-type yaw (LARDv2: 5.0)
+    std_alpha_h_deg: float = 1.0    # ecart-type horizontal (ILS localizer: ±2.5°, 2σ=2.0°)
+    std_yaw_deg: float = 2.5        # ecart-type yaw (reduit pour vue frontale stable)
     std_pitch_deg: float = 2.0      # ecart-type pitch (LARDv2: 2.0)
     std_roll_deg: float = 5.0       # ecart-type roll (LARDv2: 5.0)
 
@@ -198,8 +198,8 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     :param cfg: parametres utilisateur (du XML)
     :param ou: hyperparametres OU (du code)
     :param ltp_lat, ltp_lon, ltp_alt: position LTP de la piste
-    :param runway_heading_deg: azimut avant de la piste
-    :param runway_back_azimuth_deg: azimut arriere (direction d'approche)
+    :param runway_heading_deg: azimut LTP→FPAP (cap camera)
+    :param runway_back_azimuth_deg: azimut FPAP→LTP (positionnement avion)
     :return: list de tuples (lon, lat, alt, yaw, pitch, roll)
     """
     # --- Timeline spatiale ---
@@ -257,11 +257,15 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     # ~1.5 m/s ≈ 300 ft/min : limite haute d'une rafale verticale en approche.
     # Converti en par-frame via dt reel (depend de vitesse + fps).
     max_climb_rate_ms = 1.5
+    max_descent_rate_ms = 5.0   # ~1000 ft/min : descente max realiste en approche
     dt_frame = dt_array[0]  # constant (vitesse constante)
     max_climb_per_frame = max_climb_rate_ms * dt_frame
+    max_descent_per_frame = max_descent_rate_ms * dt_frame
     for i in range(1, n_frames):
         if raw_alts[i] > raw_alts[i - 1] + max_climb_per_frame:
             raw_alts[i] = raw_alts[i - 1] + max_climb_per_frame
+        elif raw_alts[i] < raw_alts[i - 1] - max_descent_per_frame:
+            raw_alts[i] = raw_alts[i - 1] - max_descent_per_frame
 
     # --- Assemblage des poses ---
     g = pyproj.Geod(ellps='WGS84')
@@ -271,7 +275,8 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
         dist = distances_m[i]
         alt = raw_alts[i]
 
-        # Position horizontale via angle horizontal + deviation OU
+        # Position horizontale : projeter depuis LTP le long du back azimuth
+        # = derriere le seuil, loin de la piste (convention LARD : LTP = C/D)
         alpha_h = ou.alpha_h_deg + alpha_h_dev[i]
         lon, lat, _ = g.fwd(
             ltp_lon, ltp_lat,
@@ -279,7 +284,7 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
             dist, radians=False
         )
 
-        # Orientation
+        # Camera regarde vers FPAP (runway_heading = LTP→FPAP)
         yaw   = runway_heading_deg + crab_angles[i] + yaw_dev[i]
         pitch = 90 + ou.pitch_deg + pitch_dev[i]
         roll  = ou.roll_deg + roll_dev[i]
