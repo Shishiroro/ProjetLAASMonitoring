@@ -234,14 +234,14 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     pitch_dev   = _ou(ou.std_pitch_deg)
     roll_dev    = _ou(ou.std_roll_deg)
 
-    # --- Crab angle par frame ---
-    crab_angles = np.array([
-        compute_crab_angle(
-            cfg.wind_speed_kts, cfg.wind_direction_deg,
-            runway_heading_deg, cfg.ground_speed_kts
-        ) * conv[i]
-        for i in range(n_frames)
-    ])
+    # --- Crab angle (constant, pas de convergence) ---
+    # Le crab angle corrige le vent : l'avion le maintient jusqu'au toucher.
+    # Seules les deviations OU convergent, pas la correction vent.
+    crab_angle = compute_crab_angle(
+        cfg.wind_speed_kts, cfg.wind_direction_deg,
+        runway_heading_deg, cfg.ground_speed_kts
+    )
+    crab_angles = np.full(n_frames, crab_angle)
 
     # --- Calcul altitudes brutes puis lissage monotone ---
     raw_alts = np.zeros(n_frames)

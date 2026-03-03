@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<!--
+    Template test : trajectoire parfaitement droite (vent=0, turb=0)
+    ================================================================
+    Usage :
+      1. Dans trajectory_builder.py ligne ~211, remplacer temporairement :
+             turb_scale = 0.1 + 0.9 * max(0.0, cfg.turbulence_intensity)
+         par :
+             turb = max(0.0, cfg.turbulence_intensity)
+             turb_scale = 0.0 if turb == 0.0 else 0.1 + 0.9 * turb
+      2. Dans settings.xml, pointer vers ce template :
+             template_file_name = trajectory_template_straight.xml
+      3. Lancer : python main.py -n 1
+      4. Apres le test, remettre le code et settings.xml d'origine.
+
+    Sans la modif du code, turb_scale reste a 0.1 (10% de bruit residuel)
+    meme avec turb=0. La trajectoire sera quasi-droite mais pas parfaite.
+-->
+<root name="test_case">
+
+    <node name="scenario" nb_instances="1">
+
+        <parameter name="fps"
+                   type="integer"
+                   min="15"
+                   max="15"/>   
+
+        <parameter name="segment_start_m"
+                   type="real"
+                   min="5000"
+                   max="5000"/>
+
+        <parameter name="segment_end_m"
+                   type="real"
+                   min="280"
+                   max="280"/>
+
+        <parameter name="ground_speed_kts"
+                   type="real"
+                   min="145"
+                   max="145"/>
+
+        <parameter name="correlation_time_s"
+                   type="real"
+                   min="5"
+                   max="5"/>
+
+        <parameter name="turbulence_intensity"
+                   type="real"
+                   min="0"
+                   max="0"/>
+
+        <parameter name="wind_speed_kts"
+                   type="real"
+                   min="0"
+                   max="0"/>
+
+        <parameter name="wind_direction_deg"
+                   type="real"
+                   min="0"
+                   max="0"/>
+
+        <parameter name="stabilization_distance_m"
+                   type="real"
+                   min="2000"
+                   max="2000"/>
+
+        <parameter name="airport_runway"
+                   type="string"
+                   values="LFPO_24"/>
+
+        <!-- Le debut d'approche doit etre plus loin que la fin -->
+        <constraint name="start_gt_end"
+                    expressions="scenario[i]\segment_start_m SUP scenario[i]\segment_end_m"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+    </node>
+
+</root>

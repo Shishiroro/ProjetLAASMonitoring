@@ -24,17 +24,17 @@
 
         <parameter name="segment_start_m"
                    type="real"
-                   min="5000"
+                   min="2000"
                    max="6000"/>
 
         <parameter name="segment_end_m"
                    type="real"
                    min="280"
-                   max="280"/>
+                   max="1000"/>
 
         <parameter name="ground_speed_kts"
                    type="real"
-                   min="130"
+                   min="145"
                    max="145"/>
 
         <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
@@ -65,8 +65,8 @@
 
         <parameter name="stabilization_distance_m"
                    type="real"
-                   min="600"
-                   max="1500"/>
+                   min="800"
+                   max="2500"/>
 
         <!-- ===== Piste cible (format ICAO_RWY) ===== -->
 
@@ -90,13 +90,6 @@
                     ranges="[0, 0]"
                     types="forall"/>
 
-        <!-- La stabilisation commence avant le debut d'approche -->
-        <constraint name="stab_lt_start"
-                    expressions="scenario[i]\segment_start_m SUPEQ scenario[i]\stabilization_distance_m"
-                    quantifiers="i"
-                    ranges="[0, 0]"
-                    types="forall"/>
-
         <!-- Couplage turbulence / correlation_time :
              Forte turbulence → tau petit (fluctuations rapides)
              Temps calme → tau grand (deviations lentes)
@@ -113,9 +106,20 @@
         <!-- Marge entre stabilisation et fin d'approche :
              La zone de convergence doit etre assez large pour que
              la trajectoire ait le temps de se stabiliser naturellement.
-             stab >= end + 200  -->
+             500m ≈ 6.7s a 145kts — temps realiste pour stabiliser.
+             stab >= end + 500  -->
         <constraint name="stab_margin"
-                    expressions="scenario[i]\stabilization_distance_m SUPEQ scenario[i]\segment_end_m + 200"
+                    expressions="scenario[i]\stabilization_distance_m SUPEQ scenario[i]\segment_end_m + 500"
+                    quantifiers="i"
+                    ranges="[0, 0]"
+                    types="forall"/>
+
+        <!-- Marge entre debut d'approche et stabilisation :
+             Il faut assez de trajectoire "libre" (deviations OU pleines)
+             avant que la convergence ne commence.
+             start >= stab + 500  -->
+        <constraint name="start_margin"
+                    expressions="scenario[i]\segment_start_m SUPEQ scenario[i]\stabilization_distance_m + 500"
                     quantifiers="i"
                     ranges="[0, 0]"
                     types="forall"/>
