@@ -76,6 +76,7 @@ def compute_spatial_timeline(cfg: TrajectoryConfig):
         distances_m : ndarray (n_frames,), decroissant
         dt_array    : ndarray (n_frames-1,)
     """
+    # crée N frames uniformément espacées en distance (décroissant de start à end), calcule le dt entre chaque frame
     speed_ms = cfg.ground_speed_kts * KTS_TO_MS
     total_dist = cfg.segment_start_m - cfg.segment_end_m
     duration = total_dist / speed_ms
@@ -113,6 +114,8 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
     :param conv_factors: ndarray (n_steps,) facteurs de convergence [0,1]
     :return: ndarray (n_steps,)
     """
+    #  processus Ornstein-Uhlenbeck discret à dt variable. Formule : x[i+1] = mean + (x[i]-mean)*exp(-dt/tau) + sigma*N(0,1)
+    #  Si conv_factors est passé, le bruit diminue progressivement → convergence naturelle
     if n_steps <= 0:
         return np.array([])
 
@@ -135,6 +138,7 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
 # ---------------------------------------------------------------------------
 # Convergence finale
 # ---------------------------------------------------------------------------
+#facteurs [0,1] par frame. Vaut 1.0 loin de la piste, diminue vers residual vers la piste
 
 def compute_convergence_factors(distances_m, segment_end_m,
                                 stabilization_distance_m,
@@ -165,7 +169,7 @@ def compute_convergence_factors(distances_m, segment_end_m,
 # ---------------------------------------------------------------------------
 # Crab angle
 # ---------------------------------------------------------------------------
-
+# Angle de crabe pour compenser le vent traversier, avec correction pilote.
 def compute_crab_angle(wind_speed_kts, wind_direction_deg,
                        runway_heading_deg, groundspeed_kts,
                        pilot_correction=0.30):
@@ -188,7 +192,8 @@ def compute_crab_angle(wind_speed_kts, wind_direction_deg,
 # ---------------------------------------------------------------------------
 # Generation de trajectoire complete
 # ---------------------------------------------------------------------------
-
+# Genere une trajectoire d'approche complete, de segment_start_m a segment_end_m,
+# Retourne la liste de poses (lon, lat, alt, yaw, pitch, roll) 
 def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
                      ltp_lat, ltp_lon, ltp_alt,
                      runway_heading_deg, runway_back_azimuth_deg):
