@@ -23,8 +23,9 @@ def _precreate_output_dirs(project_dir):
     """
     Pre-cree l'arborescence de sortie TAF.
 
-    TAF utilise `mkdir -p` (Unix) qui echoue sur Windows.
-    On lit settings.xml et on cree les dossiers nous-memes.
+    TAF utilise `mkdir -p` (Unix) qui n'existe pas sur Windows.
+    Sur Linux, TAF gere tout seul, mais on pre-cree quand meme
+    pour uniformiser le comportement cross-platform.
     """
     tree = ET.parse(project_dir / "settings.xml")
     params = {p.attrib["name"]: p.attrib["value"] for p in tree.getroot()}
@@ -74,7 +75,9 @@ def run(nb_test_cases=None, verbose=True):
                 p.set("value", str(nb_test_cases))
         tree.write(settings_file)
 
-    # Pre-creer les dossiers (contournement mkdir -p sur Windows)
+    # Pre-creer les dossiers : mkdir -p n'existe pas sur Windows,
+    # et sur Linux ca evite le prompt interactif de TAF.
+    # Path.mkdir() est cross-platform, donc on appelle toujours.
     _precreate_output_dirs(project_dir)
 
     import Taf
