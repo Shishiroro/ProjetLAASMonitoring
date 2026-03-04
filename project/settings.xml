@@ -8,16 +8,18 @@
     <parameter name="experiment_folder_name" type="folder" value="output" />
 
     
-    <parameter name="nb_test_cases" type="integer" value="20" />
+    <parameter name="nb_test_cases" type="integer" value="5" />
 
     
     <parameter name="test_case_folder_name" type="folder" value="scenario" />
     <parameter name="nb_test_artifacts" type="integer" value="1" />
     <parameter name="test_artifact_folder_name" type="folder" value="artifact" />
 
-    
+ 
     <parameter name="parameter_max_nb_instances" type="integer" value="50" />
-    <parameter name="string_parameter_max_size" type="integer" value="50" />
+    
+    <parameter name="string_parameter_max_size" type="integer" value="50" /> 
+
     <parameter name="node_max_nb_instances" type="integer" value="200" />
     <parameter name="max_backtracking" type="integer" value="100" />
     <parameter name="max_diversity" type="integer" value="10" />

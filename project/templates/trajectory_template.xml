@@ -19,8 +19,8 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="30"
-                   max="30"/>
+                   min="10"
+                   max="15"/>
 
         <parameter name="segment_start_m"
                    type="real"
