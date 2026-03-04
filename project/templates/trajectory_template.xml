@@ -39,11 +39,6 @@
 
         <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
 
-        <parameter name="correlation_time_s"
-                   type="real"
-                   min="3"
-                   max="8"/>
-
         <parameter name="turbulence_intensity"
                    type="real"
                    min="0"
@@ -88,19 +83,6 @@
         <!-- La stabilisation commence apres la fin d'approche -->
         <constraint name="stab_gt_end"
                     expressions="scenario[i]\stabilization_distance_m SUP scenario[i]\segment_end_m"
-                    quantifiers="i"
-                    ranges="[0, 0]"
-                    types="forall"/>
-
-        <!-- Couplage turbulence / correlation_time :
-             Forte turbulence → tau petit (fluctuations rapides)
-             Temps calme → tau grand (deviations lentes)
-             correlation_time + 5 * turbulence <= 10
-               turb=0   → tau<=10
-               turb=0.5 → tau<=7.5
-               turb=1   → tau<=5  -->
-        <constraint name="turb_tau_coupling"
-                    expressions="scenario[i]\correlation_time_s + 5 * scenario[i]\turbulence_intensity INFEQ 10"
                     quantifiers="i"
                     ranges="[0, 0]"
                     types="forall"/>

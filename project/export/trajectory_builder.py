@@ -35,7 +35,7 @@ class TrajectoryConfig:
     segment_start_m: float = 3000.0
     segment_end_m: float = 280.0
     ground_speed_kts: float = 137.0
-    correlation_time_s: float = 10.0
+    correlation_time_s: float = 4.0   # auto-calcule par Export.py (Dryden)
     turbulence_intensity: float = 0.3
     wind_speed_kts: float = 0.0
     wind_direction_deg: float = 0.0

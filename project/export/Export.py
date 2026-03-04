@@ -8,6 +8,7 @@ Chaine : TAF root_node → TrajectoryConfig → build_trajectory → export .esp
 """
 
 import sys
+import math
 from pathlib import Path
 
 # Ajouter project/export/ au sys.path pour nos imports
@@ -38,7 +39,6 @@ def export(root_node, path):
     segment_start_m = float(_read_param(scenario_node, "segment_start_m"))
     segment_end_m = float(_read_param(scenario_node, "segment_end_m"))
     ground_speed_kts = float(_read_param(scenario_node, "ground_speed_kts"))
-    correlation_time_s = float(_read_param(scenario_node, "correlation_time_s"))
     turbulence_intensity = float(_read_param(scenario_node, "turbulence_intensity"))
     wind_speed_kts = float(_read_param(scenario_node, "wind_speed_kts"))
     wind_direction_deg = float(_read_param(scenario_node, "wind_direction_deg"))
@@ -49,6 +49,12 @@ def export(root_node, path):
     if "_" not in airport_runway:
         raise ValueError(f"Format airport_runway invalide : '{airport_runway}' (attendu: ICAO_RWY)")
     airport, runway = airport_runway.split("_", 1)
+
+    # --- Calcul auto de tau (Dryden simplifie) ---
+    # A nos altitudes (~300m max), L ≈ h, donc tau ≈ h / V
+    h_m = segment_start_m * math.tan(math.radians(3.0))
+    speed_ms = ground_speed_kts * 0.514444
+    correlation_time_s = h_m / speed_ms
 
     # --- Construire les configs ---
     cfg = TrajectoryConfig(
