@@ -95,7 +95,7 @@ def compute_spatial_timeline(cfg: TrajectoryConfig):
 # ---------------------------------------------------------------------------
 
 def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
-                        conv_factors=None):
+                        conv_factors=None, oversample_factor=50):
     """
     Processus OU discret avec pas de temps variables et convergence integree.
 
@@ -112,25 +112,48 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
     :param std: ecart-type stationnaire de base
     :param mean: moyenne de reversion
     :param conv_factors: ndarray (n_steps,) facteurs de convergence [0,1]
+    :param oversample_factor: nombre de micro-pas entre chaque frame (defaut 10).
+                              Plus c'est haut, plus c'est lisse (rendements decroissants au-dela de ~20).
     :return: ndarray (n_steps,)
     """
-    #  processus Ornstein-Uhlenbeck discret à dt variable. Formule : x[i+1] = mean + (x[i]-mean)*exp(-dt/tau) + sigma*N(0,1)
-    #  Si conv_factors est passé, le bruit diminue progressivement → convergence naturelle
     if n_steps <= 0:
         return np.array([])
 
     tau = max(correlation_time, 1e-6)
-    x = np.zeros(n_steps)
+    osf = max(int(oversample_factor), 1)
 
-    std_0 = std * (conv_factors[0] if conv_factors is not None else 1.0)
-    x[0] = mean + std_0 * np.random.randn()
+    # --- Surechantillonnage : simuler a osf x le taux reel ---
+    # Entre chaque paire de frames, on insere osf micro-pas avec dt/osf.
+    # Les conv_factors sont interpoles lineairement sur les micro-pas.
+    n_micro = (n_steps - 1) * osf + 1
 
-    for i in range(1, n_steps):
-        dt = dt_array[min(i - 1, len(dt_array) - 1)]
-        decay = np.exp(-dt / tau)
-        std_i = std * (conv_factors[i] if conv_factors is not None else 1.0)
-        sigma_d = std_i * np.sqrt(max(1.0 - np.exp(-2.0 * dt / tau), 0.0))
-        x[i] = mean + (x[i - 1] - mean) * decay + sigma_d * np.random.randn()
+    # Construire dt micro (chaque dt original divise par osf)
+    dt_micro = np.empty(n_micro - 1)
+    for i in range(n_steps - 1):
+        dt = dt_array[min(i, len(dt_array) - 1)]
+        dt_micro[i * osf:(i + 1) * osf] = dt / osf
+
+    # Interpoler conv_factors sur les micro-pas
+    if conv_factors is not None:
+        micro_indices = np.linspace(0, n_steps - 1, n_micro)
+        conv_micro = np.interp(micro_indices, np.arange(n_steps), conv_factors)
+    else:
+        conv_micro = None
+
+    # Simuler le processus OU sur les micro-pas
+    x_micro = np.zeros(n_micro)
+    std_0 = std * (conv_micro[0] if conv_micro is not None else 1.0)
+    x_micro[0] = mean + std_0 * np.random.randn()
+
+    for j in range(1, n_micro):
+        dt_j = dt_micro[j - 1]
+        decay = np.exp(-dt_j / tau)
+        std_j = std * (conv_micro[j] if conv_micro is not None else 1.0)
+        sigma_d = std_j * np.sqrt(max(1.0 - np.exp(-2.0 * dt_j / tau), 0.0))
+        x_micro[j] = mean + (x_micro[j - 1] - mean) * decay + sigma_d * np.random.randn()
+
+    # Sous-echantillonner : garder uniquement les points aux frames reelles
+    x = x_micro[::osf]
 
     return x
 
