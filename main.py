@@ -4,6 +4,8 @@ main.py — Point d'entree CLI du projet LARD-LAAS-TAF
 Usage :
     python main.py                    # genere 3 scenarios (defaut settings.xml)
     python main.py -n 5 -q            # 5 scenarios, mode silencieux
+
+    ou python project/Generate.py -n 5 -q
 """
 
 import sys
