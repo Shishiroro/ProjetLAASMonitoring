@@ -20,6 +20,11 @@ venv/
 .DS_Store
 Thumbs.db
 
+# YOLOv8
+yolo/output/
+yolo/*.pt
+yolo/test_images/
+
 # Docs internes
 CLAUDE.md
 DOCUMENTATION.txt
