@@ -24,6 +24,7 @@ Thumbs.db
 yolo/output/
 yolo/*.pt
 yolo/test_images/
+yolo/datasetsGES/
 
 # Docs internes
 CLAUDE.md

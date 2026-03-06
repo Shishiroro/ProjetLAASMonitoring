@@ -20,12 +20,12 @@
         <parameter name="fps"
                    type="integer"
                    min="10"
-                   max="15"/>
+                   max="10"/>
 
         <parameter name="segment_start_m"
                    type="real"
                    min="2000"
-                   max="6000"/>
+                   max="3000"/>
 
         <parameter name="segment_end_m"
                    type="real"
@@ -67,9 +67,10 @@
 
         <parameter name="airport_runway"
                    type="string"
-                   values="LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;AYMD_7;BIRK_19;CYEY_32;CYYZ_24L;DNMK_05;EDDP_8L;
-                   EFHK_4R;EFMI_11;EFVA_34;EGNJ_02;EKCH_4L;EKMB_10;EKTS_10;EKYT_2306R;ETNH_8;FAMD_16;FAPP_23;FASK_20;FASZ_17;FBKE_8;FMST_22;FTTD_22;FZWA_16;GGOV_3;
-                   GMFB_09;GMME_3;GOOY_00;HTZA_18;KAGC_28;KCDS_18;KCKB_21;KDLF_31C"/>
+                   values="LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;
+                   EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;
+                   KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;
+                   WMKK_33;VHHH_07R;RJTT_22;YSSY_34R"/>
 
         <!-- ===== Contraintes ===== -->
 

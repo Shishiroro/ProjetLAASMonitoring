@@ -50,7 +50,7 @@ def export(root_node, path):
         raise ValueError(f"Format airport_runway invalide : '{airport_runway}' (attendu: ICAO_RWY)")
     airport, runway = airport_runway.split("_", 1)
 
-    # --- Calcul auto de tau (Dryden simplifie) ---
+    # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), L ≈ h, donc tau ≈ h / V
     h_m = segment_start_m * math.tan(math.radians(3.0))
     speed_ms = ground_speed_kts * 0.514444
@@ -78,7 +78,7 @@ def export(root_node, path):
           f"dist=[{segment_start_m:.0f}-{segment_end_m:.0f}m] | "
           f"wind={wind_speed_kts:.0f}kts@{wind_direction_deg:.0f}deg")
 
-    flight_data, distances_m, ltp_alt = build_trajectory(
+    flight_data, _, _ = build_trajectory(
         cfg, ou,
         ltp_lat=rwy["ltp_lat"],
         ltp_lon=rwy["ltp_lon"],
@@ -87,12 +87,10 @@ def export(root_node, path):
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
-    # --- Exporter .esp + .yaml + .csv --- / à noter que .csv debug pas .csv lardv2 
+    # --- Exporter .esp + .yaml ---
     export_scenario(
         flight_data, cfg, ou,
         airport, runway,
         output_dir=path,
         scenario_name=f"{airport}_{runway}",
-        distances_m=distances_m,
-        ltp_alt=ltp_alt,
     )
