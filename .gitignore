@@ -4,6 +4,7 @@ taf/
 
 # Scenarios generes
 output/
+runs/
 
 # Python
 __pycache__/
@@ -30,6 +31,10 @@ yolo/datasetsGES/
 CLAUDE.md
 DOCUMENTATION.txt
 historique.txt
+tutoArtemis.txt
+
+# Sweep scenarios
+project/sweep/
 
 # Claude Code
 .claude/

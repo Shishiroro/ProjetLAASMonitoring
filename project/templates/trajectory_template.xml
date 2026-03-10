@@ -19,7 +19,7 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="20"
+                   min="10"
                    max="20"/>
 
         <parameter name="segment_start_m"

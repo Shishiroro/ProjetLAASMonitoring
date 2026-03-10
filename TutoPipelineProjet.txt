@@ -1,0 +1,19 @@
+================================================================
+IMPORTANT - PIPELINE PROJET
+================================================================
+
+1. python run_pipeline.py generate -n 5
+   → Genere runs/LFPO_24/ runs/EDDF_25C/ etc. avec .esp + .yaml
+
+2. Tu importes les .esp dans GES, tu rends, tu telecharges les .zip
+
+3. Tu poses chaque .zip dans runs/<nom>/
+   Ex: runs/EDDF_25C/EDDF_25C.zip
+
+4. python run_pipeline.py evaluate --all
+   → Pour chaque run :
+     - Dezip auto le .zip → footage/
+     - Genere le CSV ground truth
+     - Lance YOLO → predictions/ + annotated/
+     - Calcule IoU → eval_results.json
+     - Rapport final 

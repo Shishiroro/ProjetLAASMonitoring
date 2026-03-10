@@ -95,8 +95,18 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
     return torch.tensor(rows, dtype=torch.float32)
 
 
-def evaluate(labels_dir: Path, csv_path: Path, iou_thresh: float = 0.5, iou_method: str = "CIOU", runway: str | None = None):
-    """Lance l'evaluation IoU et affiche les metriques."""
+def evaluate(labels_dir: Path, csv_path: Path, iou_thresh: float = 0.5, iou_method: str = "CIOU",
+             runway: str | None = None, results_dir: Path | None = None):
+    """Lance l'evaluation IoU et affiche les metriques.
+
+    Args:
+        labels_dir: Dossier des .txt predictions YOLO.
+        csv_path: Fichier .csv ground truth LARD.
+        iou_thresh: Seuil IoU.
+        iou_method: Methode IoU (IOU/GIOU/DIOU/CIOU).
+        runway: Filtrer GT sur une piste.
+        results_dir: Dossier ou sauvegarder eval_results.json (defaut: parent de labels_dir).
+    """
 
     # Noms des images (stems des .txt) pour le mapping img_id
     txt_files = sorted(labels_dir.glob("*.txt"))
@@ -136,9 +146,9 @@ def evaluate(labels_dir: Path, csv_path: Path, iou_thresh: float = 0.5, iou_meth
     print(f"  Confiance: {metrics['c']:.4f}")
     print(f"  TP={metrics['tp']}, FP={metrics['fp']}, FN={metrics['fn']}")
 
-    # Sauvegarder dans le dossier exp (parent de labels/)
-    exp_dir = labels_dir.parent
-    results_file = exp_dir / "eval_results.json"
+    # Sauvegarder
+    save_dir = results_dir or labels_dir.parent
+    results_file = save_dir / "eval_results.json"
     results = {
         "iou_thresh": iou_thresh,
         "iou_method": iou_method,
