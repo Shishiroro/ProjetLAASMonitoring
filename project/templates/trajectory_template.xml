@@ -19,8 +19,8 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="10"
-                   max="10"/>
+                   min="20"
+                   max="20"/>
 
         <parameter name="segment_start_m"
                    type="real"
@@ -60,8 +60,8 @@
 
         <parameter name="stabilization_distance_m"
                    type="real"
-                   min="800"
-                   max="2500"/>
+                   min="1000"
+                   max="1500"/>
 
         <!-- ===== Piste cible (format ICAO_RWY) ===== -->
 
@@ -81,7 +81,7 @@
                     ranges="[0, 0]"
                     types="forall"/>
 
-        <!-- La stabilisation commence apres la fin d'approche -->
+        <!-- La distance de stabilisation doit être supérieure à la distance de fin d'approche. -->
         <constraint name="stab_gt_end"
                     expressions="scenario[i]\stabilization_distance_m SUP scenario[i]\segment_end_m"
                     quantifiers="i"

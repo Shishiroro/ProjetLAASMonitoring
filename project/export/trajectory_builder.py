@@ -51,11 +51,11 @@ class OUParams:
     yaw_deg: float = 0.0            # yaw moyen (deviation)
     roll_deg: float = 0.0           # roll moyen
 
-    std_alpha_v_deg: float = 0.4    # ecart-type vertical (LARDv2: 0.4)
-    std_alpha_h_deg: float = 1.0    # ecart-type horizontal (ILS localizer: ±2.5°, 2σ=2.0°)
-    std_yaw_deg: float = 2.5        # ecart-type yaw (reduit pour vue frontale stable)
-    std_pitch_deg: float = 2.0      # ecart-type pitch (LARDv2: 2.0)
-    std_roll_deg: float = 5.0       # ecart-type roll (LARDv2: 5.0)
+    std_alpha_v_deg: float = 0.25   # ecart-type vertical (~half-dot glide slope)
+    std_alpha_h_deg: float = 0.35   # ecart-type horizontal (~half-dot localizer, ±15m a 3km)
+    std_yaw_deg: float = 1.2        # ecart-type yaw (approche stabilisee A320)
+    std_pitch_deg: float = 0.7      # ecart-type pitch (assiette quasi fixe sur glide)
+    std_roll_deg: float = 2.5       # ecart-type roll (+ couplage lateral en sus)
 
     dist_ap_m: float = 300.0        # distance aiming point depuis LTP (où l'avion vise)
 
@@ -95,7 +95,7 @@ def compute_spatial_timeline(cfg: TrajectoryConfig):
 # ---------------------------------------------------------------------------
 
 def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
-                        conv_factors=None, oversample_factor=50):
+                        conv_factors=None, sim_rate_hz=500):
     """
     Processus OU discret avec pas de temps variables et convergence integree.
 
@@ -106,54 +106,56 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
     Le processus OU converge alors naturellement vers mean car le bruit
     injecte diminue progressivement, tout en gardant la correlation temporelle.
 
-    :param n_steps: nombre de pas
+    La simulation interne tourne a une frequence fixe (sim_rate_hz) independante
+    du fps demande. Cela garantit que le meme seed produit la meme trajectoire
+    sous-jacente quel que soit le fps (10, 20, 30...).
+
+    :param n_steps: nombre de pas (frames de sortie)
     :param dt_array: array de dt (n_steps-1,)
     :param correlation_time: tau du processus OU (secondes)
     :param std: ecart-type stationnaire de base
     :param mean: moyenne de reversion
     :param conv_factors: ndarray (n_steps,) facteurs de convergence [0,1]
-    :param oversample_factor: nombre de micro-pas entre chaque frame (defaut 10).
-                              Plus c'est haut, plus c'est lisse (rendements decroissants au-dela de ~20).
+    :param sim_rate_hz: frequence interne de simulation (Hz). Fixe = meme
+                        nombre de tirages aleatoires pour la meme duree.
     :return: ndarray (n_steps,)
     """
     if n_steps <= 0:
         return np.array([])
 
     tau = max(correlation_time, 1e-6)
-    osf = max(int(oversample_factor), 1)
 
-    # --- Surechantillonnage : simuler a osf x le taux reel ---
-    # Entre chaque paire de frames, on insere osf micro-pas avec dt/osf.
-    # Les conv_factors sont interpoles lineairement sur les micro-pas.
-    n_micro = (n_steps - 1) * osf + 1
-
-    # Construire dt micro (chaque dt original divise par osf)
-    dt_micro = np.empty(n_micro - 1)
+    # --- Temps cumule des frames de sortie ---
+    frame_times = np.zeros(n_steps)
     for i in range(n_steps - 1):
-        dt = dt_array[min(i, len(dt_array) - 1)]
-        dt_micro[i * osf:(i + 1) * osf] = dt / osf
+        frame_times[i + 1] = frame_times[i] + dt_array[min(i, len(dt_array) - 1)]
+    total_duration = frame_times[-1]
 
-    # Interpoler conv_factors sur les micro-pas
+    # --- Grille interne a frequence fixe ---
+    dt_sim = 1.0 / sim_rate_hz
+    n_micro = max(int(round(total_duration * sim_rate_hz)), 1) + 1
+    micro_times = np.linspace(0.0, total_duration, n_micro)
+
+    # Interpoler conv_factors sur la grille interne (via les temps)
     if conv_factors is not None:
-        micro_indices = np.linspace(0, n_steps - 1, n_micro)
-        conv_micro = np.interp(micro_indices, np.arange(n_steps), conv_factors)
+        conv_micro = np.interp(micro_times, frame_times, conv_factors)
     else:
         conv_micro = None
 
-    # Simuler le processus OU sur les micro-pas
+    # Simuler le processus OU sur la grille interne
     x_micro = np.zeros(n_micro)
     std_0 = std * (conv_micro[0] if conv_micro is not None else 1.0)
     x_micro[0] = mean + std_0 * np.random.randn()
 
     for j in range(1, n_micro):
-        dt_j = dt_micro[j - 1]
+        dt_j = micro_times[j] - micro_times[j - 1]
         decay = np.exp(-dt_j / tau)
         std_j = std * (conv_micro[j] if conv_micro is not None else 1.0)
         sigma_d = std_j * np.sqrt(max(1.0 - np.exp(-2.0 * dt_j / tau), 0.0))
         x_micro[j] = mean + (x_micro[j - 1] - mean) * decay + sigma_d * np.random.randn()
 
-    # Sous-echantillonner : garder uniquement les points aux frames reelles
-    x = x_micro[::osf]
+    # Interpoler aux temps des frames de sortie
+    x = np.interp(frame_times, micro_times, x_micro)
 
     return x
 
@@ -246,30 +248,88 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     # --- OU deviations par canal (avec convergence integree) ---
     # Le std diminue progressivement via conv_factors, ce qui fait
     # converger le processus OU naturellement vers 0 sans "snap".
-    def _ou(std, mean=0.0):
+    #
+    # Tau differencies par type de canal :
+    #   - Position (alpha_h, alpha_v) : tau long (~5x) car l'avion a de l'inertie,
+    #     il ne change pas de direction instantanement. Donne des derives lentes.
+    #   - Attitude (yaw, pitch, roll) : tau court (Dryden) car les surfaces de
+    #     controle reagissent vite. Donne des oscillations rapides realistes.
+    tau_attitude = cfg.correlation_time_s           # ~2s (Dryden)
+    tau_position = cfg.correlation_time_s * 5.0     # ~10s (derive lente)
+
+    def _ou(std, tau, mean=0.0):
         return generate_ou_process(
             n_steps=n_frames,
             dt_array=dt_array,
-            correlation_time=cfg.correlation_time_s,
+            correlation_time=tau,
             std=std * turb_scale,
             mean=mean,
             conv_factors=conv,
         )
 
-    alpha_v_dev = _ou(ou.std_alpha_v_deg)
-    alpha_h_dev = _ou(ou.std_alpha_h_deg)
-    yaw_dev     = _ou(ou.std_yaw_deg)
-    pitch_dev   = _ou(ou.std_pitch_deg)
-    roll_dev    = _ou(ou.std_roll_deg)
+    alpha_v_dev = _ou(ou.std_alpha_v_deg, tau_position)
+    alpha_h_dev = _ou(ou.std_alpha_h_deg, tau_position)
+    yaw_dev     = _ou(ou.std_yaw_deg, tau_attitude)
+    pitch_dev   = _ou(ou.std_pitch_deg, tau_attitude)
+    roll_dev    = _ou(ou.std_roll_deg, tau_attitude)
 
-    # --- Crab angle (constant, pas de convergence) ---
-    # Le crab angle corrige le vent : l'avion le maintient jusqu'au toucher.
-    # Seules les deviations OU convergent, pas la correction vent.
+    # --- Rate limiting sur les canaux angulaires ---
+    # Empeche les sauts brusques frame-a-frame (l'avion ne peut pas
+    # tourner instantanement). Meme principe que max_climb_rate pour l'altitude.
+    # Valeurs en deg/s : roll ~5, yaw ~3, pitch ~2 (realiste approche).
+    max_roll_rate_ds = 5.0    # deg/s
+    max_yaw_rate_ds = 3.0     # deg/s
+    max_pitch_rate_ds = 2.0   # deg/s
+    dt_rl = dt_array[0]  # constant (vitesse constante)
+
+    def _rate_limit(signal, max_rate_ds):
+        max_delta = max_rate_ds * dt_rl
+        for i in range(1, len(signal)):
+            delta = signal[i] - signal[i - 1]
+            if abs(delta) > max_delta:
+                signal[i] = signal[i - 1] + np.sign(delta) * max_delta
+        return signal
+
+    max_alpha_h_rate_ds = 1.5   # deg/s — deviation laterale (localizer)
+    max_alpha_v_rate_ds = 0.5   # deg/s — deviation verticale (glide slope)
+
+    alpha_h_dev = _rate_limit(alpha_h_dev, max_alpha_h_rate_ds)
+    alpha_v_dev = _rate_limit(alpha_v_dev, max_alpha_v_rate_ds)
+    yaw_dev     = _rate_limit(yaw_dev, max_yaw_rate_ds)
+    pitch_dev   = _rate_limit(pitch_dev, max_pitch_rate_ds)
+
+    # --- Couplage roll-lateral : l'avion penche dans le sens de sa deviation ---
+    # On utilise la derivee filtree (EMA) de alpha_h pour eviter les oscillations
+    # que causait la derivee brute (echec v3).
+    # Gain ~2.0 : 1 deg/s de deviation laterale → 2 deg de roll.
+    roll_lateral_gain = 2.0
+    ema_alpha = 0.15  # coeff EMA (0=pas de filtre, 1=tout lisse). 0.15 ≈ cutoff ~1Hz a 10fps
+    d_alpha_h = np.diff(alpha_h_dev, prepend=alpha_h_dev[0]) / dt_rl  # derivee deg/s
+    # Filtre EMA passe-bas sur la derivee
+    d_alpha_h_filtered = np.zeros_like(d_alpha_h)
+    d_alpha_h_filtered[0] = d_alpha_h[0]
+    for i in range(1, len(d_alpha_h)):
+        d_alpha_h_filtered[i] = ema_alpha * d_alpha_h[i] + (1 - ema_alpha) * d_alpha_h_filtered[i - 1]
+    roll_dev += roll_lateral_gain * d_alpha_h_filtered
+
+    roll_dev    = _rate_limit(roll_dev, max_roll_rate_ds)
+
+    # --- Crab angle avec de-crab en finale ---
+    # Le pilote maintient le crab pendant l'approche puis l'enleve
+    # (coup de palonnier) dans les derniers 300m du segment.
+    # Le de-crab commence a segment_end + 300m et converge vers 0 a segment_end.
     crab_angle = compute_crab_angle(
         cfg.wind_speed_kts, cfg.wind_direction_deg,
         runway_heading_deg, cfg.ground_speed_kts
     )
+    decrab_start_m = cfg.segment_end_m + 300.0  # debut du de-crab
     crab_angles = np.full(n_frames, crab_angle)
+    for i in range(n_frames):
+        if distances_m[i] < decrab_start_m:
+            # Convergence lineaire : plein crab a decrab_start, 0 a segment_end
+            ratio = (distances_m[i] - cfg.segment_end_m) / 300.0
+            ratio = np.clip(ratio, 0.0, 1.0)
+            crab_angles[i] = crab_angle * ratio
 
     # --- Calcul altitudes brutes puis lissage monotone ---
     raw_alts = np.zeros(n_frames)
@@ -315,6 +375,7 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
         # Camera regarde vers FPAP (runway_heading = LTP→FPAP)
         yaw   = runway_heading_deg + crab_angles[i] + yaw_dev[i]
         pitch = 90 + ou.pitch_deg + pitch_dev[i]
+
         roll  = ou.roll_deg + roll_dev[i]
 
         flight_data.append((lon, lat, alt, yaw, pitch, roll))

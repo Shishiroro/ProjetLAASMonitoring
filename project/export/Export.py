@@ -51,7 +51,7 @@ def export(root_node, path):
     airport, runway = airport_runway.split("_", 1)
 
     # --- Calcul auto de tau  ---
-    # A nos altitudes (~300m max), L ≈ h, donc tau ≈ h / V
+    # A nos altitudes (~300m max), , donc tau ≈ h / V
     h_m = segment_start_m * math.tan(math.radians(3.0))
     speed_ms = ground_speed_kts * 0.514444
     correlation_time_s = h_m / speed_ms
