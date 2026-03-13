@@ -1,0 +1,134 @@
+================================================================
+ camera_sensor_errors.py — Guide d'utilisation
+================================================================
+
+Simule des fautes capteur camera embarquee avion sur des images.
+Permet de tester la robustesse de YOLOv8 face a des degradations.
+
+----------------------------------------------------------------
+ PREREQUIS
+----------------------------------------------------------------
+- Python 3.10+
+- OpenCV :  pip install opencv-python
+- NumPy  :  pip install numpy
+(deja dans le projet normalement)
+
+----------------------------------------------------------------
+ USAGE CLI
+----------------------------------------------------------------
+
+1) Lister toutes les erreurs et presets disponibles :
+
+   python yolo/camera_sensor_errors/camera_sensor_errors.py --list
+
+
+2) Appliquer des erreurs specifiques :
+
+   python yolo/camera_sensor_errors/camera_sensor_errors.py --images runs/LFPO_24/footage/ --output runs/LFPO_24/degraded/ --errors gaussian_noise,motion_blur --severity 0.5
+
+   --errors   : noms separes par des virgules (voir --list)
+   --severity : 0.0 (aucun effet) a 1.0 (maximum), defaut 0.5
+
+
+3) Appliquer un preset (combinaison realiste pre-configuree) :
+
+   python yolo/camera_sensor_errors/camera_sensor_errors.py --images runs/LFPG_09L/footage/ --output runs/LFPG_09L/degraded/ --preset moderate
+
+   Presets disponibles :
+     light        — Conditions normales, defauts mineurs
+     moderate     — Turbulence moderee, capteur vieillissant
+     severe       — Vibrations fortes, objectif sale, bruit eleve
+     solar_glare  — Soleil face camera (flare + surexposition)
+     low_light    — Approche de nuit / faible luminosite
+     icing        — Givre / condensation sur objectif
+     compression  — Liaison video degradee
+
+   --severity-scale : multiplicateur (0.5 = moitie, 2.0 = double)
+
+
+----------------------------------------------------------------
+ USAGE DEPUIS LE CODE (import)
+----------------------------------------------------------------
+
+   from yolo.camera_sensor_errors.camera_sensor_errors import apply_errors, apply_preset
+   import cv2
+
+   img = cv2.imread("image.png")
+
+   # Erreurs individuelles
+   degraded = apply_errors(img, ["gaussian_noise", "motion_blur"], severity=0.4)
+
+   # Severite par erreur
+   degraded = apply_errors(img, ["gaussian_noise", "motion_blur"],
+                           severities={"gaussian_noise": 0.3, "motion_blur": 0.6})
+
+   # Preset
+   degraded = apply_preset(img, "severe", severity_scale=0.8)
+
+   cv2.imwrite("degraded.png", degraded)
+
+
+----------------------------------------------------------------
+ WORKFLOW AVEC YOLO
+----------------------------------------------------------------
+
+Objectif : evaluer la robustesse de YOLOv8 sur images degradees.
+
+1. Generer les images degradees :
+
+   python yolo/camera_sensor_errors/camera_sensor_errors.py --images runs/LFPG_09L/footage/ --output runs/LFPG_09L/degraded/ --preset moderate
+
+2. Lancer YOLOv8 sur les images degradees :
+
+   python yolo/predict.py --images runs/LFPG_09L/degraded/ --output runs/LFPG_09L/degraded_predictions/
+
+3. Comparer avec les resultats sur images originales pour mesurer
+   l'impact des fautes capteur sur la detection.
+
+
+----------------------------------------------------------------
+ LISTE DES ERREURS
+----------------------------------------------------------------
+
+Bruit :
+  gaussian_noise      Bruit gaussien capteur
+  shot_noise          Bruit photonique (basse lumiere)
+  salt_pepper         Pixels morts aleatoires (sel & poivre)
+  dead_pixels         Clusters de pixels morts (defaut capteur)
+
+Flou :
+  motion_blur         Flou de bouge (vibrations avion)
+  defocus_blur        Flou de mise au point
+  rolling_shutter     Distorsion rolling shutter (vibrations)
+
+Exposition :
+  overexposure        Surexposition (soleil, auto-exposure lag)
+  underexposure       Sous-exposition (ombre, transition rapide)
+
+Optique :
+  vignetting          Assombrissement des bords
+  chromatic_aberration Decalage R/B aux bords
+  radial_distortion   Distorsion barrel/pincushion
+  lens_flare          Tache lumineuse (soleil dans le champ)
+
+Capteur :
+  banding             Lignes horizontales parasites
+
+Compression :
+  jpeg_artifacts      Artefacts JPEG (transmission degradee)
+
+Couleur :
+  color_shift         Derive balance des blancs
+
+Environnement :
+  condensation        Givre / condensation sur objectif
+  dirt_on_lens        Salete / gouttes sur objectif
+
+----------------------------------------------------------------
+ NOTES
+----------------------------------------------------------------
+- Formats images supportes : .png, .jpg, .jpeg, .bmp, .tiff
+- Les erreurs sont appliquees dans l'ordre donne (l'ordre compte)
+- Severity 0 = quasi aucun effet, 1 = degradation maximale
+- Le fichier est autonome, ne modifie rien d'autre dans le projet
+- Les images de sortie gardent le meme nom que les originales

@@ -72,7 +72,9 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
     # et les images annotees dans <project>/<name>/
     # On utilise un dossier temp puis on reorganise si output_dir est specifie
     if output_dir is not None:
-        # YOLO va ecrire dans annotated_dir/labels/ et annotated_dir/
+        # YOLO va ecrire dans <project>/<name>/ et <project>/<name>/labels/
+        # Chemins absolus pour eviter que YOLO resolve par rapport a son propre CWD
+        abs_annotated = annotated_dir.resolve()
         model.predict(
             source=source,
             imgsz=imgsz,
@@ -80,12 +82,12 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
             save_txt=True,
             save_conf=True,
             save=True,
-            project=str(annotated_dir),
-            name=".",
+            project=str(abs_annotated.parent),
+            name=abs_annotated.name,
             exist_ok=True,
         )
         # Deplacer les labels de annotated/labels/ vers predictions/
-        yolo_labels = annotated_dir / "labels"
+        yolo_labels = abs_annotated / "labels"
         if yolo_labels.exists():
             import shutil
             for txt in yolo_labels.glob("*.txt"):
