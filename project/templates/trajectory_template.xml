@@ -81,13 +81,6 @@
                     ranges="[0, 0]"
                     types="forall"/>
 
-        <!-- La distance de stabilisation doit être supérieure à la distance de fin d'approche. -->
-        <constraint name="stab_gt_end"
-                    expressions="scenario[i]\stabilization_distance_m SUP scenario[i]\segment_end_m"
-                    quantifiers="i"
-                    ranges="[0, 0]"
-                    types="forall"/>
-
         <!-- Marge entre stabilisation et fin d'approche :
              La zone de convergence doit etre assez large pour que
              la trajectoire ait le temps de se stabiliser naturellement.

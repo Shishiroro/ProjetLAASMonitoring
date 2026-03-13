@@ -280,6 +280,58 @@ def dirt_on_lens(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     return out
 
 
+def fog(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Brouillard (Hendrycks). Voile blanc progressif, perte de contraste."""
+    h, w = img.shape[:2]
+    out = img.astype(np.float32)
+    # Intensite du voile
+    alpha = 0.2 + severity * 0.6  # 0.2 - 0.8
+    # Gradient vertical (plus dense en bas = plus loin sur la piste)
+    gradient = np.linspace(0.3, 1.0, h).reshape(h, 1, 1).astype(np.float32)
+    fog_layer = np.full_like(out, 240)  # blanc legerement gris
+    out = out * (1 - alpha * gradient) + fog_layer * alpha * gradient
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def zoom_blur(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Flou radial / zoom (Hendrycks). Simule l'avancement rapide vers la piste."""
+    h, w = img.shape[:2]
+    n_steps = int(3 + severity * 12)  # 3 - 15 etapes de zoom
+    zoom_factor = 1.0 + severity * 0.15  # 1.0 - 1.15
+    out = np.zeros_like(img, dtype=np.float32)
+    cx, cy = w / 2, h / 2
+    for i in range(n_steps):
+        t = i / max(n_steps - 1, 1)
+        scale = 1.0 + (zoom_factor - 1.0) * t
+        M = np.float32([
+            [scale, 0, cx * (1 - scale)],
+            [0, scale, cy * (1 - scale)]
+        ])
+        zoomed = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+        out += zoomed.astype(np.float32)
+    out /= n_steps
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def contrast(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Perte/exces de contraste (Hendrycks). Haze atmospherique ou reglage auto."""
+    # severity 0 = contraste normal, 0.5 = reduit, 1.0 = tres reduit
+    factor = max(0.1, 1.0 - severity * 0.85)  # 1.0 → 0.15
+    mean = img.astype(np.float32).mean()
+    out = mean + (img.astype(np.float32) - mean) * factor
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def pixelate(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Pixelisation (Hendrycks). Transmission video basse resolution."""
+    h, w = img.shape[:2]
+    # Facteur de reduction : 0.5 (leger) a 0.05 (extreme)
+    scale = max(0.05, 0.5 - severity * 0.45)
+    small_w, small_h = max(1, int(w * scale)), max(1, int(h * scale))
+    small = cv2.resize(img, (small_w, small_h), interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+
+
 # ---------------------------------------------------------------------------
 # Registre des erreurs
 # ---------------------------------------------------------------------------
@@ -311,6 +363,11 @@ ERROR_REGISTRY: dict[str, Callable] = {
     # Environnement
     "condensation": condensation,
     "dirt_on_lens": dirt_on_lens,
+    # Atmospherique / transmission
+    "fog": fog,
+    "zoom_blur": zoom_blur,
+    "contrast": contrast,
+    "pixelate": pixelate,
 }
 
 
@@ -392,6 +449,7 @@ PRESETS: dict[str, ErrorPreset] = {
             "vignetting", "chromatic_aberration", "radial_distortion", "lens_flare",
             "banding", "jpeg_artifacts", "color_shift",
             "condensation", "dirt_on_lens",
+            "fog", "zoom_blur", "contrast", "pixelate",
         ]},
     ),
 }

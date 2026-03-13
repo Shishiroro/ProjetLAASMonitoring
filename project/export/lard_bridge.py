@@ -143,8 +143,8 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     times = generate_frame_times(n_frames, cfg.fps)
 
     # --- Params image ---
-    img_width = 1280
-    img_height = 1024
+    img_width = 512
+    img_height = 512
     fov_x = 30.0
     watermark_height = 0
     # fov_y calcule comme dans LARD (write_scenario.py)
