@@ -11,10 +11,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "project" / "export"))
 sys.path.insert(0, str(PROJECT_ROOT / "LARD"))
 
-# Desactiver le filtre d'orientation de LARD pour labelliser TOUTES les pistes
-# (sinon la piste d'approche est exclue a cause de la convention yaw GES vs LARD)
+# Fix convention yaw : LARD retourne un azimut camera (LTP→FPAP) qui, apres % 360,
+# donne le cap de vol (~oppose au heading piste). runway_is_facing_us attend le sens
+# de regard. Le +180 corrige l'inversion (fix envisage par LARD, ligne 132 commentee).
 import src.labeling.label_export as _le
-_le.runway_is_facing_us = lambda *args, **kwargs: True
+_original_facing = _le.runway_is_facing_us
+def _fixed_facing(heading, runway):
+    return _original_facing((heading + 180) % 360, runway)
+_le.runway_is_facing_us = _fixed_facing
 
 from lard_bridge import generate_labels_csv
 

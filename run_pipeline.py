@@ -77,7 +77,9 @@ def _find_runs(run_name=None, all_runs=False):
 
 
 def _unzip_ges(run_dir):
-    """Dezippe le .zip GES dans le run, extrait les images vers footage/."""
+    """Dezippe le .zip GES dans le run, extrait les images vers footage/.
+    Renomme les images si leur prefixe ne correspond pas au nom du dossier
+    (cas d'un suffixe _002, _003... quand la meme piste est generee 2x)."""
     zips = sorted(run_dir.glob("*.zip"))
     if not zips:
         return False
@@ -86,6 +88,8 @@ def _unzip_ges(run_dir):
     if footage_dir.exists() and list(footage_dir.glob("*.jpeg")):
         print(f"  [ZIP] footage/ existe deja avec des images, skip dezip")
         return True
+
+    run_name = run_dir.name  # ex: LFPG_09L_002
 
     for zp in zips:
         print(f"  [ZIP] Extraction de {zp.name}...")
@@ -103,13 +107,25 @@ def _unzip_ges(run_dir):
 
             footage_dir.mkdir(parents=True, exist_ok=True)
 
+            # Detecter le prefixe des images dans le zip (ex: LFPG_09L)
+            first_img = Path(image_files[0]).name
+            # Prefixe = tout avant le dernier _NNN.ext
+            import re
+            m = re.match(r"^(.+)_\d+\.\w+$", first_img)
+            zip_prefix = m.group(1) if m else None
+
+            needs_rename = zip_prefix and zip_prefix != run_name
+
             for img_path in image_files:
-                # Extraire juste le nom du fichier (ignorer les sous-dossiers du zip)
                 img_name = Path(img_path).name
+                if needs_rename:
+                    img_name = img_name.replace(zip_prefix, run_name, 1)
                 target = footage_dir / img_name
                 with zf.open(img_path) as src, open(target, 'wb') as dst:
                     dst.write(src.read())
 
+            if needs_rename:
+                print(f"  [ZIP] Images renommees : {zip_prefix}_* -> {run_name}_*")
             print(f"  [ZIP] {len(image_files)} images extraites dans footage/")
 
     # Nettoyer exported_images/ (cree par LARD export_labels, doublon de footage/)
@@ -158,14 +174,15 @@ def step_generate(nb_scenarios=None, quiet=False):
             run_dir = RUNS_DIR / f"{name}_{idx:03d}"
 
         run_dir.mkdir(parents=True, exist_ok=True)
+        run_name = run_dir.name  # ex: LFPG_09L ou LFPG_09L_002
 
-        # Copier .esp
-        shutil.copy2(esp, run_dir / esp.name)
+        # Copier .esp (renomme si suffixe)
+        shutil.copy2(esp, run_dir / f"{run_name}.esp")
 
-        # Trouver le .yaml correspondant
+        # Trouver le .yaml correspondant (renomme si suffixe)
         matching_yaml = [y for y in yaml_files if y.stem == name]
         if matching_yaml:
-            shutil.copy2(matching_yaml[0], run_dir / matching_yaml[0].name)
+            shutil.copy2(matching_yaml[0], run_dir / f"{run_name}.yaml")
 
         # Copier le .xml des parametres du scenario (ex: scenario_0.xml)
         scenario_xml = esp.parent.parent / f"{esp.parent.parent.name}.xml"
@@ -200,8 +217,13 @@ def step_generate_gt(run_info):
     if export_path not in sys.path:
         sys.path.insert(0, export_path)
 
+    # Fix convention yaw : +180 pour passer du cap de vol au sens de regard
+    # (fix envisage par LARD, ligne 132 commentee dans label_export.py)
     import src.labeling.label_export as _le
-    _le.runway_is_facing_us = lambda *args, **kwargs: True
+    _original_facing = _le.runway_is_facing_us
+    def _fixed_facing(heading, runway):
+        return _original_facing((heading + 180) % 360, runway)
+    _le.runway_is_facing_us = _fixed_facing
 
     from lard_bridge import generate_labels_csv
 
@@ -210,6 +232,80 @@ def step_generate_gt(run_info):
         dataset_dir=str(run_dir),
     )
     return Path(csv_file)
+
+
+# ---------------------------------------------------------------------------
+# Etape 2b : Annotations visuelles GT LARD (echantillon)
+# ---------------------------------------------------------------------------
+
+def step_annotate_lard(run_info, csv_path, max_images=10):
+    """Dessine les bbox GT LARD sur un echantillon d'images dans annotated_lard/."""
+    import csv as csvmod
+    from PIL import Image, ImageDraw, ImageFont
+
+    run_dir = run_info["dir"]
+    footage_dir = run_dir / "footage"
+    out_dir = run_dir / "annotated_lard"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Police lisible (taille adaptee a l'image)
+    try:
+        font = ImageFont.truetype("arial.ttf", 20)
+    except OSError:
+        font = ImageFont.load_default()
+
+    # Charger le CSV
+    entries = {}
+    with open(csv_path, "r") as f:
+        reader = csvmod.DictReader(f, delimiter=";")
+        for row in reader:
+            filename = Path(row["image"]).name
+            corners = (
+                (int(row["x_TR"]), int(row["y_TR"])),
+                (int(row["x_TL"]), int(row["y_TL"])),
+                (int(row["x_BL"]), int(row["y_BL"])),
+                (int(row["x_BR"]), int(row["y_BR"])),
+            )
+            runway = row.get("runway", "?")
+            if filename not in entries:
+                entries[filename] = []
+            entries[filename].append({"corners": corners, "runway": runway})
+
+    COLORS = ["cyan", "red", "yellow", "lime", "magenta", "orange"]
+    runway_colors = {}
+    color_idx = 0
+    processed = 0
+
+    for filename in sorted(entries.keys()):
+        if processed >= max_images:
+            break
+        img_path = footage_dir / filename
+        if not img_path.exists():
+            continue
+
+        img = Image.open(img_path).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        for entry in entries[filename]:
+            rwy = entry["runway"]
+            if rwy not in runway_colors:
+                runway_colors[rwy] = COLORS[color_idx % len(COLORS)]
+                color_idx += 1
+            color = runway_colors[rwy]
+            c = entry["corners"]
+            for i in range(4):
+                draw.line([c[i], c[(i + 1) % 4]], fill=color, width=4)
+            # Label avec fond noir pour lisibilite
+            cx = sum(p[0] for p in c) // 4
+            cy = min(p[1] for p in c) - 25  # au-dessus de la bbox
+            bbox = draw.textbbox((cx, cy), rwy, font=font)
+            draw.rectangle([bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2], fill="black")
+            draw.text((cx, cy), rwy, fill=color, font=font)
+
+        img.save(out_dir / f"gt_{filename}")
+        processed += 1
+
+    print(f"  [GT-VIS] {processed} images annotees dans annotated_lard/")
 
 
 # ---------------------------------------------------------------------------
@@ -319,12 +415,13 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
             print(f"  [SKIP] Pas d'images dans footage/ pour {run_info['name']}")
             continue
 
-        # Extraire le runway du nom du run (ex: LFPO_24 → 24)
+        # Extraire le runway du nom du run (ex: LFPO_24 → 24, LFPG_09L_002 → 09L)
         rwy = runway
         if rwy is None:
-            parts = run_info["name"].split("_")
-            if len(parts) >= 2:
-                rwy = parts[-1]
+            import re
+            m = re.match(r"^[A-Z]{4}_(.+?)(?:_\d{3})?$", run_info["name"])
+            if m:
+                rwy = m.group(1)
 
         # GT
         try:
@@ -338,6 +435,12 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
             else:
                 print(f"  [SKIP] Pas de CSV GT pour {run_info['name']}")
                 continue
+
+        # Annotations visuelles GT LARD (echantillon)
+        try:
+            step_annotate_lard(run_info, csv_path)
+        except Exception as e:
+            print(f"  [GT-VIS] ERREUR : {e}")
 
         # YOLO
         try:
