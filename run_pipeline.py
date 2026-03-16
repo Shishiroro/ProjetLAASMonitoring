@@ -189,8 +189,14 @@ def step_generate(nb_scenarios=None, quiet=False):
         if scenario_xml.exists():
             shutil.copy2(scenario_xml, run_dir / "params.xml")
 
+        # Copier fault_profile.json (si fautes capteur actives)
+        fault_json = esp.parent / "fault_profile.json"
+        if fault_json.exists():
+            shutil.copy2(fault_json, run_dir / "fault_profile.json")
+
         created_runs.append(run_dir)
-        print(f"  [RUNS] {run_dir.name}/ <- .esp + .yaml")
+        extras = " + fault_profile.json" if fault_json.exists() else ""
+        print(f"  [RUNS] {run_dir.name}/ <- .esp + .yaml{extras}")
 
     print(f"\n[Pipeline] {len(created_runs)} run(s) cree(s) dans runs/")
     print(f"  Prochaine etape : importer les .esp dans GES, poser les .zip dans runs/<nom>/")
@@ -309,18 +315,61 @@ def step_annotate_lard(run_info, csv_path, max_images=10):
 
 
 # ---------------------------------------------------------------------------
+# Etape 2c : Application des fautes capteur
+# ---------------------------------------------------------------------------
+
+def step_apply_faults(run_info):
+    """Applique les fautes capteur aux images si fault_profile.json existe.
+    Les images degradees vont dans degraded/, les originales restent dans footage/.
+    Retourne le dossier a utiliser pour YOLO (degraded/ ou footage/)."""
+    run_dir = run_info["dir"]
+    fault_json = run_dir / "fault_profile.json"
+    footage_dir = run_dir / "footage"
+    degraded_dir = run_dir / "degraded"
+
+    if not fault_json.exists():
+        return footage_dir
+
+    # Si degraded/ existe deja avec des images, skip
+    if degraded_dir.exists() and list(degraded_dir.glob("*.jpeg")):
+        print(f"  [FAULTS] degraded/ existe deja, skip application")
+        return degraded_dir
+
+    print(f"\n  [FAULTS] Application des fautes capteur ({run_info['name']})...")
+
+    export_path = str(ROOT / "project" / "export")
+    if export_path not in sys.path:
+        sys.path.insert(0, export_path)
+
+    from sensor_fault_profile import load_fault_profile, apply_faults_to_directory
+
+    faults, n_frames = load_fault_profile(fault_json)
+    if not faults:
+        print(f"  [FAULTS] Aucune faute dans le profil, skip")
+        return footage_dir
+
+    fault_str = ", ".join(f"{f.fault_type}({f.severity:.2f})" for f in faults)
+    print(f"  [FAULTS] Fautes : {fault_str}")
+
+    apply_faults_to_directory(footage_dir, degraded_dir, faults, n_frames)
+    return degraded_dir
+
+
+# ---------------------------------------------------------------------------
 # Etape 3 : YOLO prediction
 # ---------------------------------------------------------------------------
 
-def step_predict(run_info, conf=0.25, imgsz=512):
-    """Lance YOLO sur les images d'un run, sortie dans le meme dossier."""
+def step_predict(run_info, conf=0.25, imgsz=512, images_dir=None):
+    """Lance YOLO sur les images d'un run, sortie dans le meme dossier.
+    :param images_dir: dossier d'images (defaut: footage/). Peut etre degraded/."""
     run_dir = run_info["dir"]
-    footage_dir = run_dir / "footage"
+    footage_dir = images_dir or (run_dir / "footage")
 
     n_images = len(
         list(footage_dir.glob("*.jpeg")) + list(footage_dir.glob("*.jpg")) + list(footage_dir.glob("*.png"))
     )
-    print(f"\n  [YOLO] Prediction sur {n_images} images ({run_info['name']})...")
+    src_label = footage_dir.name
+    print(f"\n  [YOLO] Prediction sur {n_images} images depuis {src_label}/ ({run_info['name']})...")
 
     yolo_path = str(YOLO_DIR)
     if yolo_path not in sys.path:
@@ -442,9 +491,17 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
         except Exception as e:
             print(f"  [GT-VIS] ERREUR : {e}")
 
+        # Fautes capteur (si fault_profile.json present)
+        try:
+            yolo_images_dir = step_apply_faults(run_info)
+        except Exception as e:
+            print(f"  [FAULTS] ERREUR : {e}")
+            yolo_images_dir = run_dir / "footage"
+
         # YOLO
         try:
-            predictions_dir = step_predict(run_info, conf=conf, imgsz=imgsz)
+            predictions_dir = step_predict(run_info, conf=conf, imgsz=imgsz,
+                                           images_dir=yolo_images_dir)
         except Exception as e:
             print(f"  [YOLO] ERREUR : {e}")
             continue

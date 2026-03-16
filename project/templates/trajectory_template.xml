@@ -34,7 +34,7 @@
 
         <parameter name="ground_speed_kts"
                    type="real"
-                   min="145"
+                   min="145" 
                    max="145"/>
 
         <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
@@ -67,10 +67,190 @@
 
         <parameter name="airport_runway"
                    type="string"
-                   values="LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;
-                   EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;
-                   KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;
-                   WMKK_33;VHHH_07R;RJTT_22;YSSY_34R"/>
+                   values="LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;WMKK_33;VHHH_07R;RJTT_22;YSSY_34R"/>
+
+        <!-- ===== Fautes capteur camera ===== -->
+        <!--
+            Chaque type de faute a 3 parametres :
+              {type}_severity  : severite [0.0, 1.0] — mettre min="0" max="0" pour desactiver
+              {type}_from_pct  : debut d'application en % de la trajectoire [0, 100]
+              {type}_to_pct    : fin d'application en % de la trajectoire [0, 100]
+                                 (0% = debut approche loin, 100% = pres de la piste)
+
+            Pour activer une faute : mettre severity min/max > 0 et ajuster from/to.
+            Plusieurs fautes se cumulent si leurs plages se chevauchent.
+            TAF (z3) sample dans les plages min/max et valide les contraintes.
+        -->
+
+        <!-- ===== Bruits ===== -->
+
+        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0.2"/>
+        <parameter name="gaussian_noise_from_pct"   type="real" min="0" max="0"/>
+        <parameter name="gaussian_noise_to_pct"     type="real" min="100" max="100"/>
+
+        <parameter name="shot_noise_severity"       type="real" min="0" max="0.2"/>
+        <parameter name="shot_noise_from_pct"        type="real" min="0" max="0"/>
+        <parameter name="shot_noise_to_pct"          type="real" min="100" max="100"/>
+
+        <parameter name="salt_pepper_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="salt_pepper_from_pct"       type="real" min="0" max="0"/>
+        <parameter name="salt_pepper_to_pct"         type="real" min="100" max="100"/>
+
+        <parameter name="dead_pixels_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="dead_pixels_from_pct"       type="real" min="0" max="0"/>
+        <parameter name="dead_pixels_to_pct"         type="real" min="100" max="100"/>
+
+        <!-- ===== Flous ===== -->
+
+        <parameter name="motion_blur_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="motion_blur_from_pct"       type="real" min="0" max="0"/>
+        <parameter name="motion_blur_to_pct"         type="real" min="100" max="100"/>
+
+        <parameter name="defocus_blur_severity"     type="real" min="0" max="0.2"/>
+        <parameter name="defocus_blur_from_pct"      type="real" min="0" max="0"/>
+        <parameter name="defocus_blur_to_pct"        type="real" min="100" max="100"/>
+
+        <parameter name="rolling_shutter_severity"  type="real" min="0" max="0.2"/>
+        <parameter name="rolling_shutter_from_pct"   type="real" min="0" max="0"/>
+        <parameter name="rolling_shutter_to_pct"     type="real" min="100" max="100"/>
+
+        <!-- ===== Exposition ===== -->
+
+        <parameter name="overexposure_severity"     type="real" min="0" max="0.2"/>
+        <parameter name="overexposure_from_pct"      type="real" min="0" max="0"/>
+        <parameter name="overexposure_to_pct"        type="real" min="100" max="100"/>
+
+        <parameter name="underexposure_severity"    type="real" min="0" max="0.2"/>
+        <parameter name="underexposure_from_pct"     type="real" min="0" max="0"/>
+        <parameter name="underexposure_to_pct"       type="real" min="100" max="100"/>
+
+        <!-- ===== Optique ===== -->
+
+        <parameter name="vignetting_severity"       type="real" min="0" max="0.2"/>
+        <parameter name="vignetting_from_pct"        type="real" min="0" max="0"/>
+        <parameter name="vignetting_to_pct"          type="real" min="100" max="100"/>
+
+        <parameter name="chromatic_aberration_severity" type="real" min="0" max="0.2"/>
+        <parameter name="chromatic_aberration_from_pct"  type="real" min="0" max="0"/>
+        <parameter name="chromatic_aberration_to_pct"    type="real" min="100" max="100"/>
+
+        <parameter name="radial_distortion_severity" type="real" min="0" max="0.2"/>
+        <parameter name="radial_distortion_from_pct"  type="real" min="0" max="0"/>
+        <parameter name="radial_distortion_to_pct"    type="real" min="100" max="100"/>
+
+        <parameter name="lens_flare_severity"       type="real" min="0" max="0.2"/>
+        <parameter name="lens_flare_from_pct"        type="real" min="0" max="0"/>
+        <parameter name="lens_flare_to_pct"          type="real" min="100" max="100"/>
+
+        <!-- ===== Artefacts ===== -->
+
+        <parameter name="banding_severity"          type="real" min="0" max="0.2"/>
+        <parameter name="banding_from_pct"           type="real" min="0" max="0"/>
+        <parameter name="banding_to_pct"             type="real" min="100" max="100"/>
+
+        <parameter name="jpeg_artifacts_severity"   type="real" min="0" max="0.2"/>
+        <parameter name="jpeg_artifacts_from_pct"    type="real" min="0" max="0"/>
+        <parameter name="jpeg_artifacts_to_pct"      type="real" min="100" max="100"/>
+
+        <parameter name="color_shift_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="color_shift_from_pct"       type="real" min="0" max="0"/>
+        <parameter name="color_shift_to_pct"         type="real" min="100" max="100"/>
+
+        <!-- ===== Environnement / salissure ===== -->
+
+        <parameter name="condensation_severity"     type="real" min="0" max="0"/>
+        <parameter name="condensation_from_pct"      type="real" min="0" max="0"/>
+        <parameter name="condensation_to_pct"        type="real" min="100" max="100"/>
+
+        <parameter name="dirt_on_lens_severity"     type="real" min="0" max="0"/>
+        <parameter name="dirt_on_lens_from_pct"      type="real" min="0" max="0"/>
+        <parameter name="dirt_on_lens_to_pct"        type="real" min="100" max="100"/>
+
+        <parameter name="fog_severity"              type="real" min="0" max="0"/>
+        <parameter name="fog_from_pct"               type="real" min="0" max="0"/>
+        <parameter name="fog_to_pct"                 type="real" min="100" max="100"/>
+
+        <!-- ===== Transformations geometriques ===== -->
+
+        <parameter name="zoom_blur_severity"        type="real" min="0" max="0"/>
+        <parameter name="zoom_blur_from_pct"         type="real" min="0" max="0"/>
+        <parameter name="zoom_blur_to_pct"           type="real" min="100" max="100"/>
+
+        <parameter name="contrast_severity"         type="real" min="0" max="0"/>
+        <parameter name="contrast_from_pct"          type="real" min="0" max="0"/>
+        <parameter name="contrast_to_pct"            type="real" min="100" max="100"/>
+
+        <parameter name="pixelate_severity"         type="real" min="0" max="0"/>
+        <parameter name="pixelate_from_pct"          type="real" min="0" max="0"/>
+        <parameter name="pixelate_to_pct"            type="real" min="100" max="100"/>
+
+        <!-- Contraintes from < to pour chaque faute -->
+        <constraint name="gaussian_noise_pct_order"
+                    expressions="scenario[i]\gaussian_noise_from_pct INF scenario[i]\gaussian_noise_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="shot_noise_pct_order"
+                    expressions="scenario[i]\shot_noise_from_pct INF scenario[i]\shot_noise_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="salt_pepper_pct_order"
+                    expressions="scenario[i]\salt_pepper_from_pct INF scenario[i]\salt_pepper_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="dead_pixels_pct_order"
+                    expressions="scenario[i]\dead_pixels_from_pct INF scenario[i]\dead_pixels_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="motion_blur_pct_order"
+                    expressions="scenario[i]\motion_blur_from_pct INF scenario[i]\motion_blur_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="defocus_blur_pct_order"
+                    expressions="scenario[i]\defocus_blur_from_pct INF scenario[i]\defocus_blur_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="rolling_shutter_pct_order"
+                    expressions="scenario[i]\rolling_shutter_from_pct INF scenario[i]\rolling_shutter_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="overexposure_pct_order"
+                    expressions="scenario[i]\overexposure_from_pct INF scenario[i]\overexposure_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="underexposure_pct_order"
+                    expressions="scenario[i]\underexposure_from_pct INF scenario[i]\underexposure_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="vignetting_pct_order"
+                    expressions="scenario[i]\vignetting_from_pct INF scenario[i]\vignetting_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="chromatic_aberration_pct_order"
+                    expressions="scenario[i]\chromatic_aberration_from_pct INF scenario[i]\chromatic_aberration_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="radial_distortion_pct_order"
+                    expressions="scenario[i]\radial_distortion_from_pct INF scenario[i]\radial_distortion_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="lens_flare_pct_order"
+                    expressions="scenario[i]\lens_flare_from_pct INF scenario[i]\lens_flare_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="banding_pct_order"
+                    expressions="scenario[i]\banding_from_pct INF scenario[i]\banding_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="jpeg_artifacts_pct_order"
+                    expressions="scenario[i]\jpeg_artifacts_from_pct INF scenario[i]\jpeg_artifacts_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="color_shift_pct_order"
+                    expressions="scenario[i]\color_shift_from_pct INF scenario[i]\color_shift_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="condensation_pct_order"
+                    expressions="scenario[i]\condensation_from_pct INF scenario[i]\condensation_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="dirt_on_lens_pct_order"
+                    expressions="scenario[i]\dirt_on_lens_from_pct INF scenario[i]\dirt_on_lens_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="fog_pct_order"
+                    expressions="scenario[i]\fog_from_pct INF scenario[i]\fog_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="zoom_blur_pct_order"
+                    expressions="scenario[i]\zoom_blur_from_pct INF scenario[i]\zoom_blur_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="contrast_pct_order"
+                    expressions="scenario[i]\contrast_from_pct INF scenario[i]\contrast_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="pixelate_pct_order"
+                    expressions="scenario[i]\pixelate_from_pct INF scenario[i]\pixelate_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
 
         <!-- ===== Contraintes ===== -->
 

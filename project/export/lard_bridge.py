@@ -122,7 +122,7 @@ def generate_frame_times(n_frames, fps):
 # ---------------------------------------------------------------------------
 
 def export_scenario(flight_data, cfg, ou_params, airport, runway,
-                    output_dir, scenario_name="scenario"):
+                    output_dir, scenario_name="scenario", faults=None):
     """
     Exporte un scenario complet : .esp + .yaml.
     Le .yaml est fidele au format LARD (poses, image, trajectory)
@@ -143,8 +143,8 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     times = generate_frame_times(n_frames, cfg.fps)
 
     # --- Params image ---
-    img_width = 512
-    img_height = 512
+    img_width = 1024
+    img_height = 1024
     fov_x = 30.0
     watermark_height = 0
     # fov_y calcule comme dans LARD (write_scenario.py)
@@ -235,6 +235,11 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
             'year_min': 2020, 'year_max': 2025,
         },
     }
+
+    # --- Fautes capteur (optionnel) ---
+    if faults:
+        from dataclasses import asdict as _asdict
+        yaml_content['sensor_faults'] = [_asdict(f) for f in faults]
 
     yaml_file = output_path / f"{scenario_name}.yaml"
     with open(yaml_file, "w") as f:

@@ -18,6 +18,7 @@ if str(_export_dir) not in sys.path:
 
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario
+from sensor_fault_profile import FaultConfig, KNOWN_FAULT_TYPES, validate_faults, save_fault_profile
 
  
 def _read_param(node, name):
@@ -49,6 +50,21 @@ def export(root_node, path):
     if "_" not in airport_runway:
         raise ValueError(f"Format airport_runway invalide : '{airport_runway}' (attendu: ICAO_RWY)")
     airport, runway = airport_runway.split("_", 1)
+
+    # --- Lire les fautes capteur (severity > 0 = actif) ---
+    faults = []
+    for fault_type in sorted(KNOWN_FAULT_TYPES):
+        severity = float(_read_param(scenario_node, f"{fault_type}_severity"))
+        if severity > 0:
+            from_pct = float(_read_param(scenario_node, f"{fault_type}_from_pct"))
+            to_pct = float(_read_param(scenario_node, f"{fault_type}_to_pct"))
+            faults.append(FaultConfig(fault_type, severity, from_pct, to_pct))
+
+    if faults:
+        validate_faults(faults)
+        fault_str = ", ".join(f"{f.fault_type}({f.severity:.2f})[{f.from_pct:.0f}-{f.to_pct:.0f}%]"
+                              for f in faults)
+        print(f"[Export] Fautes capteur : {fault_str}")
 
     # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), , donc tau ≈ h / V
@@ -83,7 +99,7 @@ def export(root_node, path):
         ltp_lat=rwy["ltp_lat"],
         ltp_lon=rwy["ltp_lon"],
         ltp_alt=rwy["ltp_alt"],
-        runway_heading_deg=rwy["runway_heading_deg"],
+        runway_heading_deg=rwy["runway_heading_deg"], 
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
@@ -93,4 +109,13 @@ def export(root_node, path):
         airport, runway,
         output_dir=path,
         scenario_name=f"{airport}_{runway}",
+        faults=faults,
     )
+
+    # --- Sauver le profil de fautes (si actif) ---
+    if faults:
+        save_fault_profile(
+            faults,
+            n_frames=len(flight_data),
+            output_path=Path(path) / "fault_profile.json",
+        )
