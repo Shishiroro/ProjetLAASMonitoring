@@ -1,0 +1,245 @@
+INTEGRATION X-PLANE 12 — LARD-LAAS-TAF
+=======================================
+Date : 2026-03-17
+
+1. POURQUOI X-PLANE
+-------------------
+- Remplace Google Earth Studio (etape manuelle) par un rendu automatise
+- 100 scenarios full auto sans intervention humaine
+- Photorealisme secondaire : on teste des moniteurs, pas un modele
+- Deux couches de degradation :
+    * Meteo X-Plane (in-sim) : fog 3D, pluie, neige, luminosite (futur)
+    * Fautes capteur (post-rendu) : bruit, blur, pixelisation (existe deja)
+- La meteo degrade ce que la camera VOIT, le capteur degrade COMMENT elle le voit
+
+2. LICENCE
+----------
+- Version standard : ~60 EUR sur x-plane.com (pas Steam, pour pouvoir transferer)
+- Licence Pro obligatoire si usage entreprise/universite (~750 EUR/an)
+  → Verifier avec ONERA/IRT/Airbus/DGA
+- Demo gratuite : https://www.x-plane.com/desktop/try-it/
+    * 15 min par session (relance illimitee)
+    * 2 zones : Portland (Oregon) + Salzburg (LOWS)
+    * Meme SDK/datarefs que la version complete
+    * Suffisant pour prototyper le bridge
+
+3. CONFIG MACHINE
+-----------------
+- GPU : minimum GTX 1070 ou equivalent (teste avec RTX 4060 Laptop)
+- RAM : 16 Go minimum
+- Stockage : ~80 Go (install de base)
+- Pas besoin d'addons ou sceneries supplementaires
+
+4. ARCHITECTURE PIPELINE
+------------------------
+
+  XML (contraintes + fautes)
+   |
+   TAF (z3 solver) — sample N scenarios
+   |
+   Export.py — calcul trajectoire OU → poses camera
+   |
+   .yaml + poses.json
+   |
+   xplane_bridge.py — UDP vers X-Plane 12
+   |  Pour chaque scenario :
+   |    1. Connexion UDP port 49000
+   |    2. Pause sim + override planepath
+   |    3. Lecture point de reference (lat/lon/elev + local_x/y/z)
+   |    4. Resize fenetre X-Plane (1280x1024, DPI-aware)
+   |    5. Injection poses frame par frame (coordonnees locales OpenGL)
+   |    6. Capture fenetre via mss (screen grab) → JPEG dans footage/
+   |
+   Modele de faute capteur (fog, blur, dead_pixels, etc.)
+   |
+   YOLOv8 predict
+   |
+   GT LARD (DatasetTypes.XPLANE, runways_db_V2_XPlane.json)
+   |
+   IoU evaluation → pipeline_report.json
+
+5. POSITIONNEMENT CAMERA (methode validee)
+------------------------------------------
+Probleme initial :
+  - DREF latitude/longitude : float32, pas assez de precision (~100m d'erreur)
+  - DREF elevation : read-only, ignore par X-Plane
+  - POSI packet : altitude ecrasee par ground clamping physique
+
+Solution validee :
+  1. Pause le simulateur (sim/time/paused = 1)
+     → Empeche la physique de clamper l'altitude au sol
+  2. Override planepath + flight control
+     → Desactive le modele de vol
+  3. Lire un point de reference au demarrage :
+     - sim/flightmodel/position/latitude, longitude, elevation (RREF)
+     - sim/flightmodel/position/local_x, local_y, local_z (RREF)
+  4. Convertir chaque pose lat/lon/alt en local_x/y/z :
+     - dlat/dlon → metres (111320 m/deg * cos(lat))
+     - local_x = ref_lx + de (est = +x)
+     - local_z = ref_lz - dn (nord = -z)
+     - local_y = ref_ly + (alt - ref_elev) (up = +y)
+  5. Envoyer via DREF local_x, local_y, local_z + theta, phi, psi
+     → Precision metrique, pas de ground clamping
+
+6. CAPTURE D'ECRAN (methode validee)
+-------------------------------------
+Probleme initial :
+  - sim/operation/screenshot : X-Plane ecrit un PNG sur disque (~300ms)
+  - Puis copie vers footage/ (+ PermissionError si fichier verrouille)
+
+Solution validee :
+  - mss (Python screen grab) cible sur la zone client de la fenetre X-Plane
+  - DPI-aware : ctypes.windll.user32.SetProcessDPIAware()
+  - GetClientRect pour exclure barre de titre et bordures
+  - Sauvegarde directe en JPEG (quality=90) via PIL
+  - ~30 ms/frame (vs 300ms avant) → 10x plus rapide
+  - Pas besoin de xplane_dir pour les screenshots
+
+Benchmarks (RTX 4060 Laptop, fenetre 1280x1024) :
+  - Grab seul            : ~15 ms/frame
+  - Grab + save JPEG     : ~30 ms/frame
+  - Grab + save PNG      : ~70 ms/frame
+  - X-Plane screenshot   : ~310 ms/frame
+
+Resolution :
+  - X-Plane impose minimum 1280 pixels de large
+  - Zone client finale : 1280x1024
+  - YOLO resize a 512x512 en interne de toute facon
+
+7. FICHIERS CREES/MODIFIES
+---------------------------
+Nouveau :
+  project/export/xplane_bridge.py
+    - XPlaneConfig (host, port, settle_time, window_width/height)
+    - XPlaneConnection (UDP)
+      - send_dref(), send_command(), read_dref()
+      - check_connection() (RREF)
+      - setup_view() : pause + override + reference + resize + mss
+      - set_camera_pose() : conversion lat/lon → local + injection
+      - capture_frame() : mss grab + JPEG save
+      - release(), close()
+    - find_xplane_window(), resize_xplane_window(), get_xplane_capture_region()
+    - convert_pose_ges_to_xplane() — pitch GES (90=level) → XP (0=level)
+    - save_poses_json() / load_poses_json()
+    - render_scenario() — boucle complete
+
+  tests/xplane/
+    - test_xplane.py         : diagnostic UDP (6 methodes de positionnement)
+    - test_xplane_traj.py    : replay visuel trajectoire
+    - test_render_2.py       : rendu 2 scenarios avec screenshots
+    - test_mss_speed.py      : benchmark capture ecran
+    - test_mss_window.py     : test capture fenetre ciblee
+    - gen_esp_from_poses.py  : genere .esp GES depuis poses.json existant
+
+Modifies :
+  project/export/lard_bridge.py
+    - export_scenario(renderer=) : poses.json toujours, .esp seulement si ges
+    - Resolution 1280x1024 si renderer=xplane, 1024x1024 si ges
+    - generate_labels_csv(renderer=) : DatasetTypes.XPLANE pour GT
+
+  project/export/Export.py
+    - Lit LARD_RENDERER env var, passe a export_scenario()
+
+  run_pipeline.py
+    - CLI : --renderer xplane, --xplane-dir "C:/X-Plane 12"
+    - step_render_xplane() : rendu automatise
+    - step_generate() : copie poses.json + run_config.json dans runs/
+    - run_full() : rendu auto, zero intervention manuelle
+    - run_evaluate() : rendu a la volee si images manquantes
+
+  project/templates/trajectory_template.xml
+    - Pistes restreintes a KPDX pour la demo
+
+8. CONVENTIONS DE POSES
+-----------------------
+Notre flight_data (GES) : (lon, lat, alt, yaw, pitch_ges, roll)
+  pitch_ges : 90 = regard horizontal (level)
+
+X-Plane : pitch 0 = level, negatif = nez en bas
+Conversion : xplane_pitch = pitch_ges - 90
+  Exemple : pitch_ges = 86 → xplane_pitch = -4 (approche a -4 deg)
+
+Coordonnees locales OpenGL X-Plane :
+  local_x = est (metres), local_y = up (metres), local_z = sud (metres)
+  Nord = local_z negatif
+
+9. PROTOCOLE UDP X-PLANE
+-------------------------
+Port : 49000 (reception X-Plane)
+Paquets utilises :
+  DREF — set un dataref (float32)
+    Header: "DREF\0" + float32 + path (500 bytes padded)
+  CMND — execute commande
+    Header: "CMND\0" + command_path + "\0"
+  RREF — requete lecture dataref
+    Header: "RREF\0" + int32 (freq) + int32 (index) + path (400 bytes)
+
+Datarefs utilises :
+  Position locale :
+    sim/flightmodel/position/local_x, local_y, local_z
+  Attitude :
+    sim/flightmodel/position/theta (pitch), phi (roll), psi (heading)
+  Velocites (zero) :
+    sim/flightmodel/position/local_vx, local_vy, local_vz
+  Overrides :
+    sim/operation/override/override_planepath[0]
+    sim/operation/override/override_flight_control
+    sim/operation/override/override_throttles
+  Controle :
+    sim/time/paused
+
+Commandes utilisees :
+    sim/view/forward_with_nothing — vue sans cockpit
+
+10. USAGE CLI
+-------------
+# X-Plane 12 (full auto)
+python run_pipeline.py full -n 100 --renderer xplane --xplane-dir "C:/X-Plane 12"
+python run_pipeline.py generate -n 100 --renderer xplane
+python run_pipeline.py evaluate --all --renderer xplane --xplane-dir "C:/X-Plane 12"
+
+# GES (retrocompatible, defaut si --renderer omis)
+python run_pipeline.py full -n 5
+python run_pipeline.py generate -n 5
+python run_pipeline.py evaluate --all
+
+11. STRUCTURE runs/
+-------------------
+runs/
+  KPDX_28R/
+    KPDX_28R.yaml          <- metadonnees scenario (format LARD)
+    poses.json             <- poses camera (lon, lat, alt, heading, pitch, roll)
+    run_config.json        <- {"renderer": "xplane"}
+    footage/               <- images X-Plane (JPEG 1280x1024, auto)
+    degraded/              <- images avec fautes capteur (auto, si fautes actives)
+    predictions/           <- labels YOLO (auto)
+    annotated/             <- images annotees YOLO (auto)
+    *_labels.csv           <- GT LARD (auto)
+    eval_results.json      <- metriques IoU (auto)
+  pipeline_report.json     <- rapport agrege tous runs
+
+12. DEPENDANCES PYTHON (X-Plane)
+---------------------------------
+pip install mss pillow pywin32
+
+13. PROCHAINES ETAPES
+---------------------
+[x] Connexion UDP X-Plane
+[x] Positionnement camera (coordonnees locales)
+[x] Capture ecran optimisee (mss + JPEG)
+[x] Resize auto fenetre (1280x1024, DPI-aware)
+[x] Retro-compatible GES
+[ ] Test pipeline complet : full -n 5 --renderer xplane
+[ ] Ajouter la meteo X-Plane dans le XML (rain, fog, snow via datarefs)
+[ ] Tests de charge : 100 scenarios batch
+[ ] Multi-aeroport : grouper par aeroport pour minimiser chargements scenery
+
+14. RISQUES ET LIMITATIONS
+--------------------------
+- Resolution minimale X-Plane : 1280x1024 (pas de 1024x1024 carre)
+- Demo limitee : KPDX + Salzburg, sessions 15 min (relancables)
+- DPI scaling Windows : corrige via SetProcessDPIAware()
+- X-Plane en mode fenetre obligatoire (pas plein ecran)
+- Performance : ~0.13s/frame (settle + capture) → 100 scenarios x 300 frames ≈ 1h
+- Stabilite : X-Plane peut crasher sur sessions longues
+  → Le pipeline reprend la ou il s'est arrete (skip footage/ existant)

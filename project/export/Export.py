@@ -7,6 +7,7 @@ Ce module fait le lien entre les parametres TAF et notre pipeline.
 Chaine : TAF root_node → TrajectoryConfig → build_trajectory → export .esp/.yaml
 """
 
+import os
 import sys
 import math
 from pathlib import Path
@@ -103,13 +104,17 @@ def export(root_node, path):
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
-    # --- Exporter .esp + .yaml ---
+    # --- Renderer (ges ou xplane, via variable d'environnement) ---
+    renderer = os.environ.get("LARD_RENDERER", "ges").lower()
+
+    # --- Exporter .esp + .yaml + poses.json ---
     export_scenario(
         flight_data, cfg, ou,
         airport, runway,
         output_dir=path,
         scenario_name=f"{airport}_{runway}",
         faults=faults,
+        renderer=renderer,
     )
 
     # --- Sauver le profil de fautes (si actif) ---

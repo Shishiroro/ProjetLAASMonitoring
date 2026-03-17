@@ -65,9 +65,13 @@
 
         <!-- ===== Piste cible (format ICAO_RWY) ===== -->
 
+        <!-- Demo X-Plane : KPDX uniquement (Portland)
+             Remettre les autres pistes avec la licence complete :
+             LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;WMKK_33;VHHH_07R;RJTT_22;YSSY_34R
+        -->
         <parameter name="airport_runway"
                    type="string"
-                   values="LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;WMKK_33;VHHH_07R;RJTT_22;YSSY_34R"/>
+                   values="KPDX_10R;KPDX_28L;KPDX_10L;KPDX_28R;KPDX_3;KPDX_21"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--
