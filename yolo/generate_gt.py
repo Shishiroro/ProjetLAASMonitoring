@@ -11,14 +11,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "project" / "export"))
 sys.path.insert(0, str(PROJECT_ROOT / "LARD"))
 
-# Fix convention yaw : LARD retourne un azimut camera (LTP→FPAP) qui, apres % 360,
-# donne le cap de vol (~oppose au heading piste). runway_is_facing_us attend le sens
-# de regard. Le +180 corrige l'inversion (fix envisage par LARD, ligne 132 commentee).
-import src.labeling.label_export as _le
-_original_facing = _le.runway_is_facing_us
-def _fixed_facing(heading, runway):
-    return _original_facing((heading + 180) % 360, runway)
-_le.runway_is_facing_us = _fixed_facing
+# Depuis le fix DB inversion dans lard_bridge.get_runway_geometry (swap LTP↔FPAP),
+# le yaw est en convention aviation directe → plus besoin du +180 facing hack.
+# Depuis le crop 1024x1024 dans xplane_bridge, les images sont carrees avec
+# FOV 30x30 → le swap pointcam_to_pix est un no-op, plus besoin de patch.
 
 from lard_bridge import generate_labels_csv
 

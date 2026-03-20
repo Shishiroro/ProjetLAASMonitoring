@@ -304,13 +304,10 @@ def step_generate_gt(run_info, renderer="ges"):
     if export_path not in sys.path:
         sys.path.insert(0, export_path)
 
-    # Fix convention yaw : +180 pour passer du cap de vol au sens de regard
-    # (fix envisage par LARD, ligne 132 commentee dans label_export.py)
-    import src.labeling.label_export as _le
-    _original_facing = _le.runway_is_facing_us
-    def _fixed_facing(heading, runway):
-        return _original_facing((heading + 180) % 360, runway)
-    _le.runway_is_facing_us = _fixed_facing
+    # Depuis le fix DB inversion dans lard_bridge.get_runway_geometry (swap LTP↔FPAP),
+    # le yaw est en convention aviation directe → plus besoin du +180 facing hack.
+    # Depuis le crop 1024x1024 dans xplane_bridge, les images sont carrees avec
+    # FOV 30x30 → le swap pointcam_to_pix est un no-op, plus besoin de patch.
 
     from lard_bridge import generate_labels_csv
 
@@ -326,8 +323,8 @@ def step_generate_gt(run_info, renderer="ges"):
 # Etape 2b : Annotations visuelles GT LARD (echantillon)
 # ---------------------------------------------------------------------------
 
-def step_annotate_lard(run_info, csv_path, max_images=10):
-    """Dessine les bbox GT LARD sur un echantillon d'images dans annotated_lard/."""
+def step_annotate_lard(run_info, csv_path, max_images=0, target_runway=None):
+    """Dessine les bbox GT LARD sur les images dans annotated_lard/ (0 = toutes)."""
     import csv as csvmod
     from PIL import Image, ImageDraw, ImageFont
 
@@ -355,6 +352,9 @@ def step_annotate_lard(run_info, csv_path, max_images=10):
                 (int(row["x_BR"]), int(row["y_BR"])),
             )
             runway = row.get("runway", "?")
+            # Filtrer sur la piste cible si specifie
+            if target_runway and str(runway) != str(target_runway):
+                continue
             if filename not in entries:
                 entries[filename] = []
             entries[filename].append({"corners": corners, "runway": runway})
@@ -365,7 +365,7 @@ def step_annotate_lard(run_info, csv_path, max_images=10):
     processed = 0
 
     for filename in sorted(entries.keys()):
-        if processed >= max_images:
+        if max_images > 0 and processed >= max_images:
             break
         img_path = footage_dir / filename
         if not img_path.exists():
@@ -594,7 +594,7 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
 
         # Annotations visuelles GT LARD (echantillon)
         try:
-            step_annotate_lard(run_info, csv_path)
+            step_annotate_lard(run_info, csv_path, target_runway=None)
         except Exception as e:
             print(f"  [GT-VIS] ERREUR : {e}")
 

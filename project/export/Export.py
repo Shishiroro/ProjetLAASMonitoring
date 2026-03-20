@@ -100,7 +100,7 @@ def export(root_node, path):
         ltp_lat=rwy["ltp_lat"],
         ltp_lon=rwy["ltp_lon"],
         ltp_alt=rwy["ltp_alt"],
-        runway_heading_deg=rwy["runway_heading_deg"], 
+        runway_heading_deg=rwy["runway_heading_deg"],
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 

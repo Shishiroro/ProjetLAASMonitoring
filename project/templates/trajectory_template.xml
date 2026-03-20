@@ -19,13 +19,13 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="10"
-                   max="20"/>
+                   min="5"
+                   max="5"/>
 
         <parameter name="segment_start_m"
                    type="real"
-                   min="2000"
-                   max="3000"/>
+                   min="1500"
+                   max="1500"/>
 
         <parameter name="segment_end_m"
                    type="real"
@@ -50,7 +50,7 @@
                    type="real"
                    min="0"
                    max="30"/>
-
+  
         <parameter name="wind_direction_deg"
                    type="real"
                    min="0"
@@ -88,75 +88,75 @@
 
         <!-- ===== Bruits ===== -->
 
-        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0.2"/>
+        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0"/>
         <parameter name="gaussian_noise_from_pct"   type="real" min="0" max="0"/>
         <parameter name="gaussian_noise_to_pct"     type="real" min="100" max="100"/>
 
-        <parameter name="shot_noise_severity"       type="real" min="0" max="0.2"/>
+        <parameter name="shot_noise_severity"       type="real" min="0" max="0"/>
         <parameter name="shot_noise_from_pct"        type="real" min="0" max="0"/>
         <parameter name="shot_noise_to_pct"          type="real" min="100" max="100"/>
 
-        <parameter name="salt_pepper_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="salt_pepper_severity"      type="real" min="0" max="0"/>
         <parameter name="salt_pepper_from_pct"       type="real" min="0" max="0"/>
         <parameter name="salt_pepper_to_pct"         type="real" min="100" max="100"/>
 
-        <parameter name="dead_pixels_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="dead_pixels_severity"      type="real" min="0" max="0"/>
         <parameter name="dead_pixels_from_pct"       type="real" min="0" max="0"/>
         <parameter name="dead_pixels_to_pct"         type="real" min="100" max="100"/>
 
         <!-- ===== Flous ===== -->
 
-        <parameter name="motion_blur_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="motion_blur_severity"      type="real" min="0" max="0"/>
         <parameter name="motion_blur_from_pct"       type="real" min="0" max="0"/>
         <parameter name="motion_blur_to_pct"         type="real" min="100" max="100"/>
 
-        <parameter name="defocus_blur_severity"     type="real" min="0" max="0.2"/>
+        <parameter name="defocus_blur_severity"     type="real" min="0" max="0"/>
         <parameter name="defocus_blur_from_pct"      type="real" min="0" max="0"/>
         <parameter name="defocus_blur_to_pct"        type="real" min="100" max="100"/>
 
-        <parameter name="rolling_shutter_severity"  type="real" min="0" max="0.2"/>
+        <parameter name="rolling_shutter_severity"  type="real" min="0" max="0"/>
         <parameter name="rolling_shutter_from_pct"   type="real" min="0" max="0"/>
         <parameter name="rolling_shutter_to_pct"     type="real" min="100" max="100"/>
 
         <!-- ===== Exposition ===== -->
 
-        <parameter name="overexposure_severity"     type="real" min="0" max="0.2"/>
+        <parameter name="overexposure_severity"     type="real" min="0" max="0"/>
         <parameter name="overexposure_from_pct"      type="real" min="0" max="0"/>
         <parameter name="overexposure_to_pct"        type="real" min="100" max="100"/>
 
-        <parameter name="underexposure_severity"    type="real" min="0" max="0.2"/>
+        <parameter name="underexposure_severity"    type="real" min="0" max="0"/>
         <parameter name="underexposure_from_pct"     type="real" min="0" max="0"/>
         <parameter name="underexposure_to_pct"       type="real" min="100" max="100"/>
 
         <!-- ===== Optique ===== -->
 
-        <parameter name="vignetting_severity"       type="real" min="0" max="0.2"/>
+        <parameter name="vignetting_severity"       type="real" min="0" max="0"/>
         <parameter name="vignetting_from_pct"        type="real" min="0" max="0"/>
         <parameter name="vignetting_to_pct"          type="real" min="100" max="100"/>
 
-        <parameter name="chromatic_aberration_severity" type="real" min="0" max="0.2"/>
+        <parameter name="chromatic_aberration_severity" type="real" min="0" max="0"/>
         <parameter name="chromatic_aberration_from_pct"  type="real" min="0" max="0"/>
         <parameter name="chromatic_aberration_to_pct"    type="real" min="100" max="100"/>
 
-        <parameter name="radial_distortion_severity" type="real" min="0" max="0.2"/>
+        <parameter name="radial_distortion_severity" type="real" min="0" max="0"/>
         <parameter name="radial_distortion_from_pct"  type="real" min="0" max="0"/>
         <parameter name="radial_distortion_to_pct"    type="real" min="100" max="100"/>
 
-        <parameter name="lens_flare_severity"       type="real" min="0" max="0.2"/>
+        <parameter name="lens_flare_severity"       type="real" min="0" max="0"/>
         <parameter name="lens_flare_from_pct"        type="real" min="0" max="0"/>
         <parameter name="lens_flare_to_pct"          type="real" min="100" max="100"/>
 
         <!-- ===== Artefacts ===== -->
 
-        <parameter name="banding_severity"          type="real" min="0" max="0.2"/>
+        <parameter name="banding_severity"          type="real" min="0" max="0"/>
         <parameter name="banding_from_pct"           type="real" min="0" max="0"/>
         <parameter name="banding_to_pct"             type="real" min="100" max="100"/>
 
-        <parameter name="jpeg_artifacts_severity"   type="real" min="0" max="0.2"/>
+        <parameter name="jpeg_artifacts_severity"   type="real" min="0" max="0"/>
         <parameter name="jpeg_artifacts_from_pct"    type="real" min="0" max="0"/>
         <parameter name="jpeg_artifacts_to_pct"      type="real" min="100" max="100"/>
 
-        <parameter name="color_shift_severity"      type="real" min="0" max="0.2"/>
+        <parameter name="color_shift_severity"      type="real" min="0" max="0"/>
         <parameter name="color_shift_from_pct"       type="real" min="0" max="0"/>
         <parameter name="color_shift_to_pct"         type="real" min="100" max="100"/>
 

@@ -65,6 +65,7 @@ class XPlaneConfig:
     settle_time: float = 0.1        # Attente apres changement de pose (sec)
     window_width: int = 1280        # Largeur zone client X-Plane (min X-Plane)
     window_height: int = 1024       # Hauteur zone client X-Plane
+    vertical_fov: float = 30.0      # FOV vertical (deg), coherent avec lard_bridge fov_x
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +179,10 @@ class XPlaneConnection:
         self.ref_lx = None
         self.ref_ly = None
         self.ref_lz = None
+        # Offset yeux pilote (cockpit → reference avion)
+        self.pilot_eye_x = 0.0   # lateral (m)
+        self.pilot_eye_y = 0.0   # vertical (m)
+        self.pilot_eye_z = 0.0   # longitudinal (m)
         # Capture ecran
         self.sct = None
         self.capture_region = None
@@ -300,6 +305,44 @@ class XPlaneConnection:
         self.send_command("sim/view/forward_with_nothing")
         time.sleep(0.3)
 
+        # Fermer tous les panneaux/popups d'instruments (GPS, radio, etc.)
+        popup_close_commands = [
+            # Garmin G1000
+            "sim/GPS/g1000n1_popup_close",
+            "sim/GPS/g1000n3_popup_close",
+            # Garmin 430/530
+            "sim/instruments/G430n1_popup_close",
+            "sim/instruments/G430n2_popup_close",
+            "sim/instruments/G530n1_popup_close",
+            "sim/instruments/G530n2_popup_close",
+            # Map / FMS
+            "sim/instruments/map_close",
+            # Radios / transponder
+            "sim/instruments/com1_standy_flip_close",
+            "sim/instruments/com2_standy_flip_close",
+            # Generic instrument popups
+            "sim/instruments/popup_1_close",
+            "sim/instruments/popup_2_close",
+            "sim/instruments/popup_3_close",
+            "sim/instruments/popup_4_close",
+            "sim/instruments/popup_5_close",
+            "sim/instruments/popup_6_close",
+            "sim/instruments/popup_7_close",
+            "sim/instruments/popup_8_close",
+            "sim/instruments/popup_9_close",
+            "sim/instruments/popup_10_close",
+            "sim/instruments/popup_11_close",
+            "sim/instruments/popup_12_close",
+        ]
+        for cmd in popup_close_commands:
+            self.send_command(cmd)
+        time.sleep(0.3)
+
+        # Masquer tous les panneaux via le dataref show_popup
+        for i in range(20):
+            self.send_dref(f"sim/cockpit2/radios/indicators/show_popup[{i}]", 0.0)
+        time.sleep(0.2)
+
         # Desactiver le mouse yoke (reticule au centre de l'ecran)
         self.send_dref("sim/operation/override/override_joystick", 1.0)
         self.send_dref("sim/joystick/mouse_is_yoke", 0.0)
@@ -309,6 +352,14 @@ class XPlaneConnection:
         if HAS_WIN32:
             ctypes.windll.user32.SetCursorPos(0, 0)
             time.sleep(0.1)
+
+        # Lire l'offset yeux pilote du modele avion charge
+        # acf_peX = lateral, acf_peY = vertical, acf_peZ = longitudinal (metres)
+        self.pilot_eye_x = self.read_dref("sim/aircraft/view/acf_peX", 11) or 0.0
+        self.pilot_eye_y = self.read_dref("sim/aircraft/view/acf_peY", 12) or 0.0
+        self.pilot_eye_z = self.read_dref("sim/aircraft/view/acf_peZ", 13) or 0.0
+        print(f"  [XPLANE] Pilot eye offset: x={self.pilot_eye_x:.2f} "
+              f"y={self.pilot_eye_y:.2f} z={self.pilot_eye_z:.2f} m")
 
         # Point de reference
         self._read_reference_point()
@@ -322,12 +373,34 @@ class XPlaneConnection:
                       f"{self.capture_region['height']}")
             self.sct = mss.mss()
 
+        # --- FOV camera ---
+        # sim/graphics/view/field_of_view_deg est le FOV VERTICAL dans X-Plane 12.
+        # On envoie directement le FOV vertical voulu (30°).
+        # Apres crop 1280x1024 → 1024x1024, l'image carree a FOV = 30°x30°,
+        # coherent avec le YAML (fov_x=fov_y=30°) et le labeling LARD.
+        target_fov = self.config.vertical_fov
+        self.send_dref("sim/graphics/view/field_of_view_deg", target_fov)
+        time.sleep(0.3)
+        readback = self.read_dref("sim/graphics/view/field_of_view_deg", 10)
+        print(f"  [XPLANE] FOV : {target_fov:.1f}° "
+              f"(readback={readback:.1f}°)" if readback else
+              f"  [XPLANE] FOV : {target_fov:.1f}° "
+              f"(readback timeout)")
+
     def set_camera_pose(self, lat, lon, alt_m, heading, pitch, roll):
         """Positionne la camera via coordonnees locales OpenGL.
 
         Convertit lat/lon/alt en local_x/y/z pour une precision metrique.
+        Compense l'offset cockpit pour que les yeux du pilote soient
+        exactement aux coordonnees demandees.
         """
         lx, ly, lz = self._latlon_to_local(lat, lon, alt_m)
+
+        # NOTE: compensation offset cockpit desactivee — la position avion
+        # correspond deja au point de vue camera en vue forward_with_nothing.
+        # L'offset cockpit (acf_peX/Y/Z) n'est pas applique par X-Plane
+        # dans ce mode de vue.
+
         self.send_dref("sim/flightmodel/position/local_x", lx)
         self.send_dref("sim/flightmodel/position/local_y", ly)
         self.send_dref("sim/flightmodel/position/local_z", lz)
@@ -340,7 +413,11 @@ class XPlaneConnection:
         time.sleep(self.config.settle_time)
 
     def capture_frame(self, output_path):
-        """Capture la fenetre X-Plane et sauve en JPEG.
+        """Capture la fenetre X-Plane, crop centre 1024x1024, sauve en JPEG.
+
+        Le crop elimine 128px de chaque cote (1280→1024) pour obtenir une
+        image carree avec FOV 30°x30°, identique au setup LARD V2 X-Plane.
+        Cela rend le swap pointcam_to_pix inutile (FOV et dimensions egaux).
 
         :param output_path: chemin du fichier de sortie (.jpg)
         :return: True si capture reussie
@@ -349,6 +426,13 @@ class XPlaneConnection:
             return False
         img = self.sct.grab(self.capture_region)
         pil_img = Image.frombytes("RGB", img.size, bytes(img.rgb))
+
+        # Crop centre : 1280x1024 → 1024x1024
+        w, h = pil_img.size
+        if w > h:
+            margin = (w - h) // 2
+            pil_img = pil_img.crop((margin, 0, w - margin, h))
+
         pil_img.save(str(output_path), quality=90)
         return True
 

@@ -66,8 +66,6 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
-    #  interroge la base de données de pistes LARD (filtered_runways_database_Final.json), 
-    # retourne lat/lon/alt du LTP + cap piste (heading et back azimuth) pour l'aéroport/piste donnés.
     _, _, rwy_psi, ltp, _ = compute_aiming_point(
         RUNWAY_DB, airport, runway, dist_ap_m
     )
@@ -77,8 +75,8 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
         "ltp_lat": ltp_lat,
         "ltp_lon": ltp_lon,
         "ltp_alt": ltp_alt,
-        "runway_heading_deg": rwy_psi[0],      # azimut LTP→FPAP (cap camera)
-        "runway_back_azimuth_deg": rwy_psi[1],  # azimut FPAP→LTP (positionnement)
+        "runway_heading_deg": rwy_psi[0],
+        "runway_back_azimuth_deg": rwy_psi[1],
     }
 
 
@@ -157,12 +155,14 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     times = generate_frame_times(n_frames, cfg.fps)
 
     # --- Params image ---
-    # X-Plane : 1280x1024 (min impose par le moteur), GES : 1024x1024
-    img_width = 1280 if renderer == "xplane" else 1024
+    # X-Plane : capture 1280x1024 puis crop centre 1024x1024 (identique LARD V2)
+    # GES : 1024x1024 natif
+    # Le YAML reflete la taille FINALE (apres crop), pas la capture brute.
+    img_width = 1024
     img_height = 1024
     fov_x = 30.0
     watermark_height = 0
-    # fov_y calcule comme dans LARD (write_scenario.py)
+    # Image carree → fov_y = fov_x = 30° (le calcul ci-dessous le confirme)
     f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
     fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
 
