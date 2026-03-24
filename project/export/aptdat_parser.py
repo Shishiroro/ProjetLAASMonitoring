@@ -118,16 +118,25 @@ def runway_corners(rwy_data):
     :return: dict {A: {lat, lon}, B: {lat, lon}, C: {lat, lon}, D: {lat, lon},
                    heading, width, threshold: {lat, lon}, far_end: {lat, lon}}
     """
-    lat1 = rwy_data["lat"]       # seuil
+    lat1 = rwy_data["lat"]       # debut physique piste
     lon1 = rwy_data["lon"]
-    lat2 = rwy_data["other_lat"]  # far end
+    lat2 = rwy_data["other_lat"]  # far end physique
     lon2 = rwy_data["other_lon"]
     width = rwy_data["width"]
+    disp = rwy_data.get("disp_threshold_m", 0.0)  # seuil deplace (m)
 
     # Heading du seuil vers le far end
     dlat = lat2 - lat1
     dlon = (lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2))
     heading = math.degrees(math.atan2(dlon, dlat)) % 360
+
+    # Avancer le seuil de disp metres si displaced threshold
+    if disp > 0:
+        h_rad = math.radians(heading)
+        lat1 = lat1 + disp * math.cos(h_rad) / 111320.0
+        lon1 = lon1 + disp * math.sin(h_rad) / (
+            111320.0 * math.cos(math.radians(lat1))
+        )
 
     # Vecteur perpendiculaire (vers la droite vu depuis le seuil)
     perp_heading = (heading + 90) % 360

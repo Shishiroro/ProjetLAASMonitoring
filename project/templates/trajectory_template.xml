@@ -71,7 +71,7 @@
         -->
         <parameter name="airport_runway"
                    type="string"
-                   values="KPDX_28L;KPDX_10R;KPDX_3;KPDX_28R"/>
+                   values="KPDX_10L;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;KPDX_21"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--

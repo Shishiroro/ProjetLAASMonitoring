@@ -657,12 +657,15 @@ def render_scenario(poses_path, output_dir, config=None):
         print(f"  [XPLANE] Terrain au seuil : {terrain_elev:.1f}m "
               f"(elev={probe_elev:.1f}m, AGL={probe_agl:.1f}m)")
 
-        # Sauver la config de rendu (FOV + resolution) pour le labeling GT
+        # Sauver la config de rendu (FOV + resolution + pilot eye) pour le labeling GT
         render_cfg = {
             "width": conn.capture_region["width"] if conn.capture_region else config.window_width,
             "height": conn.capture_region["height"] if conn.capture_region else config.window_height,
             "fov_h": config.fov_h,
             "fov_v": config.fov_v,
+            "pilot_eye_x": conn.pilot_eye_x,  # lateral (m, + = droite)
+            "pilot_eye_y": conn.pilot_eye_y,  # vertical (m, + = haut)
+            "pilot_eye_z": conn.pilot_eye_z,  # longitudinal (m, + = avant/nez)
         }
         render_cfg_file = output_dir.parent / "render_config.json"
         with open(render_cfg_file, "w") as rf:

@@ -462,7 +462,7 @@ def step_annotate_lard(run_info, csv_path, max_images=0, target_runway=None):
             color = runway_colors[rwy]
             c = entry["corners"]
             for i in range(4):
-                draw.line([c[i], c[(i + 1) % 4]], fill=color, width=4)
+                draw.line([c[i], c[(i + 1) % 4]], fill=color, width=1)
             # Label avec fond noir pour lisibilite
             cx = sum(p[0] for p in c) // 4
             cy = min(p[1] for p in c) - 25  # au-dessus de la bbox

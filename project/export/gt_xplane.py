@@ -24,7 +24,8 @@ import pyproj
 # ---------------------------------------------------------------------------
 
 def project_point(corner_latlon, cam_lat, cam_lon, cam_alt,
-                  heading, pitch_ges, roll, fov_h, fov_v, width, height):
+                  heading, pitch_ges, roll, fov_h, fov_v, width, height,
+                  pp_offset_x=0.0, pp_offset_y=0.0):
     """Projette un point 3D (lat, lon, alt) en pixel (x, y).
 
     :param corner_latlon: (lat, lon, alt) du point a projeter
@@ -70,12 +71,12 @@ def project_point(corner_latlon, cam_lat, cam_lon, cam_alt,
     if fwd2 <= 0:
         return None
 
-    # Focales separees pour H et V
-    fx = (width / 2.0) / math.tan(math.radians(fov_h / 2.0))
-    fy = (height / 2.0) / math.tan(math.radians(fov_v / 2.0))
+    # Focale unique depuis le FOV horizontal (pixels carres)
+    # Le FOV vertical se deduit de l'aspect ratio, pas d'un reglage independant
+    f = (width / 2.0) / math.tan(math.radians(fov_h / 2.0))
 
-    px_x = width / 2.0 + (right3 / fwd2) * fx
-    px_y = height / 2.0 + (down3 / fwd2) * fy
+    px_x = width / 2.0 + pp_offset_x + (right3 / fwd2) * f
+    px_y = height / 2.0 + pp_offset_y + (down3 / fwd2) * f
 
     return (px_x, px_y)
 
@@ -127,6 +128,13 @@ def generate_gt_csv(run_dir, airport, runway):
     img_h = render_cfg["height"]
     fov_h = render_cfg["fov_h"]
     fov_v = render_cfg["fov_v"]
+    # Pilot eye offset (body frame: x=lateral, y=up, z=forward)
+    pe_x = render_cfg.get("pilot_eye_x", 0.0)
+    pe_y = render_cfg.get("pilot_eye_y", 0.0)
+    pe_z = render_cfg.get("pilot_eye_z", 0.0)
+    # Principal point offset (pixels) — laisser a 0, le pilot eye gere le shift
+    pp_x = render_cfg.get("pp_offset_x", 0.0)
+    pp_y = render_cfg.get("pp_offset_y", 0.0)
 
     # Coins piste depuis apt.dat
     db_path = project_root / "project" / "data" / "runways_db_V2_XPlane_aptdat.json"
@@ -168,12 +176,24 @@ def generate_gt_csv(run_dir, airport, runway):
         writer.writeheader()
 
         for i, pose in enumerate(poses):
-            cam_lat = pose["lat"]
-            cam_lon = pose["lon"]
-            cam_alt = pose["alt_m"]
             heading = pose["heading"]
             pitch_ges = pose["pitch_ges"]
             roll = pose["roll"]
+
+            # Position camera = position avion + pilot eye offset (body→ENU)
+            # Body frame: z=forward(nose), x=right, y=up
+            # ENU: east, north, up
+            h_rad = math.radians(heading)
+            # Projection body → ENU (horizontal plane)
+            eye_east = pe_z * math.sin(h_rad) + pe_x * math.cos(h_rad)
+            eye_north = pe_z * math.cos(h_rad) - pe_x * math.sin(h_rad)
+            eye_up = pe_y
+
+            m_per_deg_lat = 111320.0
+            m_per_deg_lon = 111320.0 * math.cos(math.radians(pose["lat"]))
+            cam_lat = pose["lat"] + eye_north / m_per_deg_lat
+            cam_lon = pose["lon"] + eye_east / m_per_deg_lon
+            cam_alt = pose["alt_m"] + eye_up
 
             img_name = f"{scenario_name}_{str(i).zfill(img_digits)}.jpg"
 
@@ -185,6 +205,7 @@ def generate_gt_csv(run_dir, airport, runway):
                     cam_lat, cam_lon, cam_alt,
                     heading, pitch_ges, roll,
                     fov_h, fov_v, img_w, img_h,
+                    pp_offset_x=pp_x, pp_offset_y=pp_y,
                 )
                 corners_px[label] = pt
 
