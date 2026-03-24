@@ -30,6 +30,8 @@ from dataclasses import asdict
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # LARD-LAAS-TAF/
 LARD_ROOT = PROJECT_ROOT / "LARD"
 RUNWAY_DB = str(LARD_ROOT / "data" / "filtered_runways_database_Final.json")
+# DB X-Plane generee depuis apt.dat (coords exactes du rendu X-Plane)
+_APTDAT_DB = PROJECT_ROOT / "project" / "data" / "runways_db_V2_XPlane_aptdat.json"
 
 # Ajouter LARD/ au sys.path pour ses imports internes
 if str(LARD_ROOT) not in sys.path:
@@ -59,24 +61,33 @@ def _lard_cwd():
         os.chdir(prev)
 
 
-def get_runway_geometry(airport, runway, dist_ap_m=300.0):
+def get_runway_geometry(airport, runway, dist_ap_m=300.0, renderer="ges"):
     """
-    Recupere la geometrie d'une piste depuis la DB LARD.
+    Recupere la geometrie d'une piste.
+
+    Pour X-Plane : utilise apt.dat (memes coords que le rendu visuel).
+    Pour GES : utilise la DB LARD (avec correction swap LTP/FPAP).
 
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
-    _, _, rwy_psi, ltp, _ = compute_aiming_point(
+    if renderer == "xplane":
+        from aptdat_parser import get_xplane_runway_geometry
+        return get_xplane_runway_geometry(airport, runway)
+
+    # GES : DB LARD avec correction swap LTP/FPAP
+    _, _, rwy_psi, ltp, fpap = compute_aiming_point(
         RUNWAY_DB, airport, runway, dist_ap_m
     )
-    ltp_lat, ltp_lon, ltp_alt = ecef2llh(ltp[0], ltp[1], ltp[2])
+    # FPAP = vrai seuil d'approche dans la convention LARD
+    fpap_lat, fpap_lon, fpap_alt = ecef2llh(fpap[0], fpap[1], fpap[2])
 
     return {
-        "ltp_lat": ltp_lat,
-        "ltp_lon": ltp_lon,
-        "ltp_alt": ltp_alt,
-        "runway_heading_deg": rwy_psi[0],
-        "runway_back_azimuth_deg": rwy_psi[1],
+        "ltp_lat": fpap_lat,
+        "ltp_lon": fpap_lon,
+        "ltp_alt": fpap_alt,
+        "runway_heading_deg": rwy_psi[1],
+        "runway_back_azimuth_deg": rwy_psi[0],
     }
 
 
@@ -155,16 +166,20 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     times = generate_frame_times(n_frames, cfg.fps)
 
     # --- Params image ---
-    # X-Plane : capture 1280x1024 puis crop centre 1024x1024 (identique LARD V2)
-    # GES : 1024x1024 natif
-    # Le YAML reflete la taille FINALE (apres crop), pas la capture brute.
-    img_width = 1024
-    img_height = 1024
-    fov_x = 30.0
+    if renderer == "xplane":
+        # X-Plane : capture native 1920x1200, FOV 65°H / 42.3°V (reglages X-Plane)
+        img_width = 1920
+        img_height = 1200
+        fov_x = 65.0     # horizontal (reglages visuels X-Plane)
+        fov_y = 42.3     # vertical (reglages visuels X-Plane)
+    else:
+        # GES : 1024x1024 natif, FOV 30°x30°
+        img_width = 1024
+        img_height = 1024
+        fov_x = 30.0
+        f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
+        fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
     watermark_height = 0
-    # Image carree → fov_y = fov_x = 30° (le calcul ci-dessous le confirme)
-    f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
-    fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
 
     # --- .esp via LARD (seulement pour GES) ---
     esp_file = output_path / f"{scenario_name}.esp"
@@ -296,12 +311,45 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None, renderer="ges"):
         ds_type = DatasetTypes.EARTH_STUDIO
 
     with _lard_cwd():
+        # Pour X-Plane : utiliser la DB apt.dat pour le labeling
+        if renderer == "xplane" and _APTDAT_DB.exists():
+            import src.labeling.label_export as _le
+            import src.labeling.export_config as _ec
+
+            # Corriger l'altitude dans la DB si on a l'elevation terrain reelle
+            terrain_file = dataset_dir / "terrain_elevation.json"
+            db_to_use = str(_APTDAT_DB)
+            if terrain_file.exists():
+                import json as _json
+                terrain = _json.load(open(terrain_file))
+                real_elev = terrain["elevation_m"]
+                # Charger la DB, corriger les altitudes, sauver une copie temp
+                db_data = _json.load(open(_APTDAT_DB))
+                for airport_data in db_data.values():
+                    for rwy_data in airport_data.values():
+                        for corner in ["A", "B", "C", "D"]:
+                            if corner in rwy_data:
+                                rwy_data[corner]["coordinate"]["altitude"] = real_elev
+                temp_db = dataset_dir / "_temp_runway_db.json"
+                with open(temp_db, "w") as tf:
+                    _json.dump(db_data, tf)
+                db_to_use = str(temp_db)
+
+            _orig_db_name = _ec.database_name
+            _ec.database_name = lambda dt: db_to_use if dt == DatasetTypes.XPLANE else _orig_db_name(dt)
+            _le.database_name = _ec.database_name
+
         export_labels(
             dataset_type=ds_type,
             yaml_scenario_path=yaml_path,
             export_dir=dataset_dir,
             out_labels_file=csv_file,
         )
+
+        # Restaurer
+        if renderer == "xplane" and _APTDAT_DB.exists():
+            _ec.database_name = _orig_db_name
+            _le.database_name = _orig_db_name
 
     print(f"  .csv GT -> {csv_file}")
     return str(csv_file)

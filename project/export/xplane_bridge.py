@@ -63,9 +63,10 @@ class XPlaneConfig:
     port: int = 49000               # Port UDP X-Plane (reception)
     xplane_dir: str = ""            # Repertoire d'installation X-Plane
     settle_time: float = 0.1        # Attente apres changement de pose (sec)
-    window_width: int = 1280        # Largeur zone client X-Plane (min X-Plane)
-    window_height: int = 1024       # Hauteur zone client X-Plane
-    vertical_fov: float = 30.0      # FOV vertical (deg), coherent avec lard_bridge fov_x
+    window_width: int = 1920        # Largeur zone client X-Plane
+    window_height: int = 1200       # Hauteur zone client X-Plane
+    fov_h: float = 65.0             # FOV horizontal (reglages X-Plane)
+    fov_v: float = 42.3             # FOV vertical (reglages X-Plane)
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +249,24 @@ class XPlaneConnection:
         print(f"  [XPLANE]   local: x={self.ref_lx:.0f}, y={self.ref_ly:.0f}, "
               f"z={self.ref_lz:.0f}")
 
+    def move_reference_to(self, lat, lon):
+        """Deplace l'avion a lat/lon et relit le point de reference.
+
+        La conversion _latlon_to_local est precise pres du point de reference
+        mais diverge avec la distance (~22m a 3km). En placant le ref au seuil
+        de piste, toutes les positions de la trajectoire (qui convergent vers
+        le seuil) auront une conversion precise la ou ca compte.
+        """
+        # Utiliser la conversion actuelle (approximative) pour deplacer
+        lx, ly, lz = self._latlon_to_local(lat, lon, self.ref_elev)
+        self.send_dref("sim/flightmodel/position/local_x", lx)
+        self.send_dref("sim/flightmodel/position/local_y", ly)
+        self.send_dref("sim/flightmodel/position/local_z", lz)
+        time.sleep(0.5)
+        # Relire : maintenant le ref est pres de la cible
+        self._read_reference_point()
+        print(f"  [XPLANE] Reference deplacee vers lat={lat:.6f}, lon={lon:.6f}")
+
     def _latlon_to_local(self, lat, lon, alt_m):
         """Convertit lat/lon/alt en local_x/y/z OpenGL X-Plane.
 
@@ -304,6 +323,11 @@ class XPlaneConnection:
         # Vue clean sans cockpit
         self.send_command("sim/view/forward_with_nothing")
         time.sleep(0.3)
+
+        # Resize fenetre a la taille cible
+        if HAS_WIN32:
+            resize_xplane_window(self.config.window_width, self.config.window_height)
+            print(f"  [XPLANE] Fenetre resizee -> {self.config.window_width}x{self.config.window_height}")
 
         # Fermer tous les panneaux/popups d'instruments (GPS, radio, etc.)
         popup_close_commands = [
@@ -364,9 +388,8 @@ class XPlaneConnection:
         # Point de reference
         self._read_reference_point()
 
-        # Resize + capture region
+        # Capture region (pas de resize — on garde la fenetre telle quelle)
         if HAS_WIN32:
-            resize_xplane_window(self.config.window_width, self.config.window_height)
             self.capture_region = get_xplane_capture_region()
             if self.capture_region:
                 print(f"  [XPLANE] Capture : {self.capture_region['width']}x"
@@ -374,32 +397,22 @@ class XPlaneConnection:
             self.sct = mss.mss()
 
         # --- FOV camera ---
-        # sim/graphics/view/field_of_view_deg est le FOV VERTICAL dans X-Plane 12.
-        # On envoie directement le FOV vertical voulu (30°).
-        # Apres crop 1280x1024 → 1024x1024, l'image carree a FOV = 30°x30°,
-        # coherent avec le YAML (fov_x=fov_y=30°) et le labeling LARD.
-        target_fov = self.config.vertical_fov
-        self.send_dref("sim/graphics/view/field_of_view_deg", target_fov)
-        time.sleep(0.3)
+        # On ne touche PAS au FOV — on utilise les reglages X-Plane (65° H, 42.3° V).
+        # Lire le dataref pour verifier la coherence.
         readback = self.read_dref("sim/graphics/view/field_of_view_deg", 10)
-        print(f"  [XPLANE] FOV : {target_fov:.1f}° "
-              f"(readback={readback:.1f}°)" if readback else
-              f"  [XPLANE] FOV : {target_fov:.1f}° "
-              f"(readback timeout)")
+        print(f"  [XPLANE] FOV config: H={self.config.fov_h}° V={self.config.fov_v}°"
+              f" (dataref={readback:.1f}°)" if readback else
+              f"  [XPLANE] FOV config: H={self.config.fov_h}° V={self.config.fov_v}°"
+              f" (dataref timeout)")
 
     def set_camera_pose(self, lat, lon, alt_m, heading, pitch, roll):
         """Positionne la camera via coordonnees locales OpenGL.
 
         Convertit lat/lon/alt en local_x/y/z pour une precision metrique.
-        Compense l'offset cockpit pour que les yeux du pilote soient
-        exactement aux coordonnees demandees.
+        NOTE: pas de compensation pilot eye pour l'instant — a investiguer
+        si forward_with_nothing applique ou non l'offset acf_peX/Y/Z.
         """
         lx, ly, lz = self._latlon_to_local(lat, lon, alt_m)
-
-        # NOTE: compensation offset cockpit desactivee — la position avion
-        # correspond deja au point de vue camera en vue forward_with_nothing.
-        # L'offset cockpit (acf_peX/Y/Z) n'est pas applique par X-Plane
-        # dans ce mode de vue.
 
         self.send_dref("sim/flightmodel/position/local_x", lx)
         self.send_dref("sim/flightmodel/position/local_y", ly)
@@ -412,12 +425,62 @@ class XPlaneConnection:
         self.send_dref("sim/flightmodel/position/local_vz", 0.0)
         time.sleep(self.config.settle_time)
 
-    def capture_frame(self, output_path):
-        """Capture la fenetre X-Plane, crop centre 1024x1024, sauve en JPEG.
+    def read_actual_pose(self):
+        """Relit la position/orientation reelle depuis X-Plane apres positionnement.
 
-        Le crop elimine 128px de chaque cote (1280→1024) pour obtenir une
-        image carree avec FOV 30°x30°, identique au setup LARD V2 X-Plane.
-        Cela rend le swap pointcam_to_pix inutile (FOV et dimensions egaux).
+        Retourne la position avion telle que lue par X-Plane.
+        NOTE: pas de compensation pilot eye pour l'instant.
+
+        :return: dict {lat, lon, alt_m, heading, pitch, roll}
+        """
+        lat = self.read_dref("sim/flightmodel/position/latitude", 20)
+        lon = self.read_dref("sim/flightmodel/position/longitude", 21)
+        elev = self.read_dref("sim/flightmodel/position/elevation", 22)
+        theta = self.read_dref("sim/flightmodel/position/theta", 23)
+        phi = self.read_dref("sim/flightmodel/position/phi", 24)
+        psi = self.read_dref("sim/flightmodel/position/psi", 25)
+        return {
+            "lat": lat, "lon": lon, "alt_m": elev,
+            "heading": psi, "pitch": theta, "roll": phi,
+        }
+
+    def read_terrain_elevation(self, lat, lon):
+        """Lit l'altitude terrain reelle a une position lat/lon.
+
+        Deplace temporairement l'avion au sol a cette position,
+        lit l'elevation, puis restaure.
+
+        :return: altitude terrain MSL en metres
+        """
+        # Sauver la position actuelle
+        old_lx = self.read_dref("sim/flightmodel/position/local_x", 20)
+        old_ly = self.read_dref("sim/flightmodel/position/local_y", 21)
+        old_lz = self.read_dref("sim/flightmodel/position/local_z", 22)
+
+        # Deplacer au point cible, altitude basse pour toucher le terrain
+        lx, ly, lz = self._latlon_to_local(lat, lon, 0.0)
+        self.send_dref("sim/flightmodel/position/local_x", lx)
+        self.send_dref("sim/flightmodel/position/local_y", 0.0)  # y=up, poser au sol
+        self.send_dref("sim/flightmodel/position/local_z", lz)
+        time.sleep(0.3)
+
+        # Lire l'elevation terrain (AGL = 0 → elevation = altitude terrain)
+        elev = self.read_dref("sim/flightmodel/position/elevation", 23)
+
+        # Restaurer
+        if old_lx is not None:
+            self.send_dref("sim/flightmodel/position/local_x", old_lx)
+            self.send_dref("sim/flightmodel/position/local_y", old_ly)
+            self.send_dref("sim/flightmodel/position/local_z", old_lz)
+            time.sleep(0.2)
+
+        return elev or 0.0
+
+    def capture_frame(self, output_path):
+        """Capture la fenetre X-Plane telle quelle, sauve en JPEG.
+
+        Pas de crop ni resize — on garde la resolution native de la fenetre.
+        Le FOV est lu depuis les parametres X-Plane (H=28°, V=22.56° par defaut).
 
         :param output_path: chemin du fichier de sortie (.jpg)
         :return: True si capture reussie
@@ -426,13 +489,6 @@ class XPlaneConnection:
             return False
         img = self.sct.grab(self.capture_region)
         pil_img = Image.frombytes("RGB", img.size, bytes(img.rgb))
-
-        # Crop centre : 1280x1024 → 1024x1024
-        w, h = pil_img.size
-        if w > h:
-            margin = (w - h) // 2
-            pil_img = pil_img.crop((margin, 0, w - margin, h))
-
         pil_img.save(str(output_path), quality=90)
         return True
 
@@ -563,10 +619,63 @@ def render_scenario(poses_path, output_dir, config=None):
 
         conn.setup_view()
 
+        # Deplacer le point de reference au seuil de piste (derniere pose).
+        # La conversion _latlon_to_local est precise pres du ref mais diverge
+        # avec la distance (~22m a 3km). En prenant le ref pres du seuil,
+        # les frames proches (ou la precision bbox compte le plus) seront exactes.
+        last_pose = data["poses"][-1]
+        conn.move_reference_to(last_pose["lat"], last_pose["lon"])
+
+        # Mesurer l'altitude terrain reelle au seuil de piste.
+        # Methode : positionner l'avion a la derniere pose (basse altitude,
+        # pres du seuil), lire elevation et y_agl, deduire le terrain.
+        last_xp = convert_pose_ges_to_xplane(
+            last_pose["lon"], last_pose["lat"], last_pose["alt_m"],
+            last_pose["heading"], last_pose["pitch_ges"], last_pose["roll"],
+        )
+        conn.set_camera_pose(
+            last_xp["lat"], last_xp["lon"], last_xp["alt_m"],
+            last_xp["heading"], last_xp["pitch"], last_xp["roll"],
+        )
+        time.sleep(0.5)  # laisser X-Plane stabiliser la position
+        probe_elev = conn.read_dref("sim/flightmodel/position/elevation", 30)
+        probe_agl = conn.read_dref("sim/flightmodel/position/y_agl", 31)
+        if probe_elev is not None and probe_agl is not None:
+            terrain_elev = probe_elev - probe_agl
+        else:
+            terrain_elev = 0.0
+            print("  [XPLANE] ATTENTION: impossible de lire elevation/y_agl")
+
+        terrain_file = output_dir.parent / "terrain_elevation.json"
+        terrain_data = {
+            "lat": last_pose["lat"],
+            "lon": last_pose["lon"],
+            "elevation_m": terrain_elev,
+        }
+        with open(terrain_file, "w") as tf:
+            json.dump(terrain_data, tf, indent=2)
+        print(f"  [XPLANE] Terrain au seuil : {terrain_elev:.1f}m "
+              f"(elev={probe_elev:.1f}m, AGL={probe_agl:.1f}m)")
+
+        # Sauver la config de rendu (FOV + resolution) pour le labeling GT
+        render_cfg = {
+            "width": conn.capture_region["width"] if conn.capture_region else config.window_width,
+            "height": conn.capture_region["height"] if conn.capture_region else config.window_height,
+            "fov_h": config.fov_h,
+            "fov_v": config.fov_v,
+        }
+        render_cfg_file = output_dir.parent / "render_config.json"
+        with open(render_cfg_file, "w") as rf:
+            json.dump(render_cfg, rf, indent=2)
+        print(f"  [XPLANE] Render config : {render_cfg['width']}x{render_cfg['height']}"
+              f" FOV {render_cfg['fov_h']}x{render_cfg['fov_v']}°")
+
         t_start = time.perf_counter()
 
         # Padding identique a LARD : img_digits = len(str(n_frames - 1))
         img_digits = len(str(n_frames - 1))
+
+        actual_poses = []  # Poses reelles lues depuis X-Plane
 
         for i, pose in enumerate(data["poses"]):
             xp = convert_pose_ges_to_xplane(
@@ -583,6 +692,22 @@ def render_scenario(poses_path, output_dir, config=None):
             dst = output_dir / f"{scenario_name}_{str(i).zfill(img_digits)}.jpg"
             conn.capture_frame(dst)
 
+            # Lire la position reelle pour le YAML corrige
+            real = conn.read_actual_pose()
+            if real["lat"] is not None:
+                # Convertir X-Plane → GES (inverse de convert_pose_ges_to_xplane)
+                actual_poses.append({
+                    "lon": real["lon"],
+                    "lat": real["lat"],
+                    "alt_m": real["alt_m"],
+                    "heading": real["heading"],
+                    "pitch_ges": (real["pitch"] or 0.0) + 90.0,
+                    "roll": real["roll"],
+                })
+            else:
+                # Fallback sur la pose commandee
+                actual_poses.append(pose)
+
             if (i + 1) % 50 == 0 or (i + 1) == n_frames:
                 elapsed = time.perf_counter() - t_start
                 fps = (i + 1) / elapsed
@@ -595,6 +720,12 @@ def render_scenario(poses_path, output_dir, config=None):
 
         if n_rendered < n_frames:
             print(f"  [XPLANE] ATTENTION : {n_frames - n_rendered} frames manquantes")
+
+        # Sauver les poses reelles pour regeneration GT
+        actual_path = output_dir.parent / "poses_actual.json"
+        with open(actual_path, "w") as f:
+            json.dump(actual_poses, f, indent=2)
+        print(f"  [XPLANE] Poses reelles -> {actual_path}")
 
     finally:
         conn.close()

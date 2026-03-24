@@ -24,8 +24,8 @@
 
         <parameter name="segment_start_m"
                    type="real"
-                   min="1500"
-                   max="1500"/>
+                   min="2000"
+                   max="2000"/>
 
         <parameter name="segment_end_m"
                    type="real"
@@ -42,7 +42,7 @@
         <parameter name="turbulence_intensity"
                    type="real"
                    min="0"
-                   max="1"/>
+                   max="0"/>
 
         <!-- ===== Vent ===== -->
 
@@ -71,7 +71,7 @@
         -->
         <parameter name="airport_runway"
                    type="string"
-                   values="KPDX_10R;KPDX_28L;KPDX_10L;KPDX_28R;KPDX_3;KPDX_21"/>
+                   values="KPDX_28L;KPDX_10R;KPDX_3;KPDX_28R"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--

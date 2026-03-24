@@ -36,6 +36,21 @@ TAF_OUTPUT_DIR = ROOT / "output"  # TAF ecrit ici, on reorganise ensuite
 # Utilitaires
 # ---------------------------------------------------------------------------
 
+def reciprocal_runway(rwy):
+    """Retourne le nom reciproque d'une piste (ex: 28L -> 10R, 09R -> 27L)."""
+    import re
+    m = re.match(r"^(\d{1,2})([LRC]?)$", rwy)
+    if not m:
+        return rwy
+    num = int(m.group(1))
+    suffix = m.group(2)
+    recip_num = (num + 18) % 36
+    if recip_num == 0:
+        recip_num = 36
+    recip_suffix = {"L": "R", "R": "L", "C": "C", "": ""}.get(suffix, suffix)
+    return f"{recip_num:02d}{recip_suffix}"
+
+
 def _find_runs(run_name=None, all_runs=False, renderer="ges"):
     """Trouve les runs evaluables (ont un .yaml + des images ou un .zip ou poses.json)."""
     runs = []
@@ -289,25 +304,78 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
 # Etape 2 : Ground truth LARD (.csv)
 # ---------------------------------------------------------------------------
 
+def _patch_yaml_with_actual_poses(yaml_path, actual_poses_path):
+    """Remplace les poses du YAML par les poses reelles lues depuis X-Plane.
+
+    Apres le rendu X-Plane, les poses reelles (lat/lon/alt/heading/pitch/roll)
+    peuvent differer des poses commandees a cause de la conversion locale.
+    En utilisant les poses reelles, le GT LARD correspondra exactement au rendu.
+    """
+    import yaml as yaml_mod
+
+    with open(actual_poses_path, "r") as f:
+        actual = json.load(f)
+
+    with open(yaml_path, "r") as f:
+        y = yaml_mod.safe_load(f)
+
+    if len(actual) != len(y["poses"]):
+        print(f"  [GT] WARN: {len(actual)} poses reelles vs {len(y['poses'])} dans YAML")
+        return yaml_path
+
+    for i, (pose_yaml, pose_real) in enumerate(zip(y["poses"], actual)):
+        # YAML pose format: [lon, lat, alt, yaw, pitch_ges, roll]
+        pose_yaml["pose"] = [
+            pose_real["lon"],
+            pose_real["lat"],
+            pose_real["alt_m"],
+            pose_real["heading"],
+            pose_real["pitch_ges"],
+            pose_real["roll"],
+        ]
+
+    # Sauver un YAML corrige (garder l'original intact)
+    corrected_path = str(yaml_path).replace(".yaml", "_actual.yaml")
+    with open(corrected_path, "w") as f:
+        yaml_mod.dump(y, f, default_flow_style=False, allow_unicode=True)
+
+    print(f"  [GT] YAML corrige avec poses reelles -> {corrected_path}")
+    return corrected_path
+
+
 def step_generate_gt(run_info, renderer="ges"):
-    """Genere le CSV ground truth LARD pour un run."""
+    """Genere le CSV ground truth pour un run."""
     run_dir = run_info["dir"]
     yaml_path = run_info["yaml"]
 
     print(f"\n  [GT] Generation CSV pour {run_info['name']}...")
 
-    # Import LARD + monkey-patch
+    # X-Plane : projection ENU pinhole autonome (pas de LARD)
+    if renderer == "xplane":
+        export_path = str(ROOT / "project" / "export")
+        if export_path not in sys.path:
+            sys.path.insert(0, export_path)
+
+        from gt_xplane import generate_gt_csv
+
+        # Extraire airport/runway depuis le YAML
+        import yaml as yaml_mod
+        with open(yaml_path) as f:
+            y = yaml_mod.safe_load(f)
+        airports_rwys = y.get("airports_runways", {})
+        airport = list(airports_rwys.keys())[0]
+        runway = airports_rwys[airport][0]
+
+        csv_file = generate_gt_csv(run_dir, airport, runway)
+        return Path(csv_file)
+
+    # GES : pipeline LARD classique
     lard_path = str(ROOT / "LARD")
     export_path = str(ROOT / "project" / "export")
     if lard_path not in sys.path:
         sys.path.insert(0, lard_path)
     if export_path not in sys.path:
         sys.path.insert(0, export_path)
-
-    # Depuis le fix DB inversion dans lard_bridge.get_runway_geometry (swap LTP↔FPAP),
-    # le yaw est en convention aviation directe → plus besoin du +180 facing hack.
-    # Depuis le crop 1024x1024 dans xplane_bridge, les images sont carrees avec
-    # FOV 30x30 → le swap pointcam_to_pix est un no-op, plus besoin de patch.
 
     from lard_bridge import generate_labels_csv
 
@@ -346,15 +414,22 @@ def step_annotate_lard(run_info, csv_path, max_images=0, target_runway=None):
         for row in reader:
             filename = Path(row["image"]).name
             corners = (
-                (int(row["x_TR"]), int(row["y_TR"])),
-                (int(row["x_TL"]), int(row["y_TL"])),
-                (int(row["x_BL"]), int(row["y_BL"])),
-                (int(row["x_BR"]), int(row["y_BR"])),
+                (int(float(row["x_TR"])), int(float(row["y_TR"]))),
+                (int(float(row["x_TL"])), int(float(row["y_TL"]))),
+                (int(float(row["x_BL"])), int(float(row["y_BL"]))),
+                (int(float(row["x_BR"])), int(float(row["y_BR"]))),
             )
             runway = row.get("runway", "?")
             # Filtrer sur la piste cible si specifie
-            if target_runway and str(runway) != str(target_runway):
-                continue
+            # Comparer sans zero-padding (03 == 3, 09R == 9R)
+            # Aussi accepter le reciprocal (10L == 28R pour le meme strip)
+            if target_runway:
+                norm_target = target_runway.lstrip("0") or "0"
+                norm_runway = str(runway).lstrip("0") or "0"
+                # Accepter la cible OU son reciprocal (meme bande physique)
+                recip_target = reciprocal_runway(target_runway).lstrip("0") or "0"
+                if norm_runway != norm_target and norm_runway != recip_target:
+                    continue
             if filename not in entries:
                 entries[filename] = []
             entries[filename].append({"corners": corners, "runway": runway})
@@ -363,6 +438,11 @@ def step_annotate_lard(run_info, csv_path, max_images=0, target_runway=None):
     runway_colors = {}
     color_idx = 0
     processed = 0
+
+    # Nom a afficher : la piste d'approche (pas le reciprocal LARD)
+    run_name = run_info.get("name", "")
+    # Extraire le runway du nom de run (ex: KPDX_21 -> 21, KPDX_28L -> 28L)
+    display_runway = run_name.split("_", 1)[1] if "_" in run_name else None
 
     for filename in sorted(entries.keys()):
         if max_images > 0 and processed >= max_images:
@@ -375,7 +455,7 @@ def step_annotate_lard(run_info, csv_path, max_images=0, target_runway=None):
         draw = ImageDraw.Draw(img)
 
         for entry in entries[filename]:
-            rwy = entry["runway"]
+            rwy = display_runway or entry["runway"]
             if rwy not in runway_colors:
                 runway_colors[rwy] = COLORS[color_idx % len(COLORS)]
                 color_idx += 1
@@ -594,7 +674,7 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
 
         # Annotations visuelles GT LARD (echantillon)
         try:
-            step_annotate_lard(run_info, csv_path, target_runway=None)
+            step_annotate_lard(run_info, csv_path, target_runway=rwy)
         except Exception as e:
             print(f"  [GT-VIS] ERREUR : {e}")
 

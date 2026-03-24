@@ -87,8 +87,11 @@ def export(root_node, path):
     )
     ou = OUParams()
 
+    # --- Renderer (ges ou xplane, via variable d'environnement) ---
+    renderer = os.environ.get("LARD_RENDERER", "ges").lower()
+
     # --- Geometrie piste ---
-    rwy = get_runway_geometry(airport, runway, dist_ap_m=ou.dist_ap_m)
+    rwy = get_runway_geometry(airport, runway, dist_ap_m=ou.dist_ap_m, renderer=renderer)
 
     # --- Generer la trajectoire ---
     print(f"[Export] {airport}/{runway} | fps={fps} | "
