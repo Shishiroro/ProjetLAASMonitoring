@@ -30,8 +30,8 @@ from dataclasses import asdict
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # LARD-LAAS-TAF/
 LARD_ROOT = PROJECT_ROOT / "LARD"
 RUNWAY_DB = str(LARD_ROOT / "data" / "filtered_runways_database_Final.json")
-# DB X-Plane generee depuis apt.dat (coords exactes du rendu X-Plane)
-_APTDAT_DB = PROJECT_ROOT / "project" / "data" / "runways_db_V2_XPlane_aptdat.json"
+# DB LARD X-Plane (meme DB que le labeling LARD pour coherence trajectoire/GT)
+RUNWAY_DB_XPLANE = str(LARD_ROOT / "data" / "runways_db_V2_XPlane.json")
 
 # Ajouter LARD/ au sys.path pour ses imports internes
 if str(LARD_ROOT) not in sys.path:
@@ -65,19 +65,16 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0, renderer="ges"):
     """
     Recupere la geometrie d'une piste.
 
-    Pour X-Plane : utilise apt.dat (memes coords que le rendu visuel).
-    Pour GES : utilise la DB LARD (avec correction swap LTP/FPAP).
+    Utilise la DB LARD correspondant au renderer pour que la trajectoire
+    vise exactement les memes coordonnees que le labeling GT.
 
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
-    if renderer == "xplane":
-        from aptdat_parser import get_xplane_runway_geometry
-        return get_xplane_runway_geometry(airport, runway)
+    db = RUNWAY_DB_XPLANE if renderer == "xplane" else RUNWAY_DB
 
-    # GES : DB LARD avec correction swap LTP/FPAP
     _, _, rwy_psi, ltp, fpap = compute_aiming_point(
-        RUNWAY_DB, airport, runway, dist_ap_m
+        db, airport, runway, dist_ap_m
     )
     # FPAP = vrai seuil d'approche dans la convention LARD
     fpap_lat, fpap_lon, fpap_alt = ecef2llh(fpap[0], fpap[1], fpap[2])
