@@ -167,11 +167,12 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
 
     # --- Params image ---
     if renderer == "xplane":
-        # X-Plane : capture native 1920x1200, FOV 65°H / 42.3°V (reglages X-Plane)
-        img_width = 1920
-        img_height = 1200
+        # X-Plane : fenetre carree 1024x1024, FOV 65° (horizontal = vertical car carre)
+        img_width = 1024
+        img_height = 1024
         fov_x = 65.0     # horizontal (reglages visuels X-Plane)
-        fov_y = 42.3     # vertical (reglages visuels X-Plane)
+        f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
+        fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
     else:
         # GES : 1024x1024 natif, FOV 30°x30°
         img_width = 1024
@@ -311,45 +312,12 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None, renderer="ges"):
         ds_type = DatasetTypes.EARTH_STUDIO
 
     with _lard_cwd():
-        # Pour X-Plane : utiliser la DB apt.dat pour le labeling
-        if renderer == "xplane" and _APTDAT_DB.exists():
-            import src.labeling.label_export as _le
-            import src.labeling.export_config as _ec
-
-            # Corriger l'altitude dans la DB si on a l'elevation terrain reelle
-            terrain_file = dataset_dir / "terrain_elevation.json"
-            db_to_use = str(_APTDAT_DB)
-            if terrain_file.exists():
-                import json as _json
-                terrain = _json.load(open(terrain_file))
-                real_elev = terrain["elevation_m"]
-                # Charger la DB, corriger les altitudes, sauver une copie temp
-                db_data = _json.load(open(_APTDAT_DB))
-                for airport_data in db_data.values():
-                    for rwy_data in airport_data.values():
-                        for corner in ["A", "B", "C", "D"]:
-                            if corner in rwy_data:
-                                rwy_data[corner]["coordinate"]["altitude"] = real_elev
-                temp_db = dataset_dir / "_temp_runway_db.json"
-                with open(temp_db, "w") as tf:
-                    _json.dump(db_data, tf)
-                db_to_use = str(temp_db)
-
-            _orig_db_name = _ec.database_name
-            _ec.database_name = lambda dt: db_to_use if dt == DatasetTypes.XPLANE else _orig_db_name(dt)
-            _le.database_name = _ec.database_name
-
         export_labels(
             dataset_type=ds_type,
             yaml_scenario_path=yaml_path,
             export_dir=dataset_dir,
             out_labels_file=csv_file,
         )
-
-        # Restaurer
-        if renderer == "xplane" and _APTDAT_DB.exists():
-            _ec.database_name = _orig_db_name
-            _le.database_name = _orig_db_name
 
     print(f"  .csv GT -> {csv_file}")
     return str(csv_file)

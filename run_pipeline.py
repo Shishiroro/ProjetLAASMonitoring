@@ -268,9 +268,17 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
             shutil.copy2(scenario_xml, run_dir / "params.xml")
 
         # Copier poses.json (format universel pour renderers)
+        # Mettre a jour scenario_name si le dossier a un suffixe (_002, _003...)
         poses_json = yf.parent / "poses.json"
         if poses_json.exists():
-            shutil.copy2(poses_json, run_dir / "poses.json")
+            poses_dst = run_dir / "poses.json"
+            shutil.copy2(poses_json, poses_dst)
+            if run_name != name:
+                import json as _json
+                poses_data = _json.load(open(poses_dst))
+                poses_data["scenario_name"] = run_name
+                with open(poses_dst, "w") as pf:
+                    _json.dump(poses_data, pf, indent=2)
 
         # Copier fault_profile.json (si fautes capteur actives)
         fault_json = yf.parent / "fault_profile.json"
@@ -350,32 +358,21 @@ def step_generate_gt(run_info, renderer="ges"):
 
     print(f"\n  [GT] Generation CSV pour {run_info['name']}...")
 
-    # X-Plane : projection ENU pinhole autonome (pas de LARD)
-    if renderer == "xplane":
-        export_path = str(ROOT / "project" / "export")
-        if export_path not in sys.path:
-            sys.path.insert(0, export_path)
-
-        from gt_xplane import generate_gt_csv
-
-        # Extraire airport/runway depuis le YAML
-        import yaml as yaml_mod
-        with open(yaml_path) as f:
-            y = yaml_mod.safe_load(f)
-        airports_rwys = y.get("airports_runways", {})
-        airport = list(airports_rwys.keys())[0]
-        runway = airports_rwys[airport][0]
-
-        csv_file = generate_gt_csv(run_dir, airport, runway)
-        return Path(csv_file)
-
-    # GES : pipeline LARD classique
+    # Pipeline LARD pour GES et X-Plane
     lard_path = str(ROOT / "LARD")
     export_path = str(ROOT / "project" / "export")
     if lard_path not in sys.path:
         sys.path.insert(0, lard_path)
     if export_path not in sys.path:
         sys.path.insert(0, export_path)
+
+    # Fix convention yaw : +180 pour passer du cap de vol au sens de regard
+    # (fix envisage par LARD, ligne 132 commentee dans label_export.py)
+    import src.labeling.label_export as _le
+    _original_facing = _le.runway_is_facing_us
+    def _fixed_facing(heading, runway):
+        return _original_facing((heading + 180) % 360, runway)
+    _le.runway_is_facing_us = _fixed_facing
 
     from lard_bridge import generate_labels_csv
 
@@ -384,6 +381,10 @@ def step_generate_gt(run_info, renderer="ges"):
         dataset_dir=str(run_dir),
         renderer=renderer,
     )
+
+    # Restaurer
+    _le.runway_is_facing_us = _original_facing
+
     return Path(csv_file)
 
 

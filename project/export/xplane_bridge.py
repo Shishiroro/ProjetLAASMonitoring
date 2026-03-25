@@ -63,10 +63,10 @@ class XPlaneConfig:
     port: int = 49000               # Port UDP X-Plane (reception)
     xplane_dir: str = ""            # Repertoire d'installation X-Plane
     settle_time: float = 0.1        # Attente apres changement de pose (sec)
-    window_width: int = 1920        # Largeur zone client X-Plane
-    window_height: int = 1200       # Hauteur zone client X-Plane
+    window_width: int = 1024        # Largeur zone client X-Plane (carre)
+    window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 65.0             # FOV horizontal (reglages X-Plane)
-    fov_v: float = 42.3             # FOV vertical (reglages X-Plane)
+    fov_v: float = 65.0             # FOV vertical (= horizontal car fenetre carree)
 
 
 # ---------------------------------------------------------------------------
@@ -93,24 +93,27 @@ def _pack_cmnd(command: str) -> bytes:
 # ---------------------------------------------------------------------------
 
 def find_xplane_window():
-    """Trouve la fenetre X-Plane et retourne son HWND + rect.
+    """Trouve la fenetre X-Plane principale (la plus grande) et retourne son HWND + rect.
 
     :return: dict {hwnd, rect, title} ou None si introuvable
     """
     if not HAS_WIN32:
         return None
-    result = {}
+    candidates = []
 
     def callback(hwnd, _):
         title = win32gui.GetWindowText(hwnd)
         if "X-Plane" in title and win32gui.IsWindowVisible(hwnd):
-            result['hwnd'] = hwnd
-            result['rect'] = win32gui.GetWindowRect(hwnd)
-            result['title'] = title
+            rect = win32gui.GetWindowRect(hwnd)
+            area = (rect[2] - rect[0]) * (rect[3] - rect[1])
+            candidates.append({'hwnd': hwnd, 'rect': rect, 'title': title, 'area': area})
         return True
 
     win32gui.EnumWindows(callback, None)
-    return result if result else None
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda c: c['area'])
+    return {'hwnd': best['hwnd'], 'rect': best['rect'], 'title': best['title']}
 
 
 def _get_client_rect(hwnd):
