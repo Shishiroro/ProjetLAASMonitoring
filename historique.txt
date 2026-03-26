@@ -1,0 +1,513 @@
+================================================================
+HISTORIQUE DU PROJET LARD-LAAS-TAF
+================================================================
+Resume des decisions et features implementees.
+
+================================================================
+Phase 0 — Travail sur LARDv2 (projet precedent)
+================================================================
+Repo : C:\Users\Sr-Sh\Desktop\LARDV2\
+Branch : trajectoireRealiste
+
+Ce qui a ete fait :
+- Mode sequentiel ajoute dans LARD : trajectoires d'approche
+  temporellement correlees (au lieu de poses independantes)
+- Processus Ornstein-Uhlenbeck a dt variable pour :
+  alpha_v, alpha_h, yaw, pitch, roll
+- Formule : x[i+1] = mean + (x[i] - mean) * exp(-dt/tau) + sigma_d * N(0,1)
+- Timeline spatiale : frames uniformes en distance, dt variable
+  (l'avion decelere → dt augmente entre les frames)
+- Convergence en finale : les deviations OU tendent vers residual (8%)
+  pres de la piste. conv(d) = 0.08 + 0.92 * clamp((d-end)/(stab-end), 0, 1)^0.5
+- Crab angle : angle de correction vent, converge aussi
+- Profils d'approche (ILS, visual, windy, unstabilized) — RETIRE
+  dans le nouveau projet, on garde les parametres OU bruts
+- Clamp altitude >= ltp_alt + 1.0 (jamais sous la piste)
+
+Fichiers cles crees/modifies :
+- LARD/src/trajectory/sequence_generator.py (nouveau)
+- LARD/src/trajectory/ou_process.py (nouveau)
+- LARD/src/trajectory/approach_profiles.py (nouveau)
+- LARD/src/scenario/default_scenario_values.py (modifie)
+- LARD/pages/step2_Scenario_Generation.py (modifie)
+
+Probleme identifie :
+- Les parametres utilisateur etaient melanges au code LARD de base
+- Streamlit ajoutait de la complexite inutile
+- Pas de separation claire entre generation de scenarios et calcul
+
+================================================================
+Phase 1 — Decouplage et migration vers LARD-LAAS-TAF
+================================================================
+Date : 2026-02-28
+Repo : C:\Users\Sr-Sh\Desktop\LARD-LAAS-TAF\
+
+Decisions :
+- Nouveau projet independant
+- LARD clone vierge, importe comme bibliotheque (geo, export .esp/.yaml)
+- TAF (LAAS) utilise pour le sampling de scenarios sous contraintes
+- Pas de Streamlit, tout via code/CLI
+- Profils d'approche retires (parametres OU directement)
+- Vitesse constante 145 kts (Vref approche standard)
+- fps entre 1 et 15
+- Distance fin approche minimum 280m
+
+Architecture choisie :
+- XML template → TAF Generation (z3 solver) → Export.py (notre code) → .esp/.yaml
+- Style : dataclasses pour configs, fonctions pures pour algorithmes
+- Voir CLAUDE.md pour la structure complete
+
+Ce qui a ete fait :
+- [x] CLAUDE.md cree
+- [x] historique.txt cree 
+- [x] Structure project/ creee
+- [x] trajectory_template.xml ecrit (10 params, 5 contraintes z3)
+- [x] trajectory_builder.py migre depuis LARDv2
+      - Fonctions pures : compute_spatial_timeline, generate_ou_process,
+        compute_convergence_factors, compute_crab_angle, build_trajectory
+      - Dataclasses : TrajectoryConfig (params XML), OUParams (hyperparams)
+- [x] lard_bridge.py cree
+      - get_runway_geometry, export_scenario (.esp + .yaml)
+      - Contournement CWD pour template.json LARD (_lard_cwd)
+- [x] Export.py implemente (point d'entree TAF)
+      - Lit parametres z3, construit configs, genere trajectoire, exporte
+- [x] main.py + Generate.py + settings.xml crees
+      - Pre-creation dossiers (contournement mkdir -p Windows)
+      - sys.path : project/export/ avant taf/src/ pour Export.py
+- [x] Tests de bout en bout — 3 scenarios generes avec succes
+      - Diversite z3 validee (aeroports, fps, distances, vent)
+      - .esp (~800KB) et .yaml (metadonnees propres) generes
+
+================================================================
+Phase 2 — Surechantillonnage du processus OU
+================================================================
+Date : 2026-03-04
+
+Probleme identifie :
+- Le processus OU applique frame par frame donnait un aspect
+  saccade visuellement (sauts visibles entre frames)
+
+Solution implementee :
+- Surechantillonnage interne dans generate_ou_process()
+- Nouveau parametre : oversample_factor (defaut 50)
+- Entre chaque paire de frames, l'OU simule oversample_factor
+  micro-pas avec dt/factor → sauts plus petits, trajectoire lisse
+- Les conv_factors sont interpoles lineairement sur les micro-pas
+- Sous-echantillonnage final : on ne garde que les frames reelles
+  → meme nombre de frames en sortie, mais plus lisses
+
+Fichier modifie :
+- [x] project/export/trajectory_builder.py
+      - generate_ou_process() : ajout parametre oversample_factor
+      - Simulation interne a taux eleve puis sous-echantillonnage
+
+Notes :
+- Rendements decroissants au-dela de ~20 (quasi-identique a 50)
+- Impact calcul negligeable meme a factor=50
+- Aucun impact sur le nombre de frames GES en sortie
+
+================================================================
+Phase 3 — Auto-calcul de tau (correlation_time)
+================================================================
+Date : 2026-03-04
+
+Probleme identifie :
+- correlation_time_s etait un parametre utilisateur dans le XML,
+  mais sa valeur realiste depend de l'altitude (modele Dryden).
+- A nos altitudes d'approche (~60-300m), tau Dryden vaut ~1-4s.
+- L'ancienne contrainte (tau + 5*turb <= 10) etait trop permissive.
+
+Solution implementee :
+- Tau retire du XML (plus de parametre utilisateur)
+- Contrainte turb_tau_coupling retiree du XML
+- Calcul automatique dans Export.py : tau = h / V
+  avec h = segment_start_m * tan(3°) (altitude max, glide slope)
+  et V = ground_speed_kts * 0.514444
+- Formule Dryden simplifiee : a nos altitudes (<1000 ft), L ≈ h
+  donc tau ≈ h / V directement
+
+Fichiers modifies :
+- [x] project/templates/trajectory_template.xml
+      - Retire parametre correlation_time_s
+      - Retire contrainte turb_tau_coupling
+- [x] project/export/Export.py
+      - Ajout calcul auto tau = h_m / speed_ms
+- [x] project/export/trajectory_builder.py
+      - Valeur par defaut de correlation_time_s mise a 4.0
+
+Valeurs resultantes :
+- segment_start=6000m → h=314m → tau=4.2s
+- segment_start=3000m → h=157m → tau=2.1s
+- segment_start=2000m → h=105m → tau=1.4s
+
+================================================================
+Phase 4 — Module YOLOv8 + retrait CSV debug
+================================================================
+Date : 2026-03-05
+
+Ajouts :
+- [x] yolo/predict.py : script CLI pour detection YOLOv8 sur images
+      Usage : python yolo/predict.py -n 100 --conf 0.25 --imgsz 512
+      Sortie : yolo/output/labels/ (.txt bbox) + images annotees
+- [x] yolo/README.txt : doc d'utilisation rapide
+- [x] yolo/yolov8n.pt : modele entraine sur LARD (detection pistes)
+- [x] yolo/test_images/test/ : dataset existant (en attendant pipeline GES)
+- [x] .gitignore mis a jour : yolo/output/, yolo/*.pt, yolo/test_images/
+
+Retrait CSV debug :
+- [x] lard_bridge.py : retrait generation .csv (import csv, params distances_m/ltp_alt)
+- [x] Export.py : retrait passage distances_m/ltp_alt a export_scenario
+- Notre pipeline sort maintenant uniquement .esp + .yaml
+- Le ground truth pour IoU viendra du .csv officiel LARD
+  (genere par LARD/src/labeling/label_export.py apres rendu GES)
+  Colonnes cles : x_TR, y_TR, x_TL, y_TL, x_BL, y_BL, x_BR, y_BR
+
+Pipeline complet documente (etapes 5-10) :
+  .esp → Google Earth Studio → images → modele de faute (futur)
+  → YOLOv8 (predict.py) → labels .txt → IoU vs ground truth LARD
+
+Contexte : le modele YOLOv8 est destine a etre embarque dans les
+avions (inference hors ligne). L'IoU sert a valider son accuracy.
+
+================================================================
+Phase 5 — Module evaluation IoU + generation CSV GT
+================================================================
+Date : 2026-03-06
+
+Ajouts :
+- [x] yolo/eval/ : module evaluation (inspire de lardv2-ml-detect-develop)
+      - box.py : conversions formats bbox numpy (tlbr, tlwh, xywh) + box_extract
+      - metrics_utils.py : IoU torch (IOU/GIOU/DIOU/CIOU), conversions bbox torch
+      - metrics.py : match_predictions, compute_ap_per_cls, compute_metrics
+- [x] yolo/evaluate.py : script glue evaluation IoU
+      - Charge .txt YOLO (cxcywh norm) → convertit en xyxy
+      - Charge .csv LARD (4 coins pixels) → box_extract → xyxy normalise
+      - Empile en tenseurs torch, appelle compute_metrics()
+      - Affiche AP, F1, Precision, Recall, TP, FP, FN
+      Usage : python yolo/evaluate.py --labels path/labels --csv path/gt.csv
+- [x] yolo/predict.py : ajout argument --images pour pointer vers un dossier
+      specifique (defaut: test_images/test/)
+- [x] lard_bridge.py : generation auto du .csv GT via LARD export_labels()
+      apres le .yaml, dans export_scenario()
+      Le .csv contient les 4 coins piste en pixels + metadonnees LARD
+- [x] trajectory_template.xml : filtre aeroports pour ne garder que ceux
+      presents dans runways_db_V2_GEarth.json (base GES labeling)
+      33 pistes valides (avant: 42 dont 29 absentes de la base GES)
+
+Pipeline complet :
+  1. Generate.py → .esp + .yaml + .csv GT
+  2. .esp → Google Earth Studio → images (footage/)
+  3. Images → predict.py → .txt predictions
+  4. evaluate.py --labels .txt --csv .csv → metriques IoU
+
+Formats :
+- Predictions YOLO .txt : classe cx cy w h confiance (cxcywh norm 0-1)
+- GT LARD .csv : 4 coins piste pixels (x_TR, y_TR, ...) + width/height
+- match_predictions : tenseurs torch, greedy matching par IoU decroissant
+
+================================================================
+Phase 5b — Corrections evaluation + generation GT post-GES
+================================================================
+Date : 2026-03-06
+
+Problemes identifies et corriges :
+- [x] CSV GT genere trop tot : la colonne 'image' etait vide car les images
+      GES n'existaient pas encore au moment de l'export.
+      → Retire la generation CSV de export_scenario() dans lard_bridge.py
+      → Nouveau : generate_labels_csv() en fonction separee, a appeler post-GES
+- [x] yolo/generate_gt.py : nouveau script CLI pour generer le CSV GT
+      apres avoir recupere les images de Google Earth Studio
+      Usage : python yolo/generate_gt.py --yaml path/to.yaml --dataset path/dir
+- [x] Nommage dossier dataset : doit matcher le prefixe des images
+      LARD cherche <export_dir.stem>_NNN.jpeg → dossier = LFPO_24, pas dataset1
+- [x] predict.py : passe le dossier (pas une liste) a model.predict() pour
+      conserver les noms originaux des images dans les .txt de sortie
+- [x] Filtre orientation LARD : runway_is_facing_us() excluait la piste
+      d'approche du GT (convention yaw GES ≠ LARD). Monkey-patch dans
+      generate_gt.py pour labelliser toutes les pistes.
+- [x] Convention coordonnees LARD : x=vertical (img_h), y=horizontal (img_w)
+      → swap x/y + normalisation correcte dans evaluate.py
+- [x] evaluate.py : ajout --runway pour filtrer le GT sur une piste
+      (evite que les autres pistes non detectees ecrasent le recall)
+- [x] evaluate.py : sauvegarde resultats dans eval_results.json (dans expN/)
+- [x] Compat numpy <2.0 : np.trapezoid → fallback np.trapz dans metrics.py
+- [x] lard_bridge.py : resolve() des chemins avant _lard_cwd() (FileNotFoundError)
+
+Pipeline corrige :
+  1. Generate.py → .esp + .yaml (PAS de CSV a cette etape)
+  2. .esp → Google Earth Studio → images dans footage/
+  3. generate_gt.py → CSV GT (avec images, toutes pistes)
+  4. predict.py → .txt predictions YOLO
+  5. evaluate.py --runway 24 → metriques IoU (filtre piste cible)
+
+BLOQUANT — Bug labeling LARD (export_labels / pointcam_to_pix) :
+  Les bbox GT generees par LARD ne correspondent pas aux positions reelles
+  des pistes dans les images GES. Verifie visuellement : ni la convention
+  standard (x=col, y=row) ni la convention inversee (x=row, y=col)
+  ne placent les bbox au bon endroit sur l'image.
+  → En attente de fix par l'equipe LARD.
+  Bugs identifies dans LARD :
+  - pointcam_to_pix : x_pixel = x_norm * img_h (au lieu de img_w)
+    → convention coordonnees inversee par rapport au standard image
+  - runway_is_facing_us : exclut la piste d'approche avec les poses GES
+    → convention yaw GES ≠ yaw LARD (contourne via monkey-patch)
+  Notre pipeline d'evaluation (predict.py + evaluate.py + metrics) est
+  fonctionnel. Il manque juste des GT fiables de la part de LARD.
+
+================================================================
+Phase 6 — Refonte parametres OU + couplage roll-lateral (v4)
+================================================================
+Date : 2026-03-10
+
+Problemes identifies :
+- Trajectoires irrealistes : l'avion "zigzaguait" lateralement
+  (dev lat max ~83m en turb=1, oscillations rapides)
+- Camera secouait trop (pitch ±2°, roll ±10° en turb=1)
+- Roll independant de la trajectoire (inclinaison aleatoire)
+- Toutes les valeurs OU venaient de LARDv2, calibrees "a l'oeil"
+
+Solutions implementees dans trajectory_builder.py :
+
+1. Tau separes position/attitude
+   - tau_position = 5 * tau_attitude (~10s vs ~2s)
+   - Position (alpha_h, alpha_v) : derives lentes (inertie avion)
+   - Attitude (yaw, pitch, roll) : oscillations rapides (surfaces controle)
+
+2. Std position cales sur specs ILS Cat I
+   - std_alpha_h : 1.0° → 0.35° (~half-dot localizer, ±15m a 3km)
+   - std_alpha_v : 0.4° → 0.25° (~half-dot glide slope)
+
+3. Std attitude cales approche stabilisee A320
+   - std_yaw   : 2.5° → 1.2°
+   - std_pitch : 2.0° → 0.7°
+   - std_roll  : 5.0° → 2.5°
+
+4. Couplage roll-lateral amorti (nouveau)
+   - roll += gain * derivee_filtree(alpha_h)
+   - Filtre EMA passe-bas (alpha=0.15, ~1Hz a 10fps)
+   - Gain 2.0, applique apres rate-limit alpha_h, avant rate-limit roll
+   - v3 avait echoue avec derivee brute → oscillations excessives
+
+Resultats (turb_high_10fps, v1 → v4) :
+  Dev laterale max : 83m → 34m
+  Yaw std          : 2.09° → 1.11°
+  Pitch std        : 1.58° → 0.60°
+  Roll max         : ±10.4° → ±5.0°
+
+Fichiers modifies :
+- [x] project/export/trajectory_builder.py (OUParams + build_trajectory)
+- [x] project/sweep/generate_esp_v4.py (nouveau)
+- [x] project/sweep/esp_scenarios_v4/ (20 .esp generes)
+- [x] project/sweep/esp_scenarios_v4/VERSION.txt
+
+Scenarios v4 a comparer dans GES vs v1 :
+  - extreme_rough_10fps (pire cas, max contraste)
+  - wind_30_cross_10fps (de-crab visible)
+  - turb_03_10fps (cas normal)
+
+================================================================
+Phase 9 — Fautes capteur camera pilotees par XML
+================================================================
+Date : 2026-03-16
+
+Objectif :
+- Permettre a l'utilisateur de definir des fautes capteur camera
+  directement dans le XML TAF (fog, dead_pixels, motion_blur, etc.)
+- Les fautes sont validees par z3, appliquees aux images GES,
+  et tracees pour l'analyse moniteur
+
+Architecture choisie :
+- Les 22 types de fautes sont declares directement dans le XML avec 3 params chacun :
+  {type}_severity (0=desactive), {type}_from_pct, {type}_to_pct
+- TAF/z3 valide les ranges (severity in [0,1], pct in [0,100])
+- Contraintes z3 : from_pct < to_pct par faute
+- Export.py lit les 22 types depuis KNOWN_FAULT_TYPES, filtre severity > 0
+- fault_profile.json sauvegarde pendant generate, applique pendant evaluate
+
+Fichiers crees :
+- [x] project/export/sensor_fault_profile.py
+      - FaultConfig dataclass (fault_type, severity, from_pct, to_pct)
+      - validate_faults() : validation backup (type connu, ranges, from < to)
+      - compute_frame_faults() : calcul fautes actives par frame (% progression)
+      - save/load_fault_profile() : persistence JSON
+      - apply_faults_to_directory() : application batch (footage/ -> degraded/)
+
+Fichiers modifies :
+- [x] project/templates/trajectory_template.xml
+      - 22 types de fautes avec {type}_severity/from_pct/to_pct
+      - severity min=max=0 desactive, > 0 active
+      - 22 contraintes z3 from_pct < to_pct
+- [x] project/export/Export.py
+      - Lecture des 22 types depuis KNOWN_FAULT_TYPES, filtre severity > 0
+      - Validation via validate_faults()
+      - Sauvegarde fault_profile.json dans le dossier artifact
+- [x] project/export/lard_bridge.py
+      - export_scenario() accepte param faults optionnel
+      - Section sensor_faults ajoutee dans le .yaml
+- [x] run_pipeline.py
+      - step_generate : copie fault_profile.json vers runs/
+      - step_apply_faults (nouveau) : applique fautes si profil present
+        footage/ -> degraded/ (originales conservees)
+      - step_predict : accepte images_dir param (degraded/ ou footage/)
+      - Pipeline evaluate : appel step_apply_faults entre GT et YOLO
+- [x] CLAUDE.md : section complete fautes capteur + mise a jour structure
+
+22 types de fautes disponibles (module yolo/camera_sensor_errors/) :
+  gaussian_noise, shot_noise, salt_pepper, dead_pixels, motion_blur,
+  defocus_blur, rolling_shutter, overexposure, underexposure, vignetting,
+  chromatic_aberration, radial_distortion, lens_flare, banding,
+  jpeg_artifacts, color_shift, condensation, dirt_on_lens,
+  fog, zoom_blur, contrast, pixelate
+
+================================================================
+Phase 10 — Integration X-Plane 12 (remplacement GES)
+================================================================
+Date : 2026-03-17
+
+Objectif :
+- Remplacer Google Earth Studio (etape manuelle) par X-Plane 12
+  pour un rendu 100% automatise (zero intervention humaine)
+- Pipeline full auto : XML → TAF → trajectoire → X-Plane rendu → fautes → YOLO → IoU
+
+Problemes resolus :
+1. Positionnement camera
+   - DREF lat/lon (float32) pas assez precis pour distinguer poses proches
+   - DREF elevation read-only, ecrase par ground clamping
+   → Solution : pause sim + override planepath + coordonnees locales OpenGL
+     (local_x/y/z en metres, precision parfaite)
+   - Conversion lat/lon → local via point de reference lu au setup
+
+2. Capture d'ecran
+   - Screenshot X-Plane : ~300ms/frame + PermissionError fichiers verrouilles
+   → Solution : mss (screen grab Python) cible fenetre X-Plane
+     ~30ms/frame en JPEG, 10x plus rapide
+   - DPI-aware (SetProcessDPIAware) + GetClientRect pour zone client pure
+
+3. Resolution
+   - X-Plane impose minimum 1280px de large (pas de 1024x1024 carre)
+   → Resolution finale : 1280x1024 (X-Plane), 1024x1024 (GES)
+
+4. Nommage images
+   - LARD attend {name}_{i:0Nd}.ext (0-based, padding dynamique)
+   - Corrige dans render_scenario() pour compat LARD export_labels
+
+5. Reticule curseur
+   - Mouse yoke actif par defaut (pas de joystick connecte)
+   → override_joystick + mouse_is_yoke=0 + deplacement souris hors fenetre
+
+Architecture :
+- Dual renderer : --renderer ges (defaut, retrocompatible) | xplane (auto)
+- poses.json : format universel (GES + X-Plane)
+- run_config.json : stocke le renderer par run
+- LARD_RENDERER env var : passe le renderer a Export.py (appele par TAF)
+
+Fichiers crees :
+- [x] project/export/xplane_bridge.py
+      - XPlaneConfig, XPlaneConnection (UDP port 49000)
+      - Protocole : DREF (set dataref), CMND (commande), RREF (lecture)
+      - setup_view() : pause + override + reference + resize + mss
+      - set_camera_pose() : lat/lon → local_x/y/z + attitude
+      - capture_frame() : mss grab + JPEG save
+      - render_scenario() : boucle complete (poses.json → footage/)
+      - save/load_poses_json(), convert_pose_ges_to_xplane()
+- [x] tests/xplane/ : scripts de test et benchmark
+- [x] xplane.txt : documentation complete integration X-Plane
+
+Fichiers modifies :
+- [x] project/export/lard_bridge.py
+      - export_scenario(renderer=) : poses.json toujours, .esp si ges only
+      - Resolution 1280x1024 si xplane, 1024x1024 si ges
+      - generate_labels_csv(renderer=) : DatasetTypes.XPLANE
+- [x] project/export/Export.py : lit LARD_RENDERER env var
+- [x] run_pipeline.py : --renderer xplane, step_render_xplane(), rendu auto
+- [x] project/templates/trajectory_template.xml : pistes KPDX (demo)
+- [x] CLAUDE.md, MEMORY.md : mis a jour
+
+Benchmarks (RTX 4060 Laptop, fenetre 1280x1024) :
+  Capture mss+JPEG : ~30ms/frame, total ~130ms/frame, 300 frames en ~40s
+
+Dependances : pip install mss pillow pywin32
+
+================================================================
+Phase 11 — Effets meteo X-Plane 12 pilotes par XML
+================================================================
+Date : 2026-03-26
+
+Objectif :
+- Permettre a l'utilisateur de definir des conditions meteo X-Plane
+  directement dans le XML TAF, avec le meme pattern que les fautes capteur
+  (severity + from_pct + to_pct)
+- Les effets sont appliques frame par frame pendant le rendu X-Plane
+  via datarefs UDP (pas en post-traitement comme les fautes capteur)
+
+Diagnostic datarefs (test_weather_drefs.py) :
+  Beaucoup de datarefs meteo sont read-only dans XP12 (nouveau moteur meteo).
+  Testes : snow_percent, visibility_reported_m, runway_wetness, thunderstorm_percent
+  → tous FAIL (non-ecrivables).
+  Ecrivables confirmes : rain_percent, cloud_base/tops_msl_m, temperature_sealevel_c,
+  wind_speed_kt, turbulence (mais turbulence inutile car sim en pause).
+
+3 effets meteo implementes (confirmes ecrivables XP12) :
+  - rain        : pluie (0-100%), gouttelettes + atmosphere grise
+  - cloud_low   : nuages bas, base 500m→50m AGL (simule brouillard/couvert)
+  - temperature : temperature 15°C→-15°C (froid, neige possible si combine avec rain)
+
+Mapping severity [0,1] → valeur dataref X-Plane :
+  - rain        : severity * 100 → rain_percent (0-100)
+  - cloud_low   : base = 500 - severity*450 → 500m (haut) a 50m (ras du sol)
+                   top = base + 500m (epaisseur fixe)
+  - temperature : 15 - severity*30 → 15°C (doux) a -15°C (froid)
+
+Architecture (meme pattern que les fautes capteur) :
+- XML : {type}_severity, {type}_from_pct, {type}_to_pct + contraintes z3
+- TAF/z3 sample dans les plages, valide from < to
+- Export.py lit les 4 types depuis KNOWN_WEATHER_TYPES, filtre severity > 0
+- weather_profile.json sauvegarde pendant generate, charge pendant rendu
+- xplane_bridge.py applique les effets frame par frame via send_dref()
+- Reset meteo (clair) a la fin du rendu
+
+Difference cle avec les fautes capteur :
+  - Fautes capteur : post-rendu, degradation image (OpenCV, footage/ → degraded/)
+  - Meteo X-Plane  : pendant le rendu, modifie la scene 3D (datarefs UDP)
+  - Les deux se cumulent et n'affectent pas la GT (geometrie piste inchangee)
+
+Fichiers crees/modifies :
+- [x] tests/xplane/test_weather_drefs.py (nouveau)
+      - Script diagnostic : teste quels datarefs meteo sont ecrivables sur XP12
+- [x] project/export/sensor_fault_profile.py
+      - KNOWN_WEATHER_TYPES : dict type → dataref X-Plane (3 types confirmes)
+      - WeatherConfig dataclass (weather_type, severity, from_pct, to_pct)
+      - validate_weather(), compute_frame_weather(), weather_severity_to_dref()
+      - save/load_weather_profile() : persistence JSON
+- [x] project/templates/trajectory_template.xml
+      - 3 types meteo avec {type}_severity/from_pct/to_pct
+      - 3 contraintes z3 from_pct < to_pct
+- [x] project/export/Export.py
+      - Lecture des 4 types depuis KNOWN_WEATHER_TYPES, filtre severity > 0
+      - Sauvegarde weather_profile.json dans le dossier artifact
+- [x] project/export/xplane_bridge.py
+      - apply_weather() : envoie datarefs meteo par frame (actif/reset)
+      - setup_weather() : desactive meteo reelle (METAR)
+      - reset_weather() : remet ciel clair a la fin
+      - render_scenario() : accepte weather_profile_path, boucle frame par frame
+- [x] project/export/lard_bridge.py
+      - export_scenario() accepte param weather optionnel
+      - Section xplane_weather ajoutee dans le .yaml
+- [x] run_pipeline.py
+      - step_generate : copie weather_profile.json vers runs/
+      - step_render_xplane : passe weather_profile_path au rendu
+- [x] CLAUDE.md : section meteo X-Plane ajoutee
+- [x] historique.txt : cette phase
+
+Exemple d'utilisation dans le XML :
+  <!-- Pluie de 50% a 80% de la trajectoire, severite 0.6 -->
+  <parameter name="rain_severity" type="real" min="0.6" max="0.6"/>
+  <parameter name="rain_from_pct" type="real" min="50" max="50"/>
+  <parameter name="rain_to_pct"   type="real" min="80" max="80"/>
+
+  <!-- Nuages bas variable entre scenarios -->
+  <parameter name="cloud_low_severity" type="real" min="0.3" max="0.8"/>
+  <parameter name="cloud_low_from_pct" type="real" min="0" max="30"/>
+  <parameter name="cloud_low_to_pct"   type="real" min="70" max="100"/>
+
+================================================================

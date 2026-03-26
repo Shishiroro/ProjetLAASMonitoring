@@ -494,6 +494,56 @@ class XPlaneConnection:
         pil_img.save(str(output_path), quality=90)
         return True
 
+    def apply_weather(self, active_weather):
+        """Applique les effets meteo actifs pour la frame courante.
+
+        :param active_weather: liste de (weather_type, severity) actifs
+                               ou liste vide si aucun effet actif
+        """
+        from sensor_fault_profile import (
+            KNOWN_WEATHER_TYPES, weather_severity_to_dref,
+        )
+
+        # Collecter les types actifs pour cette frame
+        active_types = {wt for wt, _ in active_weather}
+
+        for weather_type in KNOWN_WEATHER_TYPES:
+            if weather_type in active_types:
+                sev = next(s for wt, s in active_weather if wt == weather_type)
+                value = weather_severity_to_dref(weather_type, sev)
+            else:
+                # Reset au neutre quand l'effet n'est pas actif
+                if weather_type == "cloud_low":
+                    value = {"base": 3000.0, "top": 3500.0}  # nuages hauts = clair
+                elif weather_type == "temperature":
+                    value = 15.0  # doux
+                else:
+                    value = 0.0
+
+            # cloud_low envoie 2 datarefs (base + top)
+            if weather_type == "cloud_low":
+                self.send_dref("sim/weather/cloud_base_msl_m[0]", value["base"])
+                self.send_dref("sim/weather/cloud_tops_msl_m[0]", value["top"])
+            else:
+                self.send_dref(KNOWN_WEATHER_TYPES[weather_type], value)
+
+    def setup_weather(self):
+        """Configure X-Plane pour accepter la meteo manuelle.
+
+        Desactive la meteo reelle (METAR) pour que nos DREF ne soient
+        pas ecrases par les donnees meteorologiques en temps reel.
+        """
+        # Forcer meteo manuelle (pas de METAR/real weather)
+        self.send_dref("sim/weather/use_real_weather_bool", 0.0)
+        time.sleep(0.1)
+
+    def reset_weather(self):
+        """Remet la meteo par defaut (clair) a la fin du rendu."""
+        self.send_dref("sim/weather/rain_percent", 0.0)
+        self.send_dref("sim/weather/cloud_base_msl_m[0]", 3000.0)
+        self.send_dref("sim/weather/cloud_tops_msl_m[0]", 3500.0)
+        self.send_dref("sim/weather/temperature_sealevel_c", 15.0)
+
     def release(self):
         """Rend le controle de l'avion a X-Plane."""
         self.send_dref("sim/time/paused", 0.0)
@@ -587,7 +637,7 @@ def load_poses_json(path):
 # Rendu d'un scenario complet
 # ---------------------------------------------------------------------------
 
-def render_scenario(poses_path, output_dir, config=None):
+def render_scenario(poses_path, output_dir, config=None, weather_profile_path=None):
     """Rend un scenario complet via X-Plane.
 
     Lit le fichier poses.json, injecte chaque pose dans X-Plane,
@@ -596,10 +646,24 @@ def render_scenario(poses_path, output_dir, config=None):
     :param poses_path: chemin vers le fichier poses.json
     :param output_dir: dossier de sortie pour les images (footage/)
     :param config: XPlaneConfig (optionnel)
+    :param weather_profile_path: chemin vers weather_profile.json (optionnel)
     :return: Path du dossier de sortie
     """
     config = config or XPlaneConfig()
     data = load_poses_json(poses_path)
+
+    # Charger le profil meteo si present
+    weather_per_frame = None
+    if weather_profile_path and Path(weather_profile_path).exists():
+        from sensor_fault_profile import load_weather_profile, compute_frame_weather
+        weather_list, _ = load_weather_profile(weather_profile_path)
+        if weather_list:
+            weather_per_frame = compute_frame_weather(weather_list, data["n_frames"])
+            weather_str = ", ".join(
+                f"{w.weather_type}({w.severity:.2f})[{w.from_pct:.0f}-{w.to_pct:.0f}%]"
+                for w in weather_list
+            )
+            print(f"  [XPLANE] Meteo active : {weather_str}")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -620,6 +684,10 @@ def render_scenario(poses_path, output_dir, config=None):
             )
 
         conn.setup_view()
+
+        # Configurer la meteo si un profil est actif
+        if weather_per_frame:
+            conn.setup_weather()
 
         # Deplacer le point de reference au seuil de piste (derniere pose).
         # La conversion _latlon_to_local est precise pres du ref mais diverge
@@ -662,6 +730,11 @@ def render_scenario(poses_path, output_dir, config=None):
                 xp["heading"], xp["pitch"], xp["roll"],
             )
 
+            # Appliquer la meteo pour cette frame (si profil actif)
+            if weather_per_frame:
+                active_weather = weather_per_frame[i] if i < len(weather_per_frame) else []
+                conn.apply_weather(active_weather)
+
             # Nommage 0-based, padding LARD : {name}_{i:0Nd}.jpg
             dst = output_dir / f"{scenario_name}_{str(i).zfill(img_digits)}.jpg"
             conn.capture_frame(dst)
@@ -702,6 +775,9 @@ def render_scenario(poses_path, output_dir, config=None):
         print(f"  [XPLANE] Poses reelles -> {actual_path}")
 
     finally:
+        # Remettre la meteo par defaut avant de liberer
+        if weather_per_frame:
+            conn.reset_weather()
         conn.close()
 
     return output_dir

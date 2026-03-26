@@ -30,7 +30,7 @@
         <parameter name="segment_end_m"
                    type="real"
                    min="280"
-                   max="1000"/>
+                   max="280"/> <!-- 1000 -->
 
         <parameter name="ground_speed_kts"
                    type="real"
@@ -49,19 +49,19 @@
         <parameter name="wind_speed_kts"
                    type="real"
                    min="0"
-                   max="30"/>
+                   max="0"/>  <!-- 30 -->
   
         <parameter name="wind_direction_deg"
                    type="real"
                    min="0"
-                   max="359"/>
+                   max="0"/>  <!-- 359 -->
 
         <!-- ===== Convergence finale ===== -->
 
         <parameter name="stabilization_distance_m"
                    type="real"
                    min="1000"
-                   max="1500"/>
+                   max="1000"/> <!-- 1500 -->
 
         <!-- ===== Piste cible (format ICAO_RWY) ===== -->
 
@@ -71,7 +71,53 @@
         -->
         <parameter name="airport_runway"
                    type="string"
-                   values="KPDX_10L;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;KPDX_21"/>
+                   values="KPDX_10L;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;KPDX_21"/> <!--KPDX_10L;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;KPDX_21-->
+                   
+
+        <!-- ===== Effets meteo X-Plane 12 ===== -->
+        <!--
+            Effets meteo appliques pendant le rendu X-Plane via datarefs UDP.
+            Testes ecrivables sur XP12 via test_weather_drefs.py.
+            Meme pattern que les fautes capteur :
+              {type}_severity  : severite [0.0, 1.0] — mettre min="0" max="0" pour desactiver
+              {type}_from_pct  : debut d'application en % de la trajectoire [0, 100]
+              {type}_to_pct    : fin d'application en % de la trajectoire [0, 100]
+                                 (0% = debut approche loin, 100% = pres de la piste)
+
+            Mapping severity → valeur X-Plane :
+              rain        : severity * 100 → 0-100% precipitation
+              cloud_low   : nuages bas, base 500m→50m AGL (simule brouillard/couvert)
+              temperature : 15°C→-15°C (froid, neige possible si combine avec rain)
+
+            Plusieurs effets se cumulent si actifs simultanement.
+            Ignores si renderer=ges (GES ne supporte pas les datarefs).
+        -->
+
+        <!-- Pluie -->
+        <parameter name="rain_severity"         type="real" min="0" max="0"/>
+        <parameter name="rain_from_pct"          type="real" min="0" max="0"/>
+        <parameter name="rain_to_pct"            type="real" min="100" max="100"/>
+
+        <!-- Nuages bas (simule brouillard / couvert) -->
+        <parameter name="cloud_low_severity"    type="real" min="0" max="0"/>
+        <parameter name="cloud_low_from_pct"     type="real" min="0" max="0"/>
+        <parameter name="cloud_low_to_pct"       type="real" min="100" max="100"/>
+
+        <!-- Temperature (froid = neige possible avec rain) -->
+        <parameter name="temperature_severity"  type="real" min="0" max="0"/>
+        <parameter name="temperature_from_pct"   type="real" min="0" max="0"/>
+        <parameter name="temperature_to_pct"     type="real" min="100" max="100"/>
+
+        <!-- Contraintes from < to pour chaque effet meteo -->
+        <constraint name="rain_pct_order"
+                    expressions="scenario[i]\rain_from_pct INF scenario[i]\rain_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="cloud_low_pct_order"
+                    expressions="scenario[i]\cloud_low_from_pct INF scenario[i]\cloud_low_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <constraint name="temperature_pct_order"
+                    expressions="scenario[i]\temperature_from_pct INF scenario[i]\temperature_to_pct"
+                    quantifiers="i" ranges="[0, 0]" types="forall"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--
@@ -85,6 +131,8 @@
             Plusieurs fautes se cumulent si leurs plages se chevauchent.
             TAF (z3) sample dans les plages min/max et valide les contraintes.
         -->
+
+
 
         <!-- ===== Bruits ===== -->
 

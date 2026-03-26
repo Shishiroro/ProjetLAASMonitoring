@@ -19,7 +19,10 @@ if str(_export_dir) not in sys.path:
 
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario
-from sensor_fault_profile import FaultConfig, KNOWN_FAULT_TYPES, validate_faults, save_fault_profile
+from sensor_fault_profile import (
+    FaultConfig, KNOWN_FAULT_TYPES, validate_faults, save_fault_profile,
+    WeatherConfig, KNOWN_WEATHER_TYPES, validate_weather, save_weather_profile,
+)
 
  
 def _read_param(node, name):
@@ -66,6 +69,21 @@ def export(root_node, path):
         fault_str = ", ".join(f"{f.fault_type}({f.severity:.2f})[{f.from_pct:.0f}-{f.to_pct:.0f}%]"
                               for f in faults)
         print(f"[Export] Fautes capteur : {fault_str}")
+
+    # --- Lire les effets meteo X-Plane (severity > 0 = actif) ---
+    weather = []
+    for weather_type in sorted(KNOWN_WEATHER_TYPES.keys()):
+        severity = float(_read_param(scenario_node, f"{weather_type}_severity"))
+        if severity > 0:
+            from_pct = float(_read_param(scenario_node, f"{weather_type}_from_pct"))
+            to_pct = float(_read_param(scenario_node, f"{weather_type}_to_pct"))
+            weather.append(WeatherConfig(weather_type, severity, from_pct, to_pct))
+
+    if weather:
+        validate_weather(weather)
+        weather_str = ", ".join(f"{w.weather_type}({w.severity:.2f})[{w.from_pct:.0f}-{w.to_pct:.0f}%]"
+                                for w in weather)
+        print(f"[Export] Meteo X-Plane : {weather_str}")
 
     # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), , donc tau ≈ h / V
@@ -117,6 +135,7 @@ def export(root_node, path):
         output_dir=path,
         scenario_name=f"{airport}_{runway}",
         faults=faults,
+        weather=weather,
         renderer=renderer,
     )
 
@@ -126,4 +145,12 @@ def export(root_node, path):
             faults,
             n_frames=len(flight_data),
             output_path=Path(path) / "fault_profile.json",
+        )
+
+    # --- Sauver le profil meteo (si actif) ---
+    if weather:
+        save_weather_profile(
+            weather,
+            n_frames=len(flight_data),
+            output_path=Path(path) / "weather_profile.json",
         )

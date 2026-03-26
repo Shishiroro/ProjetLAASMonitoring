@@ -135,7 +135,7 @@ def generate_frame_times(n_frames, fps):
 
 def export_scenario(flight_data, cfg, ou_params, airport, runway,
                     output_dir, scenario_name="scenario", faults=None,
-                    renderer="ges"):
+                    weather=None, renderer="ges"):
     """
     Exporte un scenario complet.
 
@@ -154,6 +154,7 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     :param output_dir: dossier de sortie
     :param scenario_name: nom de base des fichiers
     :param faults: liste de FaultConfig (optionnel)
+    :param weather: liste de WeatherConfig (optionnel)
     :param renderer: "ges" ou "xplane"
     """
     output_path = Path(output_dir)
@@ -273,6 +274,11 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     if faults:
         from dataclasses import asdict as _asdict
         yaml_content['sensor_faults'] = [_asdict(f) for f in faults]
+
+    # --- Effets meteo X-Plane (optionnel) ---
+    if weather:
+        from dataclasses import asdict as _asdict2
+        yaml_content['xplane_weather'] = [_asdict2(w) for w in weather]
 
     yaml_file = output_path / f"{scenario_name}.yaml"
     with open(yaml_file, "w") as f:

@@ -206,7 +206,13 @@ def step_render_xplane(run_info, xplane_dir):
     from xplane_bridge import render_scenario, XPlaneConfig
 
     config = XPlaneConfig(xplane_dir=xplane_dir)
-    render_scenario(str(poses_file), str(footage_dir), config)
+
+    # Passer le profil meteo si present
+    weather_file = run_dir / "weather_profile.json"
+    weather_path = str(weather_file) if weather_file.exists() else None
+
+    render_scenario(str(poses_file), str(footage_dir), config,
+                    weather_profile_path=weather_path)
     return True
 
 
@@ -285,6 +291,11 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
         if fault_json.exists():
             shutil.copy2(fault_json, run_dir / "fault_profile.json")
 
+        # Copier weather_profile.json (si effets meteo actifs)
+        weather_json = yf.parent / "weather_profile.json"
+        if weather_json.exists():
+            shutil.copy2(weather_json, run_dir / "weather_profile.json")
+
         # Sauver le renderer utilise dans un fichier de config
         run_config = {"renderer": renderer}
         with open(run_dir / "run_config.json", "w") as f:
@@ -294,6 +305,8 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
         extras = ""
         if fault_json.exists():
             extras += " + fault_profile.json"
+        if weather_json.exists():
+            extras += " + weather_profile.json"
         if renderer == "ges":
             print(f"  [RUNS] {run_dir.name}/ <- .esp + .yaml + poses.json{extras}")
         else:
