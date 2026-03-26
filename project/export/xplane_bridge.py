@@ -265,7 +265,7 @@ class XPlaneConnection:
         self.send_dref("sim/flightmodel/position/local_x", lx)
         self.send_dref("sim/flightmodel/position/local_y", ly)
         self.send_dref("sim/flightmodel/position/local_z", lz)
-        time.sleep(0.5)
+        time.sleep(0.15)
         # Relire : maintenant le ref est pres de la cible
         self._read_reference_point()
         print(f"  [XPLANE] Reference deplacee vers lat={lat:.6f}, lon={lon:.6f}")
@@ -375,10 +375,9 @@ class XPlaneConnection:
         self.send_dref("sim/joystick/mouse_is_yoke", 0.0)
         time.sleep(0.1)
 
-        # Deplacer la souris hors de la fenetre X-Plane
-        if HAS_WIN32:
-            ctypes.windll.user32.SetCursorPos(0, 0)
-            time.sleep(0.1)
+        # Cacher le curseur dans la fenetre X-Plane sans deplacer la souris
+        # On desactive juste le mouse yoke (ci-dessus) — pas de SetCursorPos
+        # pour ne pas perturber l'utilisateur.
 
         # Lire l'offset yeux pilote du modele avion charge
         # acf_peX = lateral, acf_peY = vertical, acf_peZ = longitudinal (metres)
@@ -628,37 +627,6 @@ def render_scenario(poses_path, output_dir, config=None):
         # les frames proches (ou la precision bbox compte le plus) seront exactes.
         last_pose = data["poses"][-1]
         conn.move_reference_to(last_pose["lat"], last_pose["lon"])
-
-        # Mesurer l'altitude terrain reelle au seuil de piste.
-        # Methode : positionner l'avion a la derniere pose (basse altitude,
-        # pres du seuil), lire elevation et y_agl, deduire le terrain.
-        last_xp = convert_pose_ges_to_xplane(
-            last_pose["lon"], last_pose["lat"], last_pose["alt_m"],
-            last_pose["heading"], last_pose["pitch_ges"], last_pose["roll"],
-        )
-        conn.set_camera_pose(
-            last_xp["lat"], last_xp["lon"], last_xp["alt_m"],
-            last_xp["heading"], last_xp["pitch"], last_xp["roll"],
-        )
-        time.sleep(0.5)  # laisser X-Plane stabiliser la position
-        probe_elev = conn.read_dref("sim/flightmodel/position/elevation", 30)
-        probe_agl = conn.read_dref("sim/flightmodel/position/y_agl", 31)
-        if probe_elev is not None and probe_agl is not None:
-            terrain_elev = probe_elev - probe_agl
-        else:
-            terrain_elev = 0.0
-            print("  [XPLANE] ATTENTION: impossible de lire elevation/y_agl")
-
-        terrain_file = output_dir.parent / "terrain_elevation.json"
-        terrain_data = {
-            "lat": last_pose["lat"],
-            "lon": last_pose["lon"],
-            "elevation_m": terrain_elev,
-        }
-        with open(terrain_file, "w") as tf:
-            json.dump(terrain_data, tf, indent=2)
-        print(f"  [XPLANE] Terrain au seuil : {terrain_elev:.1f}m "
-              f"(elev={probe_elev:.1f}m, AGL={probe_agl:.1f}m)")
 
         # Sauver la config de rendu (FOV + resolution + pilot eye) pour le labeling GT
         render_cfg = {
