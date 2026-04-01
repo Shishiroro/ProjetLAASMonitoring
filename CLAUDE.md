@@ -64,7 +64,8 @@ LARD-LAAS-TAF/
 │   │   ├── Export.py                  # Point d'entree TAF (copie auto → taf/src/)
 │   │   ├── trajectory_builder.py      # OU, convergence, timeline, crab angle
 │   │   ├── lard_bridge.py            # Import LARD, genere .esp/.yaml + GT CSV
-│   │   ├── xplane_bridge.py         # Interface X-Plane 12 (UDP, mss capture, rendu auto)
+│   │   ├── xplane_bridge.py         # Interface X-Plane 12 (UDP + factory Lua/UDP, mss capture)
+│   │   ├── lua_bridge.py            # Interface X-Plane via FlyWithLua (fichiers JSON)
 │   │   └── sensor_fault_profile.py   # Profil fautes capteur (config, validation, application)
 │   ├── settings.xml                   # Config TAF (paths, nb_test_cases)
 │   └── Generate.py                    # Script lancement TAF
@@ -99,6 +100,7 @@ LARD-LAAS-TAF/
 ├── output/                            # Temporaire TAF (nettoye avant chaque generate)
 ├── tests/                             # Scripts de test
 │   └── xplane/                        # Tests X-Plane (diagnostic, benchmark, rendu)
+├── lard_bridge.lua                    # Script FlyWithLua (a copier dans X-Plane)
 ├── run_pipeline.py                    # Orchestrateur bout-en-bout
 ├── main.py                            # Point d'entree CLI (generation seule)
 ├── xplane.txt                         # Documentation integration X-Plane
@@ -183,17 +185,10 @@ Ignores si renderer=ges (GES ne supporte pas les datarefs).
 <parameter name="rain_severity"      type="real" min="0.3" max="0.7"/>
 <parameter name="rain_from_pct"      type="real" min="20" max="40"/>
 <parameter name="rain_to_pct"        type="real" min="60" max="90"/>
-
-<!-- Nuages bas (simule brouillard/couvert) -->
-<parameter name="cloud_low_severity" type="real" min="0.5" max="0.9"/>
-<parameter name="cloud_low_from_pct" type="real" min="0" max="30"/>
-<parameter name="cloud_low_to_pct"   type="real" min="70" max="100"/>
 ```
 
-### 3 types d'effets meteo disponibles (testes ecrivables XP12)
+### 1 type d'effet meteo disponible (teste ecrivable XP12)
 - **rain** : pluie (severity * 100 → 0-100% precipitation)
-- **cloud_low** : nuages bas (severity → base 500m a 50m AGL, simule brouillard/couvert)
-- **temperature** : temperature (severity → 15°C a -15°C, neige possible si froid + rain)
 
 ### Pipeline d'application
 1. `generate` : TAF sample les params, Export.py cree `weather_profile.json`
@@ -209,9 +204,41 @@ Ignores si renderer=ges (GES ne supporte pas les datarefs).
 
 ### Cumul avec les fautes capteur
 Les deux systemes sont independants et se cumulent :
-- Meteo X-Plane modifie la scene 3D (pluie, brouillard, neige dans le moteur de rendu)
+- Meteo X-Plane modifie la scene 3D (pluie dans le moteur de rendu)
 - Fautes capteur degradent l'image apres capture (OpenCV sur les pixels)
 - Ni l'un ni l'autre n'affecte la GT (geometrie piste inchangee)
+
+## Bridge FlyWithLua (project/export/lua_bridge.py + lard_bridge.lua)
+
+### Principe
+Remplacement de la communication UDP DREF par un plugin FlyWithLua qui tourne
+dans le render loop X-Plane. Les datarefs sont ecrits via XPLMSetDataf depuis
+do_every_draw(), ce qui garantit leur prise en compte par le moteur XP12
+(contrairement a l'UDP externe que le nouveau moteur meteo ignore).
+
+### Communication Python ↔ Lua
+- Fichiers JSON dans un dossier d'echange (FlyWithLua/Scripts/lard_exchange/)
+- Python ecrit `command.json` {seq, action, drefs, weather}
+- Lua lit a chaque frame, applique datarefs, ecrit `status.json` {ack_seq, ok, actual_pose, ...}
+- Sequence number pour synchronisation, ecriture atomique (.tmp + rename)
+
+### Actions supportees
+- `setup` : pause, overrides, forward_with_nothing, disable METAR, close popups
+- `set_pose` : applique datarefs position/attitude + weather (atomique, 1 frame)
+- `read_pose` : lit pose reelle + reference point (double precision lat/lon)
+- `release` : unpause, remove overrides, reset meteo
+- `noop` : heartbeat / detection FlyWithLua
+
+### Factory (xplane_bridge.py)
+`create_connection(config)` detecte automatiquement FlyWithLua :
+1. Verifie si lard_bridge.lua existe dans FlyWithLua/Scripts/
+2. Envoie noop, attend ack 5s
+3. Si OK → LuaBridgeConnection ; sinon → fallback XPlaneConnection (UDP)
+
+### Installation
+1. Copier `lard_bridge.lua` dans `X-Plane 12/Resources/plugins/FlyWithLua/Scripts/`
+2. Lancer X-Plane (le script se charge automatiquement)
+3. Configurer `xplane_dir` dans XPlaneConfig (pour la detection auto)
 
 ## Ce qu'on importe de LARD (sans modifier)
 - `src/geo/geo_utils.py` — conversions ECEF/LLH, geodesie

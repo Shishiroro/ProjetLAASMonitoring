@@ -19,13 +19,13 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="5"
-                   max="5"/>
+                   min="15"
+                   max="15"/>
 
         <parameter name="segment_start_m"
                    type="real"
                    min="2000"
-                   max="2000"/>
+                   max="3000"/>
 
         <parameter name="segment_end_m"
                    type="real"
@@ -42,26 +42,26 @@
         <parameter name="turbulence_intensity"
                    type="real"
                    min="0"
-                   max="0"/>
+                   max="1"/>
 
         <!-- ===== Vent ===== -->
 
         <parameter name="wind_speed_kts"
                    type="real"
                    min="0"
-                   max="0"/>  <!-- 30 -->
+                   max="30"/>  <!-- 30 -->
   
         <parameter name="wind_direction_deg"
                    type="real"
                    min="0"
-                   max="0"/>  <!-- 359 -->
+                   max="359"/>  <!-- 359 -->
 
         <!-- ===== Convergence finale ===== -->
 
         <parameter name="stabilization_distance_m"
                    type="real"
                    min="1000"
-                   max="1000"/> <!-- 1500 -->
+                   max="1500"/> <!-- 1500 -->
 
         <!-- ===== Piste cible (format ICAO_RWY) ===== -->
 
@@ -85,9 +85,7 @@
                                  (0% = debut approche loin, 100% = pres de la piste)
 
             Mapping severity → valeur X-Plane :
-              rain        : severity * 100 → 0-100% precipitation
-              cloud_low   : nuages bas, base 500m→50m AGL (simule brouillard/couvert)
-              temperature : 15°C→-15°C (froid, neige possible si combine avec rain)
+              rain : severity * 100 → 0-100% precipitation
 
             Plusieurs effets se cumulent si actifs simultanement.
             Ignores si renderer=ges (GES ne supporte pas les datarefs).
@@ -98,25 +96,17 @@
         <parameter name="rain_from_pct"          type="real" min="0" max="0"/>
         <parameter name="rain_to_pct"            type="real" min="100" max="100"/>
 
-        <!-- Nuages bas (simule brouillard / couvert) -->
+        <!-- Nuages bas (requis pour que la pluie soit visible dans XP12) -->
         <parameter name="cloud_low_severity"    type="real" min="0" max="0"/>
         <parameter name="cloud_low_from_pct"     type="real" min="0" max="0"/>
         <parameter name="cloud_low_to_pct"       type="real" min="100" max="100"/>
 
-        <!-- Temperature (froid = neige possible avec rain) -->
-        <parameter name="temperature_severity"  type="real" min="0" max="0"/>
-        <parameter name="temperature_from_pct"   type="real" min="0" max="0"/>
-        <parameter name="temperature_to_pct"     type="real" min="100" max="100"/>
-
-        <!-- Contraintes from < to pour chaque effet meteo -->
+        <!-- Contraintes from < to -->
         <constraint name="rain_pct_order"
                     expressions="scenario[i]\rain_from_pct INF scenario[i]\rain_to_pct"
                     quantifiers="i" ranges="[0, 0]" types="forall"/>
         <constraint name="cloud_low_pct_order"
                     expressions="scenario[i]\cloud_low_from_pct INF scenario[i]\cloud_low_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="temperature_pct_order"
-                    expressions="scenario[i]\temperature_from_pct INF scenario[i]\temperature_to_pct"
                     quantifiers="i" ranges="[0, 0]" types="forall"/>
 
         <!-- ===== Fautes capteur camera ===== -->
@@ -186,7 +176,7 @@
         <parameter name="chromatic_aberration_from_pct"  type="real" min="0" max="0"/>
         <parameter name="chromatic_aberration_to_pct"    type="real" min="100" max="100"/>
 
-        <parameter name="radial_distortion_severity" type="real" min="0" max="0"/>
+        <parameter name="radial_distortion_severity" type="real" min="0.2" max="0.2"/>
         <parameter name="radial_distortion_from_pct"  type="real" min="0" max="0"/>
         <parameter name="radial_distortion_to_pct"    type="real" min="100" max="100"/>
 

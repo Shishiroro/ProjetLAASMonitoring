@@ -850,11 +850,11 @@ Exemples :
 
     # --- Arguments communs renderer ---
     renderer_args = argparse.ArgumentParser(add_help=False)
-    renderer_args.add_argument("--renderer", type=str, default="ges",
+    renderer_args.add_argument("--renderer", type=str, default="xplane",
                                choices=["ges", "xplane"],
-                               help="Renderer d'images (defaut: ges)")
-    renderer_args.add_argument("--xplane-dir", type=str, default=None,
-                               help="Repertoire X-Plane 12 (requis si --renderer xplane)")
+                               help="Renderer d'images (defaut: xplane)")
+    renderer_args.add_argument("--xplane-dir", type=str, default="C:/X-Plane 12",
+                               help="Repertoire X-Plane 12 (defaut: C:/X-Plane 12)")
 
     # --- generate ---
     p_gen = sub.add_parser("generate", parents=[renderer_args],

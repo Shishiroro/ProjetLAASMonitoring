@@ -137,6 +137,7 @@ def export(root_node, path):
         faults=faults,
         weather=weather,
         renderer=renderer,
+        ltp_alt=rwy["ltp_alt"],
     )
 
     # --- Sauver le profil de fautes (si actif) ---

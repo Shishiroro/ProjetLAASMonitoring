@@ -135,7 +135,7 @@ def generate_frame_times(n_frames, fps):
 
 def export_scenario(flight_data, cfg, ou_params, airport, runway,
                     output_dir, scenario_name="scenario", faults=None,
-                    weather=None, renderer="ges"):
+                    weather=None, renderer="ges", ltp_alt=0.0):
     """
     Exporte un scenario complet.
 
@@ -201,7 +201,7 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
 
     # --- poses.json (format universel, pour tout renderer) ---
     poses_file = output_path / "poses.json"
-    save_poses_json(flight_data, cfg.fps, scenario_name, poses_file)
+    save_poses_json(flight_data, cfg.fps, scenario_name, poses_file, ltp_alt=ltp_alt)
 
     # --- .yaml au format LARD (compatible export_labels) ---
     def _to_python(val):

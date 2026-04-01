@@ -511,3 +511,48 @@ Exemple d'utilisation dans le XML :
   <parameter name="cloud_low_to_pct"   type="real" min="70" max="100"/>
 
 ================================================================
+Phase 12 — Bridge FlyWithLua (remplacement UDP)
+================================================================
+Date : 2026-03-30
+
+Probleme identifie :
+- Les datarefs meteo ecrits via UDP sont acceptes (valeur relue OK)
+  mais PAS rendus visuellement par le nouveau moteur meteo XP12.
+  Confirme par test_weather_drefs.py et test_weather_live.py.
+- Position lat/lon envoyee en float32 via UDP (precision ~0.5m).
+
+Solution implementee :
+- Plugin FlyWithLua (lard_bridge.lua) tournant dans le render loop X-Plane
+- Communication Python <-> Lua via fichiers JSON (command.json / status.json)
+- Sequence number (seq/ack_seq) pour synchronisation
+- Ecriture atomique (.tmp + rename) pour eviter les lectures partielles
+- Datarefs ecrits via XPLMSetDataf/XPLMSetDatad dans do_every_draw()
+  -> appliques dans le render thread (garanti pris en compte par XP12)
+
+Protocole JSON :
+- Actions : setup, set_pose, read_pose, release, noop
+- command.json : {seq, action, drefs: {name: value}, weather: {name: value}}
+- status.json : {ack_seq, ok, actual_pose, ref_point, pilot_eye, fov_deg}
+- Pose reelle lue en double precision (lat/lon) par Lua
+
+Architecture :
+- Factory create_connection(config) dans xplane_bridge.py
+  1. Verifie si lard_bridge.lua installe dans FlyWithLua/Scripts/
+  2. Envoie noop, attend ack 5s
+  3. Si OK -> LuaBridgeConnection ; sinon -> fallback XPlaneConnection (UDP)
+- render_scenario() utilise la factory (transparent pour le pipeline)
+
+Fichiers crees :
+- [x] lard_bridge.lua (a copier dans FlyWithLua/Scripts/)
+- [x] project/export/lua_bridge.py (LuaBridgeConnection)
+
+Fichiers modifies :
+- [x] project/export/xplane_bridge.py (factory + XPlaneConfig)
+
+Installation :
+  1. Copier lard_bridge.lua dans X-Plane 12/Resources/plugins/FlyWithLua/Scripts/
+  2. Lancer X-Plane (script charge automatiquement)
+  3. Configurer xplane_dir dans XPlaneConfig
+  4. Le pipeline detecte FlyWithLua et bascule automatiquement
+
+================================================================

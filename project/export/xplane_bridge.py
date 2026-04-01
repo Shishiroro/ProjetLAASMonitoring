@@ -67,6 +67,8 @@ class XPlaneConfig:
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 65.0             # FOV horizontal (reglages X-Plane)
     fov_v: float = 65.0             # FOV vertical (= horizontal car fenetre carree)
+    exchange_dir: str = ""          # Dossier echange FlyWithLua (auto si vide)
+    lua_timeout: float = 5.0        # Timeout attente reponse Lua (sec)
 
 
 # ---------------------------------------------------------------------------
@@ -494,33 +496,27 @@ class XPlaneConnection:
         pil_img.save(str(output_path), quality=90)
         return True
 
-    def apply_weather(self, active_weather):
+    def apply_weather(self, active_weather, ltp_elevation_msl=0.0):
         """Applique les effets meteo actifs pour la frame courante.
 
         :param active_weather: liste de (weather_type, severity) actifs
                                ou liste vide si aucun effet actif
+        :param ltp_elevation_msl: altitude MSL du seuil de piste (pour cloud_low)
         """
         from sensor_fault_profile import (
             KNOWN_WEATHER_TYPES, weather_severity_to_dref,
         )
 
-        # Collecter les types actifs pour cette frame
         active_types = {wt for wt, _ in active_weather}
 
         for weather_type in KNOWN_WEATHER_TYPES:
             if weather_type in active_types:
                 sev = next(s for wt, s in active_weather if wt == weather_type)
-                value = weather_severity_to_dref(weather_type, sev)
+                value = weather_severity_to_dref(weather_type, sev, ltp_elevation_msl)
             else:
-                # Reset au neutre quand l'effet n'est pas actif
-                if weather_type == "cloud_low":
-                    value = {"base": 3000.0, "top": 3500.0}  # nuages hauts = clair
-                elif weather_type == "temperature":
-                    value = 15.0  # doux
-                else:
-                    value = 0.0
+                value = {"base": ltp_elevation_msl + 3000.0, "top": ltp_elevation_msl + 3500.0} \
+                    if weather_type == "cloud_low" else 0.0
 
-            # cloud_low envoie 2 datarefs (base + top)
             if weather_type == "cloud_low":
                 self.send_dref("sim/weather/cloud_base_msl_m[0]", value["base"])
                 self.send_dref("sim/weather/cloud_tops_msl_m[0]", value["top"])
@@ -537,12 +533,11 @@ class XPlaneConnection:
         self.send_dref("sim/weather/use_real_weather_bool", 0.0)
         time.sleep(0.1)
 
-    def reset_weather(self):
+    def reset_weather(self, ltp_elevation_msl=0.0):
         """Remet la meteo par defaut (clair) a la fin du rendu."""
         self.send_dref("sim/weather/rain_percent", 0.0)
-        self.send_dref("sim/weather/cloud_base_msl_m[0]", 3000.0)
-        self.send_dref("sim/weather/cloud_tops_msl_m[0]", 3500.0)
-        self.send_dref("sim/weather/temperature_sealevel_c", 15.0)
+        self.send_dref("sim/weather/cloud_base_msl_m[0]", ltp_elevation_msl + 3000.0)
+        self.send_dref("sim/weather/cloud_tops_msl_m[0]", ltp_elevation_msl + 3500.0)
 
     def release(self):
         """Rend le controle de l'avion a X-Plane."""
@@ -566,6 +561,48 @@ class XPlaneConnection:
 # Conversion de poses GES → X-Plane
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Factory : choix du backend (FlyWithLua ou UDP)
+# ---------------------------------------------------------------------------
+
+def create_connection(config=None):
+    """Cree la meilleure connexion X-Plane disponible.
+
+    1. Si FlyWithLua est detecte (lard_bridge.lua present + repond au noop) → LuaBridgeConnection
+    2. Sinon → XPlaneConnection (UDP, mode degrade)
+
+    :param config: XPlaneConfig (optionnel)
+    :return: LuaBridgeConnection ou XPlaneConnection
+    """
+    config = config or XPlaneConfig()
+
+    # Tenter FlyWithLua si xplane_dir est configure
+    if config.xplane_dir:
+        xp = Path(config.xplane_dir)
+        lua_script = xp / "Resources" / "plugins" / "FlyWithLua" / "Scripts" / "lard_bridge.lua"
+
+        if lua_script.exists():
+            # Determiner le dossier d'echange
+            if config.exchange_dir:
+                exchange_dir = Path(config.exchange_dir)
+            else:
+                exchange_dir = lua_script.parent / "lard_exchange"
+
+            try:
+                from lua_bridge import LuaBridgeConnection
+                conn = LuaBridgeConnection(config, exchange_dir)
+                if conn.check_connection():
+                    print(f"  [XPLANE] FlyWithLua detecte et actif -> mode Lua")
+                    return conn
+                else:
+                    print(f"  [XPLANE] FlyWithLua detecte mais pas de reponse -> fallback UDP")
+            except Exception as e:
+                print(f"  [XPLANE] Erreur FlyWithLua: {e} -> fallback UDP")
+
+    print(f"  [XPLANE] Mode UDP (pas de FlyWithLua)")
+    return XPlaneConnection(config)
+
+
 def convert_pose_ges_to_xplane(lon, lat, alt, yaw, pitch_ges, roll):
     """Convertit une pose du format GES vers le format X-Plane.
 
@@ -588,13 +625,14 @@ def convert_pose_ges_to_xplane(lon, lat, alt, yaw, pitch_ges, roll):
 # Fichier poses.json (format universel, independant du renderer)
 # ---------------------------------------------------------------------------
 
-def save_poses_json(flight_data, fps, scenario_name, output_path):
+def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
     """Sauvegarde les poses dans un fichier JSON universel.
 
     :param flight_data: list de tuples (lon, lat, alt, yaw, pitch_ges, roll)
     :param fps: frames par seconde
     :param scenario_name: nom du scenario (ex: LFPO_24)
     :param output_path: chemin du fichier JSON de sortie
+    :param ltp_alt: altitude MSL du LTP (seuil de piste) en metres, pour la meteo
     :return: chemin du fichier cree
     """
     output_path = Path(output_path)
@@ -614,6 +652,7 @@ def save_poses_json(flight_data, fps, scenario_name, output_path):
         "scenario_name": scenario_name,
         "n_frames": len(poses),
         "fps": fps,
+        "ltp_alt": float(ltp_alt) if ltp_alt is not None else 0.0,
         "poses": poses,
     }
 
@@ -651,6 +690,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     """
     config = config or XPlaneConfig()
     data = load_poses_json(poses_path)
+    ltp_alt = data.get("ltp_alt", 0.0)
 
     # Charger le profil meteo si present
     weather_per_frame = None
@@ -673,7 +713,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
     print(f"  [XPLANE] Rendu de {scenario_name} ({n_frames} frames)...")
 
-    conn = XPlaneConnection(config)
+    conn = create_connection(config)
 
     try:
         if not conn.check_connection():
@@ -725,15 +765,15 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                 pose["heading"], pose["pitch_ges"], pose["roll"],
             )
 
+            # Appliquer la meteo AVANT la pose (les drefs sont envoyes avec set_camera_pose)
+            if weather_per_frame:
+                active_weather = weather_per_frame[i] if i < len(weather_per_frame) else []
+                conn.apply_weather(active_weather, ltp_elevation_msl=ltp_alt)
+
             conn.set_camera_pose(
                 xp["lat"], xp["lon"], xp["alt_m"],
                 xp["heading"], xp["pitch"], xp["roll"],
             )
-
-            # Appliquer la meteo pour cette frame (si profil actif)
-            if weather_per_frame:
-                active_weather = weather_per_frame[i] if i < len(weather_per_frame) else []
-                conn.apply_weather(active_weather)
 
             # Nommage 0-based, padding LARD : {name}_{i:0Nd}.jpg
             dst = output_dir / f"{scenario_name}_{str(i).zfill(img_digits)}.jpg"
@@ -777,7 +817,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     finally:
         # Remettre la meteo par defaut avant de liberer
         if weather_per_frame:
-            conn.reset_weather()
+            conn.reset_weather(ltp_elevation_msl=ltp_alt)
         conn.close()
 
     return output_dir

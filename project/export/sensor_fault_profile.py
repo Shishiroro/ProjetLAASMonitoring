@@ -37,11 +37,9 @@ KNOWN_FAULT_TYPES = {
 # Types d'effets meteo X-Plane 12 (datarefs controlables via UDP DREF)
 # Testes ecrivables via test_weather_drefs.py (2026-03-26).
 # Chaque type a severity + from_pct + to_pct, meme pattern que les fautes capteur.
-# cloud_low utilise 2 datarefs (base + top), gere dans xplane_bridge.py.
 KNOWN_WEATHER_TYPES = {
-    "rain":        "sim/weather/rain_percent",          # 0-100% — ecrivable XP12
-    "cloud_low":   "sim/weather/cloud_base_msl_m[0]",   # nuages bas (base + top) — ecrivable XP12
-    "temperature": "sim/weather/temperature_sealevel_c", # temperature °C — ecrivable XP12
+    "rain":      "sim/weather/rain_percent",          # 0-100% — ecrivable XP12
+    "cloud_low": "sim/weather/cloud_base_msl_m[0]",   # nuages bas (base + top) — ecrivable XP12
 }
 
 
@@ -59,18 +57,14 @@ class WeatherConfig:
     """Configuration d'un effet meteo X-Plane (genere par TAF).
 
     Meme structure que FaultConfig :
-      - weather_type : type d'effet (rain, cloud_low, temperature)
+      - weather_type : type d'effet (rain, cloud_low)
       - severity     : degre de severite [0.0, 1.0]
       - from_pct     : debut d'application en % de la trajectoire [0, 100]
       - to_pct       : fin d'application en % de la trajectoire [0, 100]
 
     La severity est mappee vers des valeurs dataref X-Plane :
-      - rain        : severity * 100 → rain_percent (0-100)
-      - cloud_low   : severity → base nuage entre 500m et 50m AGL
-                       severity=0 → 500m (haut), severity=1 → 50m (ras du sol, brouillard)
-                       top = base + 500m (epaisseur fixe)
-      - temperature : severity → temperature entre 15°C et -15°C
-                       severity=0 → 15°C (doux), severity=1 → -15°C (froid, neige possible)
+      - rain      : severity * 100 → rain_percent (0-100)
+      - cloud_low : base AGL = 500m → 50m (severity 0→1), corrigee en MSL via ltp_alt
     """
     weather_type: str
     severity: float
@@ -329,28 +323,21 @@ def compute_frame_weather(weather_list, n_frames):
     return per_frame
 
 
-def weather_severity_to_dref(weather_type, severity):
+def weather_severity_to_dref(weather_type, severity, ltp_elevation_msl=0.0):
     """
     Convertit la severity normalisee [0, 1] en valeur(s) dataref X-Plane.
 
     Mapping :
-      - rain        : severity * 100 → 0-100%
-      - cloud_low   : base = 500 - severity * 450 → 500m (haut) a 50m (ras du sol)
-                       Retourne un dict {base: val, top: val}
-      - temperature : 15 - severity * 30 → 15°C (doux) a -15°C (froid)
-
-    :return: float ou dict pour cloud_low (2 datarefs)
+      - rain      : severity * 100 → 0-100%
+      - cloud_low : base AGL = 500m → 50m (severity 0→1), convertie en MSL
+                    via ltp_elevation_msl pour eviter les nuages sous le terrain.
+                    Retourne un dict {base: val, top: val}
     """
-    if weather_type == "rain":
-        return severity * 100.0
-    elif weather_type == "cloud_low":
-        base = 500.0 - severity * 450.0  # 500m → 50m AGL
-        top = base + 500.0               # epaisseur fixe 500m
-        return {"base": base, "top": top}
-    elif weather_type == "temperature":
-        return 15.0 - severity * 30.0    # 15°C → -15°C
-    else:
-        return severity
+    if weather_type == "cloud_low":
+        base_agl = 500.0 - severity * 450.0   # 500m AGL → 50m AGL
+        top_agl = base_agl + 500.0             # epaisseur fixe 500m
+        return {"base": ltp_elevation_msl + base_agl, "top": ltp_elevation_msl + top_agl}
+    return severity * 100.0
 
 
 def save_weather_profile(weather_list, n_frames, output_path):
