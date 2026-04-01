@@ -67,8 +67,7 @@ class XPlaneConfig:
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 65.0             # FOV horizontal (reglages X-Plane)
     fov_v: float = 65.0             # FOV vertical (= horizontal car fenetre carree)
-    exchange_dir: str = ""          # Dossier echange FlyWithLua (auto si vide)
-    lua_timeout: float = 5.0        # Timeout attente reponse Lua (sec)
+    exchange_dir: str = ""          # Dossier echange XPPython3 (auto si vide)
 
 
 # ---------------------------------------------------------------------------
@@ -496,48 +495,7 @@ class XPlaneConnection:
         pil_img.save(str(output_path), quality=90)
         return True
 
-    def apply_weather(self, active_weather, ltp_elevation_msl=0.0):
-        """Applique les effets meteo actifs pour la frame courante.
-
-        :param active_weather: liste de (weather_type, severity) actifs
-                               ou liste vide si aucun effet actif
-        :param ltp_elevation_msl: altitude MSL du seuil de piste (pour cloud_low)
-        """
-        from sensor_fault_profile import (
-            KNOWN_WEATHER_TYPES, weather_severity_to_dref,
-        )
-
-        active_types = {wt for wt, _ in active_weather}
-
-        for weather_type in KNOWN_WEATHER_TYPES:
-            if weather_type in active_types:
-                sev = next(s for wt, s in active_weather if wt == weather_type)
-                value = weather_severity_to_dref(weather_type, sev, ltp_elevation_msl)
-            else:
-                value = {"base": ltp_elevation_msl + 3000.0, "top": ltp_elevation_msl + 3500.0} \
-                    if weather_type == "cloud_low" else 0.0
-
-            if weather_type == "cloud_low":
-                self.send_dref("sim/weather/cloud_base_msl_m[0]", value["base"])
-                self.send_dref("sim/weather/cloud_tops_msl_m[0]", value["top"])
-            else:
-                self.send_dref(KNOWN_WEATHER_TYPES[weather_type], value)
-
-    def setup_weather(self):
-        """Configure X-Plane pour accepter la meteo manuelle.
-
-        Desactive la meteo reelle (METAR) pour que nos DREF ne soient
-        pas ecrases par les donnees meteorologiques en temps reel.
-        """
-        # Forcer meteo manuelle (pas de METAR/real weather)
-        self.send_dref("sim/weather/use_real_weather_bool", 0.0)
-        time.sleep(0.1)
-
-    def reset_weather(self, ltp_elevation_msl=0.0):
-        """Remet la meteo par defaut (clair) a la fin du rendu."""
-        self.send_dref("sim/weather/rain_percent", 0.0)
-        self.send_dref("sim/weather/cloud_base_msl_m[0]", ltp_elevation_msl + 3000.0)
-        self.send_dref("sim/weather/cloud_tops_msl_m[0]", ltp_elevation_msl + 3500.0)
+    # Weather is now handled by xplane_weather.py via XPPython3 plugin
 
     def release(self):
         """Rend le controle de l'avion a X-Plane."""
@@ -562,44 +520,17 @@ class XPlaneConnection:
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Factory : choix du backend (FlyWithLua ou UDP)
+# Connexion UDP (seul backend, position uniquement)
 # ---------------------------------------------------------------------------
 
 def create_connection(config=None):
-    """Cree la meilleure connexion X-Plane disponible.
-
-    1. Si FlyWithLua est detecte (lard_bridge.lua present + repond au noop) → LuaBridgeConnection
-    2. Sinon → XPlaneConnection (UDP, mode degrade)
+    """Cree une connexion UDP vers X-Plane.
 
     :param config: XPlaneConfig (optionnel)
-    :return: LuaBridgeConnection ou XPlaneConnection
+    :return: XPlaneConnection
     """
     config = config or XPlaneConfig()
-
-    # Tenter FlyWithLua si xplane_dir est configure
-    if config.xplane_dir:
-        xp = Path(config.xplane_dir)
-        lua_script = xp / "Resources" / "plugins" / "FlyWithLua" / "Scripts" / "lard_bridge.lua"
-
-        if lua_script.exists():
-            # Determiner le dossier d'echange
-            if config.exchange_dir:
-                exchange_dir = Path(config.exchange_dir)
-            else:
-                exchange_dir = lua_script.parent / "lard_exchange"
-
-            try:
-                from lua_bridge import LuaBridgeConnection
-                conn = LuaBridgeConnection(config, exchange_dir)
-                if conn.check_connection():
-                    print(f"  [XPLANE] FlyWithLua detecte et actif -> mode Lua")
-                    return conn
-                else:
-                    print(f"  [XPLANE] FlyWithLua detecte mais pas de reponse -> fallback UDP")
-            except Exception as e:
-                print(f"  [XPLANE] Erreur FlyWithLua: {e} -> fallback UDP")
-
-    print(f"  [XPLANE] Mode UDP (pas de FlyWithLua)")
+    print(f"  [XPLANE] Connexion UDP -> {config.host}:{config.port}")
     return XPlaneConnection(config)
 
 
@@ -695,7 +626,10 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     # Charger le profil meteo si present
     weather_per_frame = None
     if weather_profile_path and Path(weather_profile_path).exists():
-        from sensor_fault_profile import load_weather_profile, compute_frame_weather
+        from xplane_weather import (
+            load_weather_profile, compute_frame_weather,
+            set_exchange_dir, check_plugin,
+        )
         weather_list, _ = load_weather_profile(weather_profile_path)
         if weather_list:
             weather_per_frame = compute_frame_weather(weather_list, data["n_frames"])
@@ -704,6 +638,14 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                 for w in weather_list
             )
             print(f"  [XPLANE] Meteo active : {weather_str}")
+            # Initialiser la communication avec le plugin XPPython3
+            if config.xplane_dir:
+                set_exchange_dir(config.xplane_dir)
+                if check_plugin():
+                    print(f"  [XPLANE] Plugin XPPython3 weather OK")
+                else:
+                    print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
+                    weather_per_frame = None
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -725,9 +667,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
         conn.setup_view()
 
-        # Configurer la meteo si un profil est actif
-        if weather_per_frame:
-            conn.setup_weather()
+        # La meteo est geree par le plugin XPPython3 (pas de setup UDP)
 
         # Deplacer le point de reference au seuil de piste (derniere pose).
         # La conversion _latlon_to_local est precise pres du ref mais diverge
@@ -765,10 +705,11 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                 pose["heading"], pose["pitch_ges"], pose["roll"],
             )
 
-            # Appliquer la meteo AVANT la pose (les drefs sont envoyes avec set_camera_pose)
+            # Appliquer la meteo via le plugin XPPython3
             if weather_per_frame:
+                from xplane_weather import apply_weather as apply_wx
                 active_weather = weather_per_frame[i] if i < len(weather_per_frame) else []
-                conn.apply_weather(active_weather, ltp_elevation_msl=ltp_alt)
+                apply_wx(active_weather)
 
             conn.set_camera_pose(
                 xp["lat"], xp["lon"], xp["alt_m"],
@@ -815,9 +756,10 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         print(f"  [XPLANE] Poses reelles -> {actual_path}")
 
     finally:
-        # Remettre la meteo par defaut avant de liberer
+        # Remettre la meteo par defaut via le plugin XPPython3
         if weather_per_frame:
-            conn.reset_weather(ltp_elevation_msl=ltp_alt)
+            from xplane_weather import reset_weather
+            reset_weather()
         conn.close()
 
     return output_dir

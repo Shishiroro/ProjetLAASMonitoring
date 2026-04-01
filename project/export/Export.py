@@ -19,8 +19,10 @@ if str(_export_dir) not in sys.path:
 
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario
-from sensor_fault_profile import (
+from sensor_faults import (
     FaultConfig, KNOWN_FAULT_TYPES, validate_faults, save_fault_profile,
+)
+from xplane_weather import (
     WeatherConfig, KNOWN_WEATHER_TYPES, validate_weather, save_weather_profile,
 )
 
@@ -72,7 +74,7 @@ def export(root_node, path):
 
     # --- Lire les effets meteo X-Plane (severity > 0 = actif) ---
     weather = []
-    for weather_type in sorted(KNOWN_WEATHER_TYPES.keys()):
+    for weather_type in sorted(KNOWN_WEATHER_TYPES):
         severity = float(_read_param(scenario_node, f"{weather_type}_severity"))
         if severity > 0:
             from_pct = float(_read_param(scenario_node, f"{weather_type}_from_pct"))

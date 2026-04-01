@@ -521,7 +521,7 @@ def step_apply_faults(run_info):
     if export_path not in sys.path:
         sys.path.insert(0, export_path)
 
-    from sensor_fault_profile import load_fault_profile, apply_faults_to_directory
+    from sensor_faults import load_fault_profile, apply_faults_to_directory
 
     faults, n_frames = load_fault_profile(fault_json)
     if not faults:

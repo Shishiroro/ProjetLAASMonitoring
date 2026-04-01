@@ -65,8 +65,10 @@ LARD-LAAS-TAF/
 │   │   ├── trajectory_builder.py      # OU, convergence, timeline, crab angle
 │   │   ├── lard_bridge.py            # Import LARD, genere .esp/.yaml + GT CSV
 │   │   ├── xplane_bridge.py         # Interface X-Plane 12 (UDP + factory Lua/UDP, mss capture)
-│   │   ├── lua_bridge.py            # Interface X-Plane via FlyWithLua (fichiers JSON)
-│   │   └── sensor_fault_profile.py   # Profil fautes capteur (config, validation, application)
+│   │   ├── xplane_weather.py         # Effets meteo X-Plane 12 (via plugin XPPython3)
+│   │   ├── sensor_faults.py           # Fautes capteur hardware (22 types, post-traitement OpenCV)
+│   │   ├── xplane_weather.py         # Effets meteo X-Plane 12 (via plugin XPPython3)
+│   │   └── sensor_weather_faults.py  # Effets meteo capteur (TODO: pluie lentille, givre)
 │   ├── settings.xml                   # Config TAF (paths, nb_test_cases)
 │   └── Generate.py                    # Script lancement TAF
 ├── yolo/                              # Detection YOLOv8 + evaluation (tooling)
@@ -100,7 +102,7 @@ LARD-LAAS-TAF/
 ├── output/                            # Temporaire TAF (nettoye avant chaque generate)
 ├── tests/                             # Scripts de test
 │   └── xplane/                        # Tests X-Plane (diagnostic, benchmark, rendu)
-├── lard_bridge.lua                    # Script FlyWithLua (a copier dans X-Plane)
+├── PI_lard_weather.py                 # Plugin XPPython3 (a copier dans PythonPlugins/)
 ├── run_pipeline.py                    # Orchestrateur bout-en-bout
 ├── main.py                            # Point d'entree CLI (generation seule)
 ├── xplane.txt                         # Documentation integration X-Plane
@@ -127,7 +129,7 @@ Workflow :
 3. Poser chaque .zip dans son dossier runs/<nom>/
 4. `evaluate --all` → dezip + GT + fautes capteur + YOLO + IoU pour tous les runs
 
-## Fautes capteur camera (project/export/sensor_fault_profile.py)
+## Fautes capteur camera (project/export/sensor_faults.py)
 
 ### Principe
 Les fautes capteur simulent des degradations realistes de la camera embarquee
@@ -171,74 +173,47 @@ defocus_blur, rolling_shutter, overexposure, underexposure, vignetting,
 chromatic_aberration, radial_distortion, lens_flare, banding, jpeg_artifacts,
 color_shift, condensation, dirt_on_lens, fog, zoom_blur, contrast, pixelate
 
-## Effets meteo X-Plane 12 (project/export/sensor_fault_profile.py + xplane_bridge.py)
+## Effets meteo X-Plane 12 (project/export/xplane_weather.py + PI_lard_weather.py)
 
 ### Principe
-Les effets meteo sont appliques **pendant** le rendu X-Plane via datarefs UDP,
-contrairement aux fautes capteur qui sont appliquees en post-traitement (OpenCV).
-Meme pattern XML (severity + from_pct + to_pct), meme logique frame par frame.
-Ignores si renderer=ges (GES ne supporte pas les datarefs).
+Les effets meteo sont injectes **pendant** le rendu X-Plane via le plugin
+XPPython3 (PI_lard_weather.py) qui utilise l'API officielle XPLMWeather.
+Contrairement aux fautes capteur (post-traitement OpenCV), la meteo modifie
+la scene 3D directement. Ignores si renderer=ges.
 
-### Configuration dans le XML
-```xml
-<!-- severity min="0" max="0" = desactive -->
-<parameter name="rain_severity"      type="real" min="0.3" max="0.7"/>
-<parameter name="rain_from_pct"      type="real" min="20" max="40"/>
-<parameter name="rain_to_pct"        type="real" min="60" max="90"/>
-```
+### Architecture
+- **PI_lard_weather.py** : plugin XPPython3 dans X-Plane (XPLMWeather API)
+- **xplane_weather.py** : cote pipeline Python (config, validation, communication JSON)
+- Communication par fichiers JSON (weather_command.json / weather_status.json)
 
-### 1 type d'effet meteo disponible (teste ecrivable XP12)
-- **rain** : pluie (severity * 100 → 0-100% precipitation)
+### 3 types d'effets meteo (testes sur XP12)
+- **rain** : pluie (severity → precip_rate 0-1, necessite visibility <= 10km)
+- **cloud** : nuages (severity → couverture, types few/scattered/broken/overcast)
+- **visibility** : brouillard (severity → 500m a 50km)
+
+### Contraintes XP12
+- La pluie n'est visible que si visibility <= ~10km
+- Le pipeline force automatiquement la visibilite si rain est actif
+- Les nuages sont generes automatiquement par XP12 avec la pluie
+- Les nuages et la pluie sont independants dans le XML
 
 ### Pipeline d'application
 1. `generate` : TAF sample les params, Export.py cree `weather_profile.json`
-2. `evaluate` / `full` : xplane_bridge.py charge le profil, applique frame par frame
-3. `setup_weather()` desactive la meteo reelle (METAR) au debut du rendu
-4. `apply_weather()` envoie les datarefs meteo a chaque frame selon from_pct/to_pct
-5. `reset_weather()` remet le ciel clair a la fin du rendu
+2. `evaluate` / `full` : xplane_weather.py envoie les commandes JSON frame par frame
+3. PI_lard_weather.py lit les commandes et injecte via XPLMWeather API
+4. Effets instantanes (pas de delai 90s comme avec FlyWithLua/datarefs)
 
-### Tracabilite
-- `weather_profile.json` : config meteo + resume par frame
-- `params.xml` : parametres TAF du scenario (inclut les weather_* generes)
-- `.yaml` : section `xplane_weather` dans les metadonnees du scenario
+### Installation plugin
+1. Installer XPPython3 dans `X-Plane 12/Resources/plugins/XPPython3/`
+2. Copier `PI_lard_weather.py` dans `X-Plane 12/Resources/plugins/PythonPlugins/`
+3. Lancer X-Plane (le plugin se charge automatiquement)
 
 ### Cumul avec les fautes capteur
-Les deux systemes sont independants et se cumulent :
-- Meteo X-Plane modifie la scene 3D (pluie dans le moteur de rendu)
+Les trois systemes sont independants et se cumulent :
+- Meteo X-Plane modifie la scene 3D (pluie, nuages, brouillard dans le renderer)
 - Fautes capteur degradent l'image apres capture (OpenCV sur les pixels)
-- Ni l'un ni l'autre n'affecte la GT (geometrie piste inchangee)
-
-## Bridge FlyWithLua (project/export/lua_bridge.py + lard_bridge.lua)
-
-### Principe
-Remplacement de la communication UDP DREF par un plugin FlyWithLua qui tourne
-dans le render loop X-Plane. Les datarefs sont ecrits via XPLMSetDataf depuis
-do_every_draw(), ce qui garantit leur prise en compte par le moteur XP12
-(contrairement a l'UDP externe que le nouveau moteur meteo ignore).
-
-### Communication Python ↔ Lua
-- Fichiers JSON dans un dossier d'echange (FlyWithLua/Scripts/lard_exchange/)
-- Python ecrit `command.json` {seq, action, drefs, weather}
-- Lua lit a chaque frame, applique datarefs, ecrit `status.json` {ack_seq, ok, actual_pose, ...}
-- Sequence number pour synchronisation, ecriture atomique (.tmp + rename)
-
-### Actions supportees
-- `setup` : pause, overrides, forward_with_nothing, disable METAR, close popups
-- `set_pose` : applique datarefs position/attitude + weather (atomique, 1 frame)
-- `read_pose` : lit pose reelle + reference point (double precision lat/lon)
-- `release` : unpause, remove overrides, reset meteo
-- `noop` : heartbeat / detection FlyWithLua
-
-### Factory (xplane_bridge.py)
-`create_connection(config)` detecte automatiquement FlyWithLua :
-1. Verifie si lard_bridge.lua existe dans FlyWithLua/Scripts/
-2. Envoie noop, attend ack 5s
-3. Si OK → LuaBridgeConnection ; sinon → fallback XPlaneConnection (UDP)
-
-### Installation
-1. Copier `lard_bridge.lua` dans `X-Plane 12/Resources/plugins/FlyWithLua/Scripts/`
-2. Lancer X-Plane (le script se charge automatiquement)
-3. Configurer `xplane_dir` dans XPlaneConfig (pour la detection auto)
+- Fautes meteo capteur (TODO) : pluie sur lentille, givre (post-traitement)
+- Aucun n'affecte la GT (geometrie piste inchangee)
 
 ## Ce qu'on importe de LARD (sans modifier)
 - `src/geo/geo_utils.py` — conversions ECEF/LLH, geodesie

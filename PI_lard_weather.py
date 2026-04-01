@@ -74,8 +74,10 @@ class PythonInterface:
             self.dr_lon = xp.findDataRef("sim/flightmodel/position/longitude")
             self.dr_elev = xp.findDataRef("sim/flightmodel/position/elevation")
 
-            # Cache dataref for disabling real weather
+            # Cache datarefs for weather control
             self.dr_use_real_wx = xp.findDataRef("sim/weather/use_real_weather_bool")
+            self.dr_rain_pct = xp.findDataRef("sim/weather/rain_percent")
+            self.dr_precip = xp.findDataRef("sim/weather/region/rain_percent")
 
             # Flight loop — phase=0 (before flight model, required for weather API)
             self.flight_loop_id = xp.createFlightLoop(self._tick, phase=0)
@@ -186,8 +188,10 @@ class PythonInterface:
             info.cloud_layers[i].cloud_type = 0.0
             info.cloud_layers[i].coverage = 0.0
 
-        # Precipitation
-        info.precip_rate = float(weather.get("precip_rate", 0.0))
+        # Precipitation (both base rate and at-altitude rate)
+        precip = float(weather.get("precip_rate", 0.0))
+        info.precip_rate = precip
+        info.precip_rate_alt = precip
 
         # Visibility
         info.visibility = float(weather.get("visibility_m", 10000.0))
@@ -200,10 +204,21 @@ class PythonInterface:
         with xp.weatherUpdateContext(updateImmediately=1):
             xp.setWeatherAtLocation(lat, lon, elev, info)
 
+        # Also force rain via datarefs (API precip_rate alone may not trigger visual rain)
+        rain_pct = float(weather.get("precip_rate", 0.0)) * 100.0
+        try:
+            xp.setDataf(self.dr_rain_pct, rain_pct)
+        except Exception:
+            pass
+        try:
+            xp.setDataf(self.dr_precip, rain_pct)
+        except Exception:
+            pass
+
         xp.log(f"LARD Weather: SET clouds={cloud_base:.0f}-{cloud_top:.0f}m "
                f"type={cloud_type:.0f} cov={cloud_coverage:.1f} "
-               f"precip={info.precip_rate:.2f} vis={info.visibility:.0f}m "
-               f"at ({lat:.4f}, {lon:.4f})")
+               f"precip={info.precip_rate:.2f} rain_pct={rain_pct:.0f} "
+               f"vis={info.visibility:.0f}m at ({lat:.4f}, {lon:.4f})")
 
     def _clear_weather(self):
         """Reset to clear skies."""
