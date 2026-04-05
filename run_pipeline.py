@@ -371,6 +371,15 @@ def step_generate_gt(run_info, renderer="ges"):
 
     print(f"\n  [GT] Generation CSV pour {run_info['name']}...")
 
+    # X-Plane : patcher le YAML avec les poses reelles lues depuis X-Plane
+    # (corrige le decalage entre pose commandee et pose rendue)
+    if renderer == "xplane":
+        actual_poses_path = run_dir / "poses_actual.json"
+        if actual_poses_path.exists():
+            yaml_path = _patch_yaml_with_actual_poses(yaml_path, actual_poses_path)
+        else:
+            print(f"  [GT] WARN: pas de poses_actual.json, GT sur poses commandees")
+
     # Pipeline LARD pour GES et X-Plane
     lard_path = str(ROOT / "LARD")
     export_path = str(ROOT / "project" / "export")

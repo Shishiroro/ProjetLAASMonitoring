@@ -165,10 +165,10 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
 
     # --- Params image ---
     if renderer == "xplane":
-        # X-Plane : fenetre carree 1024x1024, FOV 65° (horizontal = vertical car carre)
+        # X-Plane : fenetre carree 1024x1024, FOV 60° (comme LARD dataset)
         img_width = 1024
         img_height = 1024
-        fov_x = 65.0     # horizontal (reglages visuels X-Plane)
+        fov_x = 60.0     # horizontal (reglages visuels X-Plane, 60° comme LARD)
         f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
         fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
     else:

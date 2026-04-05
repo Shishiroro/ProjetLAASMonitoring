@@ -65,8 +65,8 @@ class XPlaneConfig:
     settle_time: float = 0.1        # Attente apres changement de pose (sec)
     window_width: int = 1024        # Largeur zone client X-Plane (carre)
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
-    fov_h: float = 65.0             # FOV horizontal (reglages X-Plane)
-    fov_v: float = 65.0             # FOV vertical (= horizontal car fenetre carree)
+    fov_h: float = 60.0             # FOV horizontal (reglages X-Plane, 60° comme LARD)
+    fov_v: float = 60.0             # FOV vertical (= horizontal car fenetre carree)
     exchange_dir: str = ""          # Dossier echange XPPython3 (auto si vide)
 
 
@@ -400,29 +400,73 @@ class XPlaneConnection:
             self.sct = mss.mss()
 
         # --- FOV camera ---
-        # On ne touche PAS au FOV — on utilise les reglages X-Plane (65° H, 42.3° V).
-        # Lire le dataref pour verifier la coherence.
-        readback = self.read_dref("sim/graphics/view/field_of_view_deg", 10)
-        print(f"  [XPLANE] FOV config: H={self.config.fov_h}° V={self.config.fov_v}°"
-              f" (dataref={readback:.1f}°)" if readback else
-              f"  [XPLANE] FOV config: H={self.config.fov_h}° V={self.config.fov_v}°"
-              f" (dataref timeout)")
+        # Programmer le FOV via datarefs (methode LARD officielle).
+        # Lire la taille reelle de la fenetre X-Plane pour adapter le FOV
+        # si la fenetre est plus grande que la taille de crop desiree.
+        actual_w = self.read_dref("sim/graphics/view/window_width", 30)
+        actual_h = self.read_dref("sim/graphics/view/window_height", 31)
+        desired_w = self.config.window_width
+        desired_h = self.config.window_height
+
+        if actual_w and actual_h:
+            fact_w = actual_w / desired_w
+            fact_h = actual_h / desired_h
+            if fact_w < 1.0 or fact_h < 1.0:
+                print(f"  [XPLANE] ATTENTION: fenetre ({actual_w:.0f}x{actual_h:.0f}) "
+                      f"< taille desiree ({desired_w}x{desired_h})")
+            # Adapter le FOV pour que le crop central ait le FOV desire
+            prog_fov_h = fact_w * self.config.fov_h
+            prog_fov_v = fact_h * self.config.fov_v
+            print(f"  [XPLANE] Fenetre reelle: {actual_w:.0f}x{actual_h:.0f}, "
+                  f"fact={fact_w:.2f}x{fact_h:.2f}")
+        else:
+            prog_fov_h = self.config.fov_h
+            prog_fov_v = self.config.fov_v
+
+        # Activer FOV vertical independant (separe du horizontal)
+        self.send_dref("sim/graphics/settings/non_proportional_vertical_FOV", 1.0)
+        time.sleep(0.1)
+        # Programmer les FOV
+        self.send_dref("sim/graphics/view/field_of_view_deg", prog_fov_h)
+        self.send_dref("sim/graphics/view/vertical_field_of_view_deg", prog_fov_v)
+        time.sleep(0.2)
+
+        # Verifier le readback
+        readback_h = self.read_dref("sim/graphics/view/field_of_view_deg", 32)
+        readback_v = self.read_dref("sim/graphics/view/vertical_field_of_view_deg", 33)
+        if readback_h and readback_v:
+            print(f"  [XPLANE] FOV programme: H={prog_fov_h:.1f}° V={prog_fov_v:.1f}°"
+                  f" (readback: H={readback_h:.1f}° V={readback_v:.1f}°)")
+        else:
+            print(f"  [XPLANE] FOV programme: H={prog_fov_h:.1f}° V={prog_fov_v:.1f}°"
+                  f" (readback timeout)")
+
+    def send_posi(self, lat, lon, alt_m, heading, pitch, roll):
+        """Positionne l'avion via VEHS (lat/lon en double precision float64).
+
+        Protocole VEHS X-Plane : lat/lon/alt en double, angles en float32.
+        Envoye 2x car X-Plane recalcule l'elevation au 1er paquet
+        (hack du code LARD officiel).
+        """
+        msg = struct.pack('<4sxidddfff', b'VEHS',
+                          0,          # aircraft index (0 = ego)
+                          lat,        # double (float64)
+                          lon,        # double (float64)
+                          alt_m,      # double (MSL metres)
+                          heading,    # float (true heading deg)
+                          pitch,      # float (deg, 0=level)
+                          roll)       # float (deg)
+        self.sock.sendto(msg, self.addr)
+        self.sock.sendto(msg, self.addr)  # 2x pour l'elevation
 
     def set_camera_pose(self, lat, lon, alt_m, heading, pitch, roll):
-        """Positionne la camera via coordonnees locales OpenGL.
+        """Positionne la camera via VEHS (double precision lat/lon).
 
-        Convertit lat/lon/alt en local_x/y/z pour une precision metrique.
-        NOTE: pas de compensation pilot eye pour l'instant — a investiguer
-        si forward_with_nothing applique ou non l'offset acf_peX/Y/Z.
+        Utilise le paquet VEHS pour envoyer lat/lon en float64,
+        plus precis que les datarefs float32 ou la conversion locale.
         """
-        lx, ly, lz = self._latlon_to_local(lat, lon, alt_m)
-
-        self.send_dref("sim/flightmodel/position/local_x", lx)
-        self.send_dref("sim/flightmodel/position/local_y", ly)
-        self.send_dref("sim/flightmodel/position/local_z", lz)
-        self.send_dref("sim/flightmodel/position/theta", pitch)
-        self.send_dref("sim/flightmodel/position/phi", roll)
-        self.send_dref("sim/flightmodel/position/psi", heading)
+        self.send_posi(lat, lon, alt_m, heading, pitch, roll)
+        # Zero velocites pour eviter le drift
         self.send_dref("sim/flightmodel/position/local_vx", 0.0)
         self.send_dref("sim/flightmodel/position/local_vy", 0.0)
         self.send_dref("sim/flightmodel/position/local_vz", 0.0)
@@ -480,10 +524,11 @@ class XPlaneConnection:
         return elev or 0.0
 
     def capture_frame(self, output_path):
-        """Capture la fenetre X-Plane telle quelle, sauve en JPEG.
+        """Capture la fenetre X-Plane et crop au centre a la taille desiree.
 
-        Pas de crop ni resize — on garde la resolution native de la fenetre.
-        Le FOV est lu depuis les parametres X-Plane (H=28°, V=22.56° par defaut).
+        Si la fenetre est plus grande que window_width x window_height,
+        on crop au centre pour que le FOV de l'image corresponde exactement
+        au FOV desire (le FOV programme a ete adapte pour ca).
 
         :param output_path: chemin du fichier de sortie (.jpg)
         :return: True si capture reussie
@@ -492,6 +537,16 @@ class XPlaneConnection:
             return False
         img = self.sct.grab(self.capture_region)
         pil_img = Image.frombytes("RGB", img.size, bytes(img.rgb))
+
+        # Crop centre si la capture est plus grande que la taille desiree
+        cap_w, cap_h = pil_img.size
+        desired_w = self.config.window_width
+        desired_h = self.config.window_height
+        if cap_w > desired_w or cap_h > desired_h:
+            left = (cap_w - desired_w) // 2
+            top = (cap_h - desired_h) // 2
+            pil_img = pil_img.crop((left, top, left + desired_w, top + desired_h))
+
         pil_img.save(str(output_path), quality=90)
         return True
 
@@ -668,13 +723,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         conn.setup_view()
 
         # La meteo est geree par le plugin XPPython3 (pas de setup UDP)
-
-        # Deplacer le point de reference au seuil de piste (derniere pose).
-        # La conversion _latlon_to_local est precise pres du ref mais diverge
-        # avec la distance (~22m a 3km). En prenant le ref pres du seuil,
-        # les frames proches (ou la precision bbox compte le plus) seront exactes.
-        last_pose = data["poses"][-1]
-        conn.move_reference_to(last_pose["lat"], last_pose["lon"])
+        # Positionnement via VEHS (double precision) — pas besoin de reference locale
 
         # Sauver la config de rendu (FOV + resolution + pilot eye) pour le labeling GT
         render_cfg = {
@@ -720,21 +769,12 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
             dst = output_dir / f"{scenario_name}_{str(i).zfill(img_digits)}.jpg"
             conn.capture_frame(dst)
 
-            # Lire la position reelle pour le YAML corrige
-            real = conn.read_actual_pose()
-            if real["lat"] is not None:
-                # Convertir X-Plane → GES (inverse de convert_pose_ges_to_xplane)
-                actual_poses.append({
-                    "lon": real["lon"],
-                    "lat": real["lat"],
-                    "alt_m": real["alt_m"],
-                    "heading": real["heading"],
-                    "pitch_ges": (real["pitch"] or 0.0) + 90.0,
-                    "roll": real["roll"],
-                })
-            else:
-                # Fallback sur la pose commandee
-                actual_poses.append(pose)
+            # Utiliser la pose commandee (double precision) pour le GT.
+            # Le readback RREF est float32 (~4m de precision) — trop imprecis
+            # pour le labeling, surtout a grande distance ou la piste est petite.
+            # VEHS place l'avion avec la precision double, donc la pose commandee
+            # est plus fiable que le readback.
+            actual_poses.append(pose)
 
             if (i + 1) % 50 == 0 or (i + 1) == n_frames:
                 elapsed = time.perf_counter() - t_start
