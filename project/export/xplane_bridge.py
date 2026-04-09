@@ -786,10 +786,8 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         print(f"  [XPLANE] Poses reelles -> {actual_path}")
 
     finally:
-        # Remettre la meteo par defaut via le plugin XPPython3
-        if weather_active:
-            from xplane_weather import reset_weather
-            reset_weather()
+        # Pas de clear meteo ici — le prochain set_weather (isIncremental=False)
+        # ecrase tout. Le clear final est fait par run_pipeline.py apres tous les scenarios.
         conn.close()
 
     return output_dir

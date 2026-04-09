@@ -741,6 +741,19 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
             print(f"  [EVAL] ERREUR : {e}")
             continue
 
+    # Clear meteo final (une seule fois apres tous les scenarios)
+    if renderer == "xplane":
+        try:
+            export_path = str(ROOT / "project" / "export")
+            if export_path not in sys.path:
+                sys.path.insert(0, export_path)
+            from xplane_weather import reset_weather, set_exchange_dir
+            if xplane_dir:
+                set_exchange_dir(xplane_dir)
+                reset_weather()
+        except Exception:
+            pass
+
     # Rapport final
     if all_results:
         print(f"\n{'=' * 60}")
@@ -794,6 +807,18 @@ def run_full(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
                 "name": run_dir.name,
             }
             step_render_xplane(run_info, xplane_dir or "")
+
+        # Clear meteo final apres tous les rendus
+        try:
+            export_path = str(ROOT / "project" / "export")
+            if export_path not in sys.path:
+                sys.path.insert(0, export_path)
+            from xplane_weather import reset_weather, set_exchange_dir
+            if xplane_dir:
+                set_exchange_dir(xplane_dir)
+                reset_weather()
+        except Exception:
+            pass
 
     else:
         # Etape 2 : Pause manuelle GES
