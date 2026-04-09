@@ -75,12 +75,12 @@ def main():
     # Test 2 : meteo lourde (nuages bas + pluie)
     print("[2] Injection meteo: nuages bas 100-600m + pluie forte...")
     result = send_command(2, "set_weather", weather={
-        "cloud_base_msl": 100.0,   # base nuages 100m MSL
-        "cloud_top_msl": 600.0,    # sommet 600m MSL
-        "cloud_type": 4,           # overcast
-        "cloud_coverage": 1.0,     # couverture totale
-        "precip_rate": 0.8,        # pluie forte
-        "visibility_m": 3000.0,    # visibilite 3km
+        "cloud_base_msl": 200.0,   # base nuages 100m MSL
+        "cloud_top_msl": 1000.0,    # sommet 600m MSL
+       # "cloud_type": 4,           # overcast
+       #"cloud_coverage": 1.0,     # couverture totale
+        "precip_rate": 1.0,        # pluie forte
+        "visibility_m": 1000.0,    # visibilite 3km
     })
     if result and result.get("ok"):
         print("OK — meteo injectee!")
@@ -88,8 +88,8 @@ def main():
         print(f"ECHEC: {result}")
 
     print("\nRegarde X-Plane — tu devrais voir nuages + pluie IMMEDIATEMENT.")
-    print("Attente 30s pour observer...")
-    for i in range(30):
+    print("Attente 7s pour observer...")
+    for i in range(7):
         time.sleep(1)
         if i % 10 == 0:
             print(f"  {i}s...")
@@ -103,8 +103,8 @@ def main():
         print(f"ECHEC: {result}")
 
     print("\nLe ciel devrait redevenir clair.")
-    print("Attente 10s...")
-    time.sleep(10)
+    print("Attente 4s...")
+    time.sleep(4)
 
     print("\n" + "=" * 60)
     print("Test termine.")

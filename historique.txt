@@ -556,3 +556,114 @@ Installation :
   4. Le pipeline detecte FlyWithLua et bascule automatiquement
 
 ================================================================
+Phase 13 — Fix bbox X-Plane (code LARD officiel)
+================================================================
+Date : 2026-04-05
+
+Contexte :
+- Retours du createur de LARD avec le repo lard_xplane_replay-main.zip
+  contenant runScenario.py et XPlaneConnectX.py (code LARD officiel X-Plane)
+- Comparaison de leur approche avec la notre pour identifier les ecarts bbox
+
+Corrections implementees :
+
+1. Positionnement VEHS double precision
+   - Avant : datarefs local_x/y/z (float32, ~0.5m precision)
+   - Apres : paquet UDP VEHS (lat/lon en float64, comme le code LARD officiel)
+   - send_posi() envoie 2x le paquet (hack elevation du code officiel)
+   - Plus besoin de point de reference local ni de move_reference_to()
+
+2. FOV programme via datarefs
+   - Avant : FOV non programme, dependait des reglages manuels X-Plane
+   - Apres : FOV programme via datarefs (methode LARD officielle)
+     a. Lire taille reelle fenetre (window_width/height)
+     b. Calculer fact = taille_reelle / taille_desiree
+     c. Adapter FOV : prog_fov = fact * desired_fov (formule lineaire)
+     d. Activer non_proportional_vertical_FOV pour controle H/V separe
+     e. Programmer field_of_view_deg + vertical_field_of_view_deg
+   - FOV 60°x60° (aligne avec LARD dataset, etait 65° par erreur)
+
+3. Crop centre dans capture_frame
+   - Avant : capture zone client entiere (ex: 1280x1024)
+   - Apres : crop au centre a la taille desiree (1024x1024)
+   - Garantit que le centre optique correspond au FOV desire
+   - Meme logique que process_images() dans le code LARD officiel
+
+4. Pose commandee pour GT (au lieu du readback float32)
+   - Avant : read_actual_pose() via RREF (float32, ~4m precision)
+   - Apres : pose commandee (double precision) directement pour le GT
+   - VEHS place l'avion avec la precision double, le readback degrade
+
+5. Mode fenetre obligatoire
+   - Confirme par le createur : X-Plane doit etre en mode fenetre
+   - Scaling Windows a 100% pour eviter les problemes DPI
+   - Taille fenetre >= 1024x1024 (resize automatique par le code)
+
+Decalage residuel investigue :
+- Petit decalage lateral (gauche) persistant apres toutes les corrections
+- Causes probables identifiees :
+  a. Pilot eye offset (acf_peX = -0.25m gauche) — forward_with_nothing
+     rend depuis l'oeil pilote, pas le centre avion
+  b. int() au lieu de round() dans pointcam_to_pix LARD (~0.5px biais)
+  c. FOV lineaire vs tangente (3.4° ecart si fenetre non-carree)
+     Mais le code LARD officiel utilise aussi la lineaire
+  d. Crop centre potentiellement decale si viewport 3D != centre fenetre
+
+Fichiers modifies :
+- [x] project/export/xplane_bridge.py
+      - send_posi() : nouveau, VEHS double precision
+      - set_camera_pose() : utilise send_posi() au lieu des DREF locaux
+      - setup_view() : FOV programme + non_proportional_vertical_FOV
+      - capture_frame() : crop centre a taille desiree
+      - render_scenario() : retire move_reference_to, pose commandee pour GT
+- [x] project/export/lard_bridge.py
+      - FOV 60° au lieu de 65° pour X-Plane
+- [x] run_pipeline.py
+      - patch yaml avec poses_actual.json pour GT X-Plane
+
+================================================================
+Meteo XP12 v2 : refactoring per-scenario + corrections API (2026-04-09)
+================================================================
+Probleme : la meteo v1 etait per-frame (severity/from_pct/to_pct), instable
+  (pluie apparait/disparait, clear ne marche pas, comportement non reproductible).
+  Bugs identifies : mauvais enum cloud_type (ancien 0-4 au lieu de 0-3),
+  use_real_weather_bool deprecated/read-only, isIncremental pas gere,
+  radius_nm/max_altitude retournes a 0 par getWeatherAtLocation.
+
+Decision : passer la meteo en per-scenario (injectee une fois avant le rendu).
+  La meteo ne change pas pendant les ~30s d'une approche — plus realiste
+  et plus fiable que du per-frame sur une API non prevue pour ca.
+
+Corrections plugin PI_lard_weather.py (v2) :
+- cloud_type : nouveau enum XPLMWeather (0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cb)
+- change_mode dataref au lieu de use_real_weather_bool (deprecated)
+- isIncremental=False pour remplacer tous les records a chaque injection
+- updateImmediately=True pour application instantanee
+- radius_nm/max_altitude_msl_ft toujours fixes (jamais 0)
+- clear : contexte vide isIncremental=False + regen_weather + change_mode=7
+- Retire les hacks datarefs rain_percent (inutiles)
+
+Refactoring XML (per-scenario, 6 params directs) :
+- precip_rate [0,1], cloud_type [-1,3], cloud_coverage [0,1]
+- visibility_m [500,50000], temperature_c [-30,45], time_of_day_h [0,24]
+- Plus de severity/from_pct/to_pct pour la meteo
+
+Comportement :
+- Pluie seule (precip > 0, cloud_type = -1) : Cumulonimbus forces auto
+  (XP12 ne genere PAS ses propres nuages via l'API, contrairement a l'UI)
+- Nuages seuls (cloud_type >= 0, precip = 0) : nuages manuels
+- Pluie + nuages (precip > 0, cloud_type >= 0) : nuages manuels utilises
+- Nuages places dynamiquement au-dessus de l'avion (alt max + 200m)
+- Stabilisation ~6s (teste avec updateImmediately=True)
+
+Fichiers modifies :
+- [x] PI_lard_weather.py — plugin v2 (corrections API)
+- [x] project/export/xplane_weather.py — per-scenario, WeatherConfig 6 champs
+- [x] project/export/Export.py — lecture 6 params directs
+- [x] project/export/xplane_bridge.py — injection unique avant boucle de rendu
+- [x] project/export/lard_bridge.py — weather objet unique (plus liste)
+- [x] project/templates/trajectory_template.xml — 6 params + doc comportement
+- [x] CLAUDE.md — section meteo mise a jour
+- [x] tests/xplane/test_weather_v2.py — 8 tests (timing, clear, chaine scenarios)
+
+================================================================

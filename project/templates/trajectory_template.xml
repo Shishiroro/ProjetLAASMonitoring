@@ -19,13 +19,13 @@
 
         <parameter name="fps"
                    type="integer"
-                   min="15"
-                   max="15"/>
+                   min="10"
+                   max="10"/>
 
         <parameter name="segment_start_m"
                    type="real"
                    min="2000"
-                   max="3000"/>
+                   max="2000"/>
 
         <parameter name="segment_end_m"
                    type="real"
@@ -74,72 +74,54 @@
                    values="KPDX_10L"/> <!--KPDX_10L;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;KPDX_21-->
                    
 
-        <!-- ===== Effets meteo X-Plane 12 ===== -->
+        <!-- ===== Effets meteo X-Plane 12 (per-scenario) ===== -->
         <!--
-            Effets meteo injectes via XPPython3 (plugin PI_lard_weather.py)
-            pendant le rendu X-Plane 12. Ignores si renderer=ges.
+            Meteo injectee UNE FOIS avant le rendu du scenario via le plugin
+            XPPython3 (PI_lard_weather.py) + XPLMWeather API. Ignores si renderer=ges.
 
-            Meme pattern que les fautes capteur :
-              {type}_severity  : severite [0.0, 1.0] — min="0" max="0" pour desactiver
-              {type}_from_pct  : debut d'application en % de la trajectoire [0, 100]
-              {type}_to_pct    : fin d'application en % de la trajectoire [0, 100]
-                                 (0% = debut approche loin, 100% = pres de la piste)
+            La meteo ne change pas pendant les ~30s d'une approche.
+            Les nuages sont places automatiquement au-dessus de l'avion (alt max + 200m).
 
-            EFFETS DISPONIBLES ET TESTES SUR XP12 :
-              - cloud  : nuages (severity → couverture 0-100%, type overcast)
-                         Injectes via XPLMWeather API, apparaissent immediatement.
-              - rain   : pluie (severity → precip_rate 0-1)
-                         IMPORTANT : la pluie n'est visible que si visibility <= 10km.
-                         Le pipeline force automatiquement la visibilite si rain actif.
-                         Les nuages sont generes automatiquement par XP12 avec la pluie.
-              - visibility : visibilite/brouillard (severity → 500m a 10km)
-                         Fonctionne seul ou combine avec nuages/pluie.
+            COMPORTEMENT :
+              - Pluie seule   (precip > 0, cloud_type = -1) : Cumulonimbus forces auto
+              - Nuages seuls  (cloud_type >= 0, precip = 0) : nuages manuels
+              - Pluie + nuages (precip > 0, cloud_type >= 0) : nuages manuels utilises
+              - Rien           (precip = 0, cloud_type = -1) : pas de meteo injectee
 
-            CONTRAINTE VISIBILITE :
-              XP12 n'affiche pas la pluie au-dessus de ~10km de visibilite.
-              Si rain est actif, la visibilite est automatiquement cappee a 10km.
+            PARAMETRES :
+              precip_rate     : taux precipitation [0, 1] — 0 = desactive, 1 = deluge
+              cloud_type      : type nuage XPLMWeather API :
+                                0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus
+                                -1 = pas de nuages manuels (auto si pluie active)
+              cloud_coverage  : couverture nuageuse [0, 1] — ignore si cloud_type = -1
+              visibility_m    : visibilite en metres [500, 50000] — 50000 = clair
+              temperature_c   : temperature Celsius [-30, 45] — < 0 = neige au lieu de pluie
+              time_of_day_h   : heure locale [0, 24] — 6=aube, 12=midi, 18=crepuscule, 22=nuit
 
-            Les nuages et la pluie sont independants :
-              - Nuages seuls : OK (cloud_severity > 0, rain_severity = 0)
-              - Pluie seule  : OK (rain_severity > 0, XP12 genere ses propres nuages)
-              - Les deux      : OK (les nuages manuels + pluie se combinent)
+            EXEMPLES :
+              Pluie forte     : precip=0.8, cloud_type=-1, vis=50000
+              Brouillard      : precip=0, cloud_type=-1, vis=2000
+              Couvert gris    : precip=0, cloud_type=1 (Stratus), coverage=1.0
+              Orage + pluie   : precip=0.9, cloud_type=3 (Cb), coverage=1.0
+              Nuit claire     : tout defaut, time_of_day_h=22
+              Neige           : precip=0.5, temperature_c=-5
         -->
 
-        <!-- Pluie : severity >= 0.8 recommande pour etre visible
-             La visibilite est automatiquement reduite quand la pluie est active -->
-        <parameter name="rain_severity"         type="real" min="0" max="0"/>
-        <parameter name="rain_from_pct"          type="real" min="0" max="0"/>
-        <parameter name="rain_to_pct"            type="real" min="100" max="100"/>
+        <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1 -->
+        <parameter name="precip_rate"      type="real" min="1" max="1"/>
 
-        <!-- Nuages : independants de la pluie, pour couverture nuageuse sans precipitation
-             severity controle la couverture (0.2=few, 0.4=scattered, 0.7=broken, 1.0=overcast)
-             Les nuages sont places a basse altitude (100-600m MSL) -->
-        <parameter name="cloud_severity"        type="real" min="0" max="0"/>
-        <parameter name="cloud_from_pct"         type="real" min="0" max="0"/>
-        <parameter name="cloud_to_pct"           type="real" min="100" max="100"/>
+        <!-- Nuages : -1 = auto (Cumulonimbus si pluie, rien sinon) -->
+        <parameter name="cloud_type"       type="real" min="-1" max="-1"/>
+        <parameter name="cloud_coverage"   type="real" min="0" max="0"/>
 
-        <!-- Visibilite / brouillard : severity controle la reduction de visibilite
-             severity 0.0 = 50km (clair), 1.0 = 500m (brouillard epais)
-             Fonctionne seul ou combine avec nuages/pluie -->
-        <parameter name="visibility_severity"   type="real" min="0" max="0"/>
-        <parameter name="visibility_from_pct"    type="real" min="0" max="0"/>
-        <parameter name="visibility_to_pct"      type="real" min="100" max="100"/>
+        <!-- Visibilite : 50000 = clair (defaut). Valeurs basses = brouillard -->
+        <parameter name="visibility_m"     type="real" min="50000" max="50000"/>
 
-        <!-- Contraintes from < to -->
-        <constraint name="rain_pct_order"
-                    expressions="scenario[i]\rain_from_pct INF scenario[i]\rain_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="cloud_pct_order"
-                    expressions="scenario[i]\cloud_from_pct INF scenario[i]\cloud_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="visibility_pct_order"
-                    expressions="scenario[i]\visibility_from_pct INF scenario[i]\visibility_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
+        <!-- Temperature : controle pluie vs neige. 15 = standard -->
+        <parameter name="temperature_c"    type="real" min="15" max="15"/>
 
-        <!-- Contrainte XP12 : la pluie n'est visible que si visibility_severity > 0
-             (le pipeline force automatiquement vis <= 10km si rain actif,
-              mais si l'utilisateur veut controler la visibilite manuellement
-              il doit activer visibility_severity quand rain_severity > 0) -->
+        <!-- Heure du jour : controle la lumiere. 12 = midi (defaut) -->
+        <parameter name="time_of_day_h"    type="real" min="12" max="12"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--
@@ -208,7 +190,7 @@
         <parameter name="chromatic_aberration_from_pct"  type="real" min="0" max="0"/>
         <parameter name="chromatic_aberration_to_pct"    type="real" min="100" max="100"/>
 
-        <parameter name="radial_distortion_severity" type="real" min="0.2" max="0.2"/>
+        <parameter name="radial_distortion_severity" type="real" min="0" max="0"/>
         <parameter name="radial_distortion_from_pct"  type="real" min="0" max="0"/>
         <parameter name="radial_distortion_to_pct"    type="real" min="100" max="100"/>
 

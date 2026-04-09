@@ -23,7 +23,7 @@ from sensor_faults import (
     FaultConfig, KNOWN_FAULT_TYPES, validate_faults, save_fault_profile,
 )
 from xplane_weather import (
-    WeatherConfig, KNOWN_WEATHER_TYPES, validate_weather, save_weather_profile,
+    WeatherConfig, validate_weather, has_weather, save_weather_profile,
 )
 
  
@@ -72,20 +72,30 @@ def export(root_node, path):
                               for f in faults)
         print(f"[Export] Fautes capteur : {fault_str}")
 
-    # --- Lire les effets meteo X-Plane (severity > 0 = actif) ---
-    weather = []
-    for weather_type in sorted(KNOWN_WEATHER_TYPES):
-        severity = float(_read_param(scenario_node, f"{weather_type}_severity"))
-        if severity > 0:
-            from_pct = float(_read_param(scenario_node, f"{weather_type}_from_pct"))
-            to_pct = float(_read_param(scenario_node, f"{weather_type}_to_pct"))
-            weather.append(WeatherConfig(weather_type, severity, from_pct, to_pct))
+    # --- Lire les effets meteo X-Plane (per-scenario) ---
+    weather_cfg = WeatherConfig(
+        precip_rate=float(_read_param(scenario_node, "precip_rate")),
+        cloud_type=float(_read_param(scenario_node, "cloud_type")),
+        cloud_coverage=float(_read_param(scenario_node, "cloud_coverage")),
+        visibility_m=float(_read_param(scenario_node, "visibility_m")),
+        temperature_c=float(_read_param(scenario_node, "temperature_c")),
+        time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),
+    )
 
-    if weather:
-        validate_weather(weather)
-        weather_str = ", ".join(f"{w.weather_type}({w.severity:.2f})[{w.from_pct:.0f}-{w.to_pct:.0f}%]"
-                                for w in weather)
-        print(f"[Export] Meteo X-Plane : {weather_str}")
+    if has_weather(weather_cfg):
+        validate_weather(weather_cfg)
+        parts = []
+        if weather_cfg.precip_rate > 0:
+            parts.append(f"precip={weather_cfg.precip_rate:.2f}")
+        if weather_cfg.cloud_type >= 0:
+            parts.append(f"cloud_type={weather_cfg.cloud_type:.0f} cov={weather_cfg.cloud_coverage:.1f}")
+        if weather_cfg.visibility_m < 50000:
+            parts.append(f"vis={weather_cfg.visibility_m:.0f}m")
+        if weather_cfg.temperature_c < 0:
+            parts.append(f"temp={weather_cfg.temperature_c:.0f}C")
+        if weather_cfg.time_of_day_h != 12.0:
+            parts.append(f"heure={weather_cfg.time_of_day_h:.1f}h")
+        print(f"[Export] Meteo X-Plane : {', '.join(parts)}")
 
     # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), , donc tau ≈ h / V
@@ -131,13 +141,14 @@ def export(root_node, path):
     renderer = os.environ.get("LARD_RENDERER", "ges").lower()
 
     # --- Exporter .esp + .yaml + poses.json ---
+    weather_arg = weather_cfg if has_weather(weather_cfg) else None
     export_scenario(
         flight_data, cfg, ou,
         airport, runway,
         output_dir=path,
         scenario_name=f"{airport}_{runway}",
         faults=faults,
-        weather=weather,
+        weather=weather_arg,
         renderer=renderer,
         ltp_alt=rwy["ltp_alt"],
     )
@@ -151,9 +162,8 @@ def export(root_node, path):
         )
 
     # --- Sauver le profil meteo (si actif) ---
-    if weather:
+    if has_weather(weather_cfg):
         save_weather_profile(
-            weather,
-            n_frames=len(flight_data),
+            weather_cfg,
             output_path=Path(path) / "weather_profile.json",
         )

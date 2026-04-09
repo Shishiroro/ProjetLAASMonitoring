@@ -176,37 +176,47 @@ color_shift, condensation, dirt_on_lens, fog, zoom_blur, contrast, pixelate
 ## Effets meteo X-Plane 12 (project/export/xplane_weather.py + PI_lard_weather.py)
 
 ### Principe
-Les effets meteo sont injectes **pendant** le rendu X-Plane via le plugin
-XPPython3 (PI_lard_weather.py) qui utilise l'API officielle XPLMWeather.
+Les effets meteo sont injectes **une fois avant le rendu** du scenario via le plugin
+XPPython3 (PI_lard_weather.py v2) qui utilise l'API officielle XPLMWeather.
+La meteo est per-scenario (pas per-frame) : elle ne change pas pendant les ~30s d'approche.
 Contrairement aux fautes capteur (post-traitement OpenCV), la meteo modifie
 la scene 3D directement. Ignores si renderer=ges.
 
 ### Architecture
-- **PI_lard_weather.py** : plugin XPPython3 dans X-Plane (XPLMWeather API)
+- **PI_lard_weather.py** : plugin XPPython3 dans X-Plane (XPLMWeather API v2)
 - **xplane_weather.py** : cote pipeline Python (config, validation, communication JSON)
 - Communication par fichiers JSON (weather_command.json / weather_status.json)
+- cloud_type enum XPLMWeather : 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus
 
-### 3 types d'effets meteo (testes sur XP12)
-- **rain** : pluie (severity → precip_rate 0-1, necessite visibility <= 10km)
-- **cloud** : nuages (severity → couverture, types few/scattered/broken/overcast)
-- **visibility** : brouillard (severity → 500m a 50km)
+### Comportement meteo
+- **Pluie seule** (precip > 0, cloud_type = -1) : Cumulonimbus forces automatiquement
+- **Nuages seuls** (cloud_type >= 0, precip = 0) : nuages manuels
+- **Pluie + nuages** (precip > 0, cloud_type >= 0) : nuages manuels utilises
+- **Rien** (precip = 0, cloud_type = -1) : pas de meteo injectee
 
-### Contraintes XP12
-- La pluie n'est visible que si visibility <= ~10km
-- Le pipeline force automatiquement la visibilite si rain est actif
-- Les nuages sont generes automatiquement par XP12 avec la pluie
-- Les nuages et la pluie sont independants dans le XML
+Les nuages sont places dynamiquement au-dessus de l'avion (alt max + 200m de marge).
+
+### Parametres XML (per-scenario, valeurs directes)
+```xml
+<parameter name="precip_rate"      type="real" min="0" max="1"/>
+<parameter name="cloud_type"       type="real" min="-1" max="3"/>
+<parameter name="cloud_coverage"   type="real" min="0" max="1"/>
+<parameter name="visibility_m"     type="real" min="500" max="50000"/>
+<parameter name="temperature_c"    type="real" min="-30" max="45"/>
+<parameter name="time_of_day_h"    type="real" min="0" max="24"/>
+```
 
 ### Pipeline d'application
 1. `generate` : TAF sample les params, Export.py cree `weather_profile.json`
-2. `evaluate` / `full` : xplane_weather.py envoie les commandes JSON frame par frame
-3. PI_lard_weather.py lit les commandes et injecte via XPLMWeather API
-4. Effets instantanes (pas de delai 90s comme avec FlyWithLua/datarefs)
+2. `evaluate` / `full` : xplane_weather.py injecte UNE FOIS avant le rendu
+3. PI_lard_weather.py applique via XPLMWeather API (isIncremental=False, updateImmediately=True)
+4. Stabilisation ~6s puis capture des frames
+5. clear_weather apres le scenario (regen_weather + change_mode=7)
 
 ### Installation plugin
 1. Installer XPPython3 dans `X-Plane 12/Resources/plugins/XPPython3/`
 2. Copier `PI_lard_weather.py` dans `X-Plane 12/Resources/plugins/PythonPlugins/`
-3. Lancer X-Plane (le plugin se charge automatiquement)
+3. Recharger : menu Plugins > XPPython3 > Reload Scripts
 
 ### Cumul avec les fautes capteur
 Les trois systemes sont independants et se cumulent :

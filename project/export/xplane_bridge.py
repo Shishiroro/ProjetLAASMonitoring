@@ -678,29 +678,23 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     data = load_poses_json(poses_path)
     ltp_alt = data.get("ltp_alt", 0.0)
 
-    # Charger le profil meteo si present
-    weather_per_frame = None
+    # Charger et injecter la meteo (per-scenario, une seule fois)
+    weather_active = False
     if weather_profile_path and Path(weather_profile_path).exists():
         from xplane_weather import (
-            load_weather_profile, compute_frame_weather,
-            set_exchange_dir, check_plugin,
+            load_weather_profile, inject_weather, set_exchange_dir, check_plugin,
         )
-        weather_list, _ = load_weather_profile(weather_profile_path)
-        if weather_list:
-            weather_per_frame = compute_frame_weather(weather_list, data["n_frames"])
-            weather_str = ", ".join(
-                f"{w.weather_type}({w.severity:.2f})[{w.from_pct:.0f}-{w.to_pct:.0f}%]"
-                for w in weather_list
-            )
-            print(f"  [XPLANE] Meteo active : {weather_str}")
-            # Initialiser la communication avec le plugin XPPython3
+        weather_cfg = load_weather_profile(weather_profile_path)
+        if weather_cfg:
             if config.xplane_dir:
                 set_exchange_dir(config.xplane_dir)
                 if check_plugin():
                     print(f"  [XPLANE] Plugin XPPython3 weather OK")
+                    # Altitude max avion pour placer les nuages au-dessus
+                    max_alt_m = max(p["alt_m"] for p in data["poses"])
+                    weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m)
                 else:
                     print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
-                    weather_per_frame = None
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -754,12 +748,6 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                 pose["heading"], pose["pitch_ges"], pose["roll"],
             )
 
-            # Appliquer la meteo via le plugin XPPython3
-            if weather_per_frame:
-                from xplane_weather import apply_weather as apply_wx
-                active_weather = weather_per_frame[i] if i < len(weather_per_frame) else []
-                apply_wx(active_weather)
-
             conn.set_camera_pose(
                 xp["lat"], xp["lon"], xp["alt_m"],
                 xp["heading"], xp["pitch"], xp["roll"],
@@ -797,7 +785,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
     finally:
         # Remettre la meteo par defaut via le plugin XPPython3
-        if weather_per_frame:
+        if weather_active:
             from xplane_weather import reset_weather
             reset_weather()
         conn.close()
