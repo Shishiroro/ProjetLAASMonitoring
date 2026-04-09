@@ -88,6 +88,10 @@ class PythonInterface:
             # Weather mode control (replaces deprecated use_real_weather_bool)
             self.dr_change_mode = xp.findDataRef("sim/weather/region/change_mode")
 
+            # Time of day
+            self.dr_zulu_time = xp.findDataRef("sim/time/zulu_time_sec")
+            self.dr_use_system_time = xp.findDataRef("sim/time/use_system_time")
+
             # Regen weather command
             self.cmd_regen_weather = xp.findCommand("sim/operation/regen_weather")
 
@@ -226,11 +230,17 @@ class PythonInterface:
         if "temperature_c" in weather:
             temp = float(weather["temperature_c"])
             info.temperature_alt = temp
-            # Also set sea-level pressure temp if available
+            # Forcer toutes les couches de temperature pour que XP12
+            # utilise cette temperature a toutes les altitudes.
+            # Sans ca, seule temperature_alt est modifiee et les autres
+            # couches restent a +15°C → XP12 blend et pas de neige.
             try:
-                info.temperature_sealevel_c = temp
-            except AttributeError:
-                pass
+                for i in range(len(info.temp_layers)):
+                    info.temp_layers[i] = temp
+                for i in range(len(info.dewp_layers)):
+                    info.dewp_layers[i] = temp - 2.0  # dewpoint legèrement sous temp
+            except (AttributeError, TypeError):
+                pass  # temp_layers pas disponible (XP12 < 12.3)
 
         # -- Coverage radius and altitude cap --
         # CRITICAL: getWeatherAtLocation returns 0 for these fields,
@@ -238,15 +248,29 @@ class PythonInterface:
         info.radius_nm = float(weather.get("radius_nm", 50.0))
         info.max_altitude_msl_ft = float(weather.get("max_alt_ft", 30000.0))
 
-        # Apply — isIncremental=False to replace all prior records from this plugin
+        # -- Time of day --
+        if "time_of_day_h" in weather:
+            hour = float(weather["time_of_day_h"])
+            # Desactiver le temps systeme pour pouvoir fixer l'heure
+            try:
+                xp.setDatai(self.dr_use_system_time, 0)
+            except Exception:
+                pass
+            # zulu_time_sec = secondes depuis minuit UTC
+            # On traite time_of_day_h comme heure locale approximative
+            # (pour un controle precis il faudrait le fuseau horaire de l'aeroport)
+            xp.setDataf(self.dr_zulu_time, hour * 3600.0)
+
+        # Apply weather — isIncremental=False to replace all prior records
         with xp.weatherUpdateContext(isIncremental=False, updateImmediately=True):
             xp.setWeatherAtLocation(lat, lon, elev, info)
 
+        time_str = f" time={weather['time_of_day_h']}h" if "time_of_day_h" in weather else ""
         cloud_str = "auto (XP12)" if cloud_type is None else f"type={cloud_type:.0f} cov={cloud_coverage:.1f} {cloud_base:.0f}-{cloud_top:.0f}m"
         xp.log(f"LARD Weather v2: SET clouds=[{cloud_str}] "
                f"precip={info.precip_rate:.2f} "
-               f"vis={info.visibility:.0f}m radius={info.radius_nm:.0f}nm "
-               f"at ({lat:.4f}, {lon:.4f})")
+               f"vis={info.visibility:.0f}m radius={info.radius_nm:.0f}nm"
+               f"{time_str} at ({lat:.4f}, {lon:.4f})")
 
     def _clear_weather(self):
         """Reset to default weather.
@@ -274,7 +298,13 @@ class PythonInterface:
         except Exception:
             pass
 
-        xp.log("LARD Weather v2: CLEARED (regen + real weather)")
+        # Step 4: restore system time
+        try:
+            xp.setDatai(self.dr_use_system_time, 1)
+        except Exception:
+            pass
+
+        xp.log("LARD Weather v2: CLEARED (regen + real weather + system time)")
 
     # ------------------------------------------------------------------
     # Status file I/O

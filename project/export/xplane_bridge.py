@@ -692,7 +692,9 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                     print(f"  [XPLANE] Plugin XPPython3 weather OK")
                     # Altitude max avion pour placer les nuages au-dessus
                     max_alt_m = max(p["alt_m"] for p in data["poses"])
-                    weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m)
+                    # Longitude pour conversion heure locale → UTC
+                    avg_lon = data["poses"][0]["lon"]
+                    weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=avg_lon)
                 else:
                     print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
 

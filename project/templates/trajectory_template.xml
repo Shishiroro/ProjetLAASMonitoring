@@ -107,7 +107,8 @@
               Neige           : precip=0.5, temperature_c=-5
         -->
 
-        <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1 -->
+        <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1 
+        0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
         <parameter name="precip_rate"      type="real" min="1" max="1"/>
 
         <!-- Nuages : -1 = auto (Cumulonimbus si pluie, rien sinon) -->
@@ -115,12 +116,13 @@
         <parameter name="cloud_coverage"   type="real" min="0" max="0"/>
 
         <!-- Visibilite : 50000 = clair (defaut). Valeurs basses = brouillard -->
-        <parameter name="visibility_m"     type="real" min="50000" max="50000"/>
+        <parameter name="visibility_m"     type="real" min="5000" max="50000"/>
 
         <!-- Temperature : controle pluie vs neige. 15 = standard -->
-        <parameter name="temperature_c"    type="real" min="15" max="15"/>
+        <parameter name="temperature_c"    type="real" min="0" max="45"/>
 
-        <!-- Heure du jour : controle la lumiere. 12 = midi (defaut) -->
+        <!-- Heure du jour : controle la lumiere. 12 = midi (defaut)
+         MODIF FAITE : Heure local convertie en UTC de manière approximative (Erreur de 10min-1h10 max)-->
         <parameter name="time_of_day_h"    type="real" min="12" max="12"/>
 
         <!-- ===== Fautes capteur camera ===== -->

@@ -50,7 +50,8 @@ def has_weather(config):
     return (config.precip_rate > 0
             or config.cloud_type >= 0
             or config.visibility_m < 50000
-            or config.temperature_c < 0)
+            or config.temperature_c < 0
+            or config.time_of_day_h != 12.0)
 
 
 def validate_weather(config):
@@ -73,7 +74,22 @@ def validate_weather(config):
     # A re-evaluer apres tests v2.
 
 
-def build_plugin_command(config, aircraft_max_alt_m=200.0):
+def local_hour_to_zulu(local_hour, longitude):
+    """Convertit une heure locale solaire en heure UTC.
+
+    Approximation par longitude : UTC_offset = longitude / 15.
+    Coherent avec le rendu solaire XP12 (erreur max ~1h vs fuseau politique).
+
+    :param local_hour: heure locale [0, 24]
+    :param longitude: longitude de l'aeroport (degres, negatif = ouest)
+    :return: heure UTC [0, 24)
+    """
+    utc_offset = longitude / 15.0
+    zulu = local_hour - utc_offset
+    return zulu % 24.0
+
+
+def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
     """Construit les parametres JSON pour PI_lard_weather.py.
 
     Traduit WeatherConfig en params attendus par le plugin.
@@ -81,6 +97,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0):
     :param config: WeatherConfig
     :param aircraft_max_alt_m: altitude max de l'avion dans le scenario (MSL, metres).
         Les nuages sont places au-dessus avec une marge de 200m minimum.
+    :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     """
     params = {
         "precip_rate": config.precip_rate,
@@ -92,6 +109,10 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0):
     # Temperature
     if config.temperature_c != 15.0:
         params["temperature_c"] = config.temperature_c
+
+    # Heure du jour — conversion locale → UTC via longitude
+    zulu_h = local_hour_to_zulu(config.time_of_day_h, longitude)
+    params["time_of_day_h"] = zulu_h
 
     # Nuages — base dynamique : au-dessus de l'avion avec marge
     cloud_base = aircraft_max_alt_m + 200.0
@@ -223,21 +244,21 @@ def set_time_of_day(hour, xplane_dir=None):
     pass
 
 
-def inject_weather(config, aircraft_max_alt_m=200.0):
+def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
     """Injecte la meteo dans X-Plane et attend la stabilisation.
 
     Appeler UNE FOIS avant le rendu du scenario.
-    Attend ~65s pour la stabilisation GPU des nuages.
 
     :param config: WeatherConfig
     :param aircraft_max_alt_m: altitude max de l'avion (MSL, metres)
+    :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     :return: True si l'injection a reussi
     """
     if not has_weather(config):
         print(f"  [WEATHER] Pas de meteo active, skip")
         return True
 
-    params = build_plugin_command(config, aircraft_max_alt_m=aircraft_max_alt_m)
+    params = build_plugin_command(config, aircraft_max_alt_m=aircraft_max_alt_m, longitude=longitude)
     result = _send_weather_command("set_weather", weather=params)
 
     if not result or not result.get("ok"):
@@ -256,6 +277,9 @@ def inject_weather(config, aircraft_max_alt_m=200.0):
         parts.append(f"vis={config.visibility_m:.0f}m")
     if config.temperature_c < 0:
         parts.append(f"temp={config.temperature_c:.0f}C (neige)")
+    if config.time_of_day_h != 12.0:
+        zulu_h = local_hour_to_zulu(config.time_of_day_h, longitude)
+        parts.append(f"heure={config.time_of_day_h:.0f}h local -> {zulu_h:.1f}h UTC")
     parts.append(f"avion_max={aircraft_max_alt_m:.0f}m")
     if config.cloud_type >= 0:
         cloud_base = aircraft_max_alt_m + 200.0
