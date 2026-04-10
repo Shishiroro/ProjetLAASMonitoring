@@ -43,13 +43,32 @@ import mss
 import mss.tools
 from PIL import Image
 
-try:
-    import win32gui
-    HAS_WIN32 = True
-    # Fix DPI scaling — coordonnees reelles au lieu de coordonnees virtuelles
-    ctypes.windll.user32.SetProcessDPIAware()
-except ImportError:
-    HAS_WIN32 = False
+import platform
+import subprocess as _sp
+
+_IS_WINDOWS = platform.system() == "Windows"
+_IS_LINUX = platform.system() == "Linux"
+
+# Windows : win32gui pour gestion fenetres + DPI-aware
+HAS_WIN32 = False
+if _IS_WINDOWS:
+    try:
+        import win32gui
+        HAS_WIN32 = True
+        ctypes.windll.user32.SetProcessDPIAware()
+    except ImportError:
+        pass
+
+# Linux : xdotool pour gestion fenetres (apt install xdotool)
+HAS_XDOTOOL = False
+if _IS_LINUX:
+    try:
+        _sp.run(["xdotool", "--version"], capture_output=True, check=True)
+        HAS_XDOTOOL = True
+    except (FileNotFoundError, _sp.CalledProcessError):
+        pass
+
+HAS_WINDOW_MGMT = HAS_WIN32 or HAS_XDOTOOL
 
 
 # ---------------------------------------------------------------------------
@@ -94,14 +113,23 @@ def _pack_cmnd(command: str) -> bytes:
 # ---------------------------------------------------------------------------
 
 def find_xplane_window():
-    """Trouve la fenetre X-Plane principale (la plus grande) et retourne son HWND + rect.
+    """Trouve la fenetre X-Plane principale (la plus grande).
 
-    :return: dict {hwnd, rect, title} ou None si introuvable
+    :return: dict {hwnd, rect, title} ou None si introuvable.
+             hwnd = HWND (Windows) ou window ID (Linux).
+             rect = (left, top, right, bottom) en coords ecran.
     """
-    if not HAS_WIN32:
-        return None
-    candidates = []
+    if HAS_WIN32:
+        return _find_xplane_window_win32()
+    if HAS_XDOTOOL:
+        return _find_xplane_window_linux()
+    return None
 
+
+# --- Windows impl ---
+
+def _find_xplane_window_win32():
+    candidates = []
     def callback(hwnd, _):
         title = win32gui.GetWindowText(hwnd)
         if "X-Plane" in title and win32gui.IsWindowVisible(hwnd):
@@ -109,7 +137,6 @@ def find_xplane_window():
             area = (rect[2] - rect[0]) * (rect[3] - rect[1])
             candidates.append({'hwnd': hwnd, 'rect': rect, 'title': title, 'area': area})
         return True
-
     win32gui.EnumWindows(callback, None)
     if not candidates:
         return None
@@ -117,7 +144,7 @@ def find_xplane_window():
     return {'hwnd': best['hwnd'], 'rect': best['rect'], 'title': best['title']}
 
 
-def _get_client_rect(hwnd):
+def _get_client_rect_win32(hwnd):
     """Zone client (rendu pur, sans bordures ni barre titre) en coords ecran."""
     client = win32gui.GetClientRect(hwnd)
     left, top = win32gui.ClientToScreen(hwnd, (client[0], client[1]))
@@ -125,38 +152,107 @@ def _get_client_rect(hwnd):
     return left, top, right, bottom
 
 
-def resize_xplane_window(width=1280, height=1024):
-    """Redimensionne la fenetre X-Plane pour que la zone client fasse width x height.
+# --- Linux impl (xdotool) ---
 
-    Calcule les bordures dynamiquement (DPI-aware).
-    """
+def _find_xplane_window_linux():
+    try:
+        out = _sp.run(
+            ["xdotool", "search", "--name", "X-Plane"],
+            capture_output=True, text=True, check=True,
+        )
+    except _sp.CalledProcessError:
+        return None
+    wids = out.stdout.strip().splitlines()
+    if not wids:
+        return None
+    # Prendre la plus grande fenetre
+    best, best_area = None, 0
+    for wid in wids:
+        geo = _xdotool_geometry(wid)
+        if not geo:
+            continue
+        area = geo['width'] * geo['height']
+        if area > best_area:
+            best_area = area
+            best = {'hwnd': wid, 'rect': (geo['x'], geo['y'],
+                     geo['x'] + geo['width'], geo['y'] + geo['height']),
+                     'title': 'X-Plane'}
+    return best
+
+
+def _xdotool_geometry(wid):
+    """Retourne {x, y, width, height} pour un window ID xdotool."""
+    try:
+        geo = _sp.run(
+            ["xdotool", "getwindowgeometry", "--shell", str(wid)],
+            capture_output=True, text=True, check=True,
+        )
+    except _sp.CalledProcessError:
+        return None
+    vals = {}
+    for line in geo.stdout.strip().splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            vals[k.strip()] = int(v.strip())
+    if all(k in vals for k in ("X", "Y", "WIDTH", "HEIGHT")):
+        return {'x': vals['X'], 'y': vals['Y'],
+                'width': vals['WIDTH'], 'height': vals['HEIGHT']}
+    return None
+
+
+def _get_client_rect_linux(wid):
+    """Zone client en coords ecran (Linux — pas de bordures a soustraire avec xdotool)."""
+    geo = _xdotool_geometry(wid)
+    if not geo:
+        return None
+    return geo['x'], geo['y'], geo['x'] + geo['width'], geo['y'] + geo['height']
+
+
+# --- Fonctions cross-platform ---
+
+def _get_client_rect(hwnd):
+    """Zone client en coords ecran (dispatch OS)."""
+    if HAS_WIN32:
+        return _get_client_rect_win32(hwnd)
+    if HAS_XDOTOOL:
+        return _get_client_rect_linux(hwnd)
+    return None
+
+
+def resize_xplane_window(width=1280, height=1024):
+    """Redimensionne la fenetre X-Plane pour que la zone client fasse width x height."""
     info = find_xplane_window()
     if not info:
         print("  [XPLANE] Fenetre introuvable, resize impossible")
         return None
     hwnd = info['hwnd']
-    full = win32gui.GetWindowRect(hwnd)
-    client = _get_client_rect(hwnd)
-    border_w = (full[2] - full[0]) - (client[2] - client[0])
-    border_h = (full[3] - full[1]) - (client[3] - client[1])
-    win32gui.MoveWindow(
-        hwnd, full[0], full[1],
-        width + border_w, height + border_h, True,
-    )
+
+    if HAS_WIN32:
+        full = win32gui.GetWindowRect(hwnd)
+        client = _get_client_rect_win32(hwnd)
+        border_w = (full[2] - full[0]) - (client[2] - client[0])
+        border_h = (full[3] - full[1]) - (client[3] - client[1])
+        win32gui.MoveWindow(
+            hwnd, full[0], full[1],
+            width + border_w, height + border_h, True,
+        )
+    elif HAS_XDOTOOL:
+        _sp.run(["xdotool", "windowsize", str(hwnd), str(width), str(height)],
+                check=True)
+
     time.sleep(0.5)
-    info['rect'] = win32gui.GetWindowRect(hwnd)
+    info['rect'] = find_xplane_window()['rect'] if find_xplane_window() else info['rect']
     return info
 
 
 def get_xplane_capture_region():
-    """Retourne la region mss pour capturer la zone client X-Plane.
-
-    Utilise GetClientRect (DPI-aware) pour exclure bordures et barre titre.
-    """
+    """Retourne la region mss pour capturer la zone client X-Plane."""
     info = find_xplane_window()
     if not info:
         return None
     client = _get_client_rect(info['hwnd'])
+    if not client:
+        return None
     return {
         "left": client[0],
         "top": client[1],
@@ -329,7 +425,7 @@ class XPlaneConnection:
         time.sleep(0.3)
 
         # Resize fenetre a la taille cible
-        if HAS_WIN32:
+        if HAS_WINDOW_MGMT:
             resize_xplane_window(self.config.window_width, self.config.window_height)
             print(f"  [XPLANE] Fenetre resizee -> {self.config.window_width}x{self.config.window_height}")
 
@@ -392,7 +488,7 @@ class XPlaneConnection:
         self._read_reference_point()
 
         # Capture region (pas de resize — on garde la fenetre telle quelle)
-        if HAS_WIN32:
+        if HAS_WINDOW_MGMT:
             self.capture_region = get_xplane_capture_region()
             if self.capture_region:
                 print(f"  [XPLANE] Capture : {self.capture_region['width']}x"
