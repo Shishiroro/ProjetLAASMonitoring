@@ -415,8 +415,14 @@ class XPlaneConnection:
                 print(f"  [XPLANE] ATTENTION: fenetre ({actual_w:.0f}x{actual_h:.0f}) "
                       f"< taille desiree ({desired_w}x{desired_h})")
             # Adapter le FOV pour que le crop central ait le FOV desire
-            prog_fov_h = fact_w * self.config.fov_h
-            prog_fov_v = fact_h * self.config.fov_v
+            # Formule tangent-based (geometriquement correcte) :
+            #   prog_fov = 2 * atan(tan(desired_fov/2) * fact)
+            # La formule lineaire (fact * fov) surestime le FOV de ~3° a fact=1.25,
+            # ce qui decale la bbox GT vers l'exterieur (~5px/100px du centre).
+            prog_fov_h = 2.0 * math.degrees(math.atan(
+                math.tan(math.radians(self.config.fov_h / 2.0)) * fact_w))
+            prog_fov_v = 2.0 * math.degrees(math.atan(
+                math.tan(math.radians(self.config.fov_v / 2.0)) * fact_h))
             print(f"  [XPLANE] Fenetre reelle: {actual_w:.0f}x{actual_h:.0f}, "
                   f"fact={fact_w:.2f}x{fact_h:.2f}")
         else:
