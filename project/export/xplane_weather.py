@@ -40,6 +40,7 @@ class WeatherConfig:
     precip_rate: float = 0.0
     cloud_type: float = -1.0         # -1 = pas de nuages
     cloud_coverage: float = 0.0
+    cloud_margin_m: float = 200.0    # marge au-dessus de l'avion pour base nuages
     visibility_m: float = 50000.0
     temperature_c: float = 15.0
     time_of_day_h: float = 12.0
@@ -96,7 +97,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
 
     :param config: WeatherConfig
     :param aircraft_max_alt_m: altitude max de l'avion dans le scenario (MSL, metres).
-        Les nuages sont places au-dessus avec une marge de 200m minimum.
+        Les nuages sont places au-dessus avec une marge de config.cloud_margin_m.
     :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     """
     params = {
@@ -115,7 +116,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
     params["time_of_day_h"] = zulu_h
 
     # Nuages — base dynamique : au-dessus de l'avion avec marge
-    cloud_base = aircraft_max_alt_m + 200.0
+    cloud_base = aircraft_max_alt_m + config.cloud_margin_m
     if config.cloud_type >= 0:
         # Nuages manuels demandes par l'utilisateur
         params["cloud_type"] = config.cloud_type
@@ -282,7 +283,7 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
         parts.append(f"heure={config.time_of_day_h:.0f}h local -> {zulu_h:.1f}h UTC")
     parts.append(f"avion_max={aircraft_max_alt_m:.0f}m")
     if config.cloud_type >= 0:
-        cloud_base = aircraft_max_alt_m + 200.0
+        cloud_base = aircraft_max_alt_m + config.cloud_margin_m
         parts.append(f"nuages={cloud_base:.0f}-{cloud_base + 2000:.0f}m MSL")
 
     print(f"  [WEATHER] Injecte : {', '.join(parts)}")

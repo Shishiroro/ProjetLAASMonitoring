@@ -77,6 +77,7 @@ def export(root_node, path):
         precip_rate=float(_read_param(scenario_node, "precip_rate")),
         cloud_type=float(_read_param(scenario_node, "cloud_type")),
         cloud_coverage=float(_read_param(scenario_node, "cloud_coverage")),
+        cloud_margin_m=float(_read_param(scenario_node, "cloud_margin_m")),
         visibility_m=float(_read_param(scenario_node, "visibility_m")),
         temperature_c=float(_read_param(scenario_node, "temperature_c")),
         time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),

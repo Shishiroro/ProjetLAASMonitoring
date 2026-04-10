@@ -80,7 +80,7 @@
             XPPython3 (PI_lard_weather.py) + XPLMWeather API. Ignores si renderer=ges.
 
             La meteo ne change pas pendant les ~30s d'une approche.
-            Les nuages sont places automatiquement au-dessus de l'avion (alt max + 200m).
+            Les nuages sont places automatiquement au-dessus de l'avion (alt max + cloud_margin_m).
 
             COMPORTEMENT :
               - Pluie seule   (precip > 0, cloud_type = -1) : Cumulonimbus forces auto
@@ -111,19 +111,31 @@
         0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
         <parameter name="precip_rate"      type="real" min="1" max="1"/>
 
-        <!-- Nuages : -1 = auto (Cumulonimbus si pluie, rien sinon) -->
+        <!-- Nuages :
+             cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)
+                           0 = Cirrus (fins, haute altitude, transparents)
+                           1 = Stratus (couche uniforme, gris, bas)
+                           2 = Cumulus (moutonnes, beau temps)
+                           3 = Cumulonimbus (epais, sombres, orage/pluie)
+             cloud_coverage : proportion du ciel couvert [0, 1]
+                              0 = ciel degage, 0.5 = moitie couvert, 1 = completement couvert
+                              Ignore si cloud_type = -1 -->
         <parameter name="cloud_type"       type="real" min="-1" max="-1"/>
         <parameter name="cloud_coverage"   type="real" min="0" max="0"/>
 
+        <!-- Marge nuages : hauteur en metres au-dessus de l'avion pour placer la base des nuages.
+             Ex: 200 = nuages 200m au-dessus de l'altitude max avion. Min raisonnable ~50m -->
+        <parameter name="cloud_margin_m"   type="real" min="200" max="200"/>
+
         <!-- Visibilite : 50000 = clair (defaut). Valeurs basses = brouillard -->
-        <parameter name="visibility_m"     type="real" min="5000" max="50000"/>
+        <parameter name="visibility_m"     type="real" min="50000" max="50000"/>
 
         <!-- Temperature : controle pluie vs neige. 15 = standard -->
         <parameter name="temperature_c"    type="real" min="-15" max="45"/>
 
         <!-- Heure du jour : controle la lumiere. 12 = midi (defaut)
          MODIF FAITE : Heure local convertie en UTC de manière approximative (Erreur de 10min-1h10 max)-->
-        <parameter name="time_of_day_h"    type="real" min="12" max="24"/>
+        <parameter name="time_of_day_h"    type="real" min="12" max="12"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--
