@@ -1,8 +1,9 @@
 """
 Detection YOLOv8 sur images d'approche.
-Genere les labels (.txt avec bbox) et les images annotees.
+Genere les predictions (CSV avec bbox) et les images annotees.
 """
 
+import csv
 from pathlib import Path
 from ultralytics import YOLO
 
@@ -23,6 +24,35 @@ def _next_exp_dir() -> Path:
     return exp_dir
 
 
+def _txt_to_csv(labels_dir: Path, csv_path: Path) -> int:
+    """Consolide les .txt YOLO en un seul predictions.csv et supprime les .txt.
+
+    Returns:
+        Nombre de detections ecrites.
+    """
+    txt_files = sorted(labels_dir.glob("*.txt"))
+    n_rows = 0
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f, delimiter=";")
+        writer.writerow(["image", "class", "cx", "cy", "w", "h", "confidence"])
+        for txt in txt_files:
+            image_name = txt.stem
+            for line in txt.read_text().strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.strip().split()
+                writer.writerow([image_name, int(parts[0]),
+                                 parts[1], parts[2], parts[3], parts[4], parts[5]])
+                n_rows += 1
+
+    # Supprimer les .txt maintenant consolides
+    for txt in txt_files:
+        txt.unlink()
+
+    return n_rows
+
+
 def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, imgsz: int = 512,
             images_dir: Path | None = None, output_dir: Path | None = None):
     """Lance la prediction YOLOv8 sur les images d'approche.
@@ -34,8 +64,10 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
         imgsz: Taille d'image pour l'inference.
         images_dir: Dossier des images (defaut: test_images/test/).
         output_dir: Dossier de sortie (defaut: yolo/output/expN/).
-            Si specifie, les labels vont dans output_dir/predictions/
+            Si specifie, predictions.csv va dans output_dir/
             et les images annotees dans output_dir/annotated/.
+    Returns:
+        (predictions_csv, annotated_dir) — chemin du CSV et dossier images annotees.
     """
     src = images_dir or IMAGES_DIR
     images = sorted(list(src.glob("*.jpeg")) + list(src.glob("*.jpg")) + list(src.glob("*.png")))
@@ -48,18 +80,15 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
 
     # Determiner les dossiers de sortie
     if output_dir is not None:
-        predictions_dir = Path(output_dir) / "predictions"
-        annotated_dir = Path(output_dir) / "annotated"
+        out = Path(output_dir)
+        annotated_dir = out / "annotated"
     else:
-        exp_dir = _next_exp_dir()
-        predictions_dir = exp_dir / "labels"
-        annotated_dir = exp_dir
+        out = _next_exp_dir()
+        annotated_dir = out
 
-    predictions_dir.mkdir(parents=True, exist_ok=True)
     annotated_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Prediction sur {len(images)} images avec {MODEL_PATH.name}")
-    print(f"Labels dans : {predictions_dir}")
 
     model = YOLO(str(MODEL_PATH))
 
@@ -70,45 +99,38 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
 
     # YOLO ecrit les labels dans <project>/<name>/labels/
     # et les images annotees dans <project>/<name>/
-    # On utilise un dossier temp puis on reorganise si output_dir est specifie
-    if output_dir is not None:
-        # YOLO va ecrire dans <project>/<name>/ et <project>/<name>/labels/
-        # Chemins absolus pour eviter que YOLO resolve par rapport a son propre CWD
-        abs_annotated = annotated_dir.resolve()
-        model.predict(
-            source=source,
-            imgsz=imgsz,
-            conf=conf,
-            save_txt=True,
-            save_conf=True,
-            save=True,
-            project=str(abs_annotated.parent),
-            name=abs_annotated.name,
-            exist_ok=True,
-        )
-        # Deplacer les labels de annotated/labels/ vers predictions/
-        yolo_labels = abs_annotated / "labels"
-        if yolo_labels.exists():
-            import shutil
-            for txt in yolo_labels.glob("*.txt"):
-                shutil.move(str(txt), str(predictions_dir / txt.name))
-            yolo_labels.rmdir()
-    else:
-        model.predict(
-            source=source,
-            imgsz=imgsz,
-            conf=conf,
-            save_txt=True,
-            save_conf=True,
-            save=True,
-            project=str(annotated_dir),
-            name=".",
-            exist_ok=True,
-        )
+    abs_annotated = annotated_dir.resolve()
+    model.predict(
+        source=source,
+        imgsz=imgsz,
+        conf=conf,
+        save_txt=True,
+        save_conf=True,
+        save=True,
+        project=str(abs_annotated.parent),
+        name=abs_annotated.name,
+        exist_ok=True,
+    )
 
-    print(f"Labels dans : {predictions_dir}")
+    # Consolider les .txt en predictions.csv
+    yolo_labels = abs_annotated / "labels"
+    predictions_csv = out / "predictions.csv"
+
+    if yolo_labels.exists():
+        n_dets = _txt_to_csv(yolo_labels, predictions_csv)
+        # Supprimer le dossier labels/ vide
+        try:
+            yolo_labels.rmdir()
+        except OSError:
+            pass
+        print(f"Predictions : {n_dets} detections dans {predictions_csv.name}")
+    else:
+        # Aucune detection — CSV vide avec header
+        _txt_to_csv(abs_annotated, predictions_csv)
+        print(f"Predictions : 0 detections")
+
     print(f"Images annotees dans : {annotated_dir}")
-    return predictions_dir, annotated_dir
+    return predictions_csv, annotated_dir
 
 
 if __name__ == "__main__":

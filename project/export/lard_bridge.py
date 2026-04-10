@@ -5,11 +5,11 @@ Responsabilites :
     1. Obtenir la geometrie piste via compute_aiming_point
     2. Convertir flight_data en .esp via GEODataset.create_scenario (si renderer=ges)
     3. Ecrire les fichiers .esp et .yaml de sortie
-    4. Sauver les poses dans poses.json (format universel pour tout renderer)
+    4. Sauver les poses dans poses_cam_export.json (format universel pour tout renderer)
 
 Renderers supportes :
-    - "ges" : Google Earth Studio (genere .esp + .yaml + poses.json)
-    - "xplane" : X-Plane 12 (genere .yaml + poses.json, pas de .esp)
+    - "ges" : Google Earth Studio (genere .esp + .yaml + poses_cam_export.json)
+    - "xplane" : X-Plane 12 (genere .yaml + poses_cam_export.json, pas de .esp)
 
 Note : create_scenario lit 'data/template.json' relativement au CWD,
        donc on change temporairement vers LARD_ROOT.
@@ -140,8 +140,8 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     Exporte un scenario complet.
 
     Selon le renderer :
-      - "ges"    : .esp + .yaml + poses.json
-      - "xplane" : .yaml + poses.json (pas de .esp)
+      - "ges"    : .esp + .yaml + poses_cam_export.json
+      - "xplane" : .yaml + poses_cam_export.json (pas de .esp)
 
     Le .yaml est fidele au format LARD (poses, image, trajectory)
     pour etre compatible avec export_labels() de LARD.
@@ -199,8 +199,8 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
         with open(esp_file, "w") as f:
             json.dump(scenario, f, indent=2)
 
-    # --- poses.json (format universel, pour tout renderer) ---
-    poses_file = output_path / "poses.json"
+    # --- poses_cam_export.json (format universel, pour tout renderer) ---
+    poses_file = output_path / "poses_cam_export.json"
     save_poses_json(flight_data, cfg.fps, scenario_name, poses_file, ltp_alt=ltp_alt)
 
     # --- .yaml au format LARD (compatible export_labels) ---

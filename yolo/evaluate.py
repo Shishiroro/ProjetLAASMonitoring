@@ -1,5 +1,5 @@
 """
-Evaluation IoU : compare les predictions YOLO (.txt) aux ground truths LARD (.csv).
+Evaluation IoU : compare les predictions YOLO (predictions.csv) aux ground truths LARD (.csv).
 Calcule AP, F1, Precision, Recall via le module yolo/eval/.
 """
 
@@ -19,32 +19,33 @@ CORNER_X_COLS = ["x_TR", "x_TL", "x_BL", "x_BR"]
 CORNER_Y_COLS = ["y_TR", "y_TL", "y_BL", "y_BR"]
 
 
-def load_predictions(labels_dir: Path) -> torch.Tensor:
-    """Charge les .txt YOLO et retourne un tenseur (N, 7) [img_id, cls, x1, y1, x2, y2, conf].
+def load_predictions(csv_path: Path) -> tuple[torch.Tensor, list[str]]:
+    """Charge predictions.csv et retourne (tenseur (N, 7), image_names).
 
-    Les .txt sont en format cxcywh normalise, on convertit en xyxy normalise.
+    Tenseur : [img_id, cls, x1, y1, x2, y2, conf] en xyxy normalise.
+    image_names : liste ordonnee des noms d'images (stems uniques).
     """
+    df = pd.read_csv(csv_path, sep=";")
+
+    if df.empty:
+        return torch.zeros((0, 7)), []
+
+    # Mapping nom image -> img_id (ordre d'apparition trie)
+    image_names = sorted(df["image"].unique())
+    name_to_id = {name: i for i, name in enumerate(image_names)}
+
     rows = []
-    txt_files = sorted(labels_dir.glob("*.txt"))
-
-    for img_id, txt_path in enumerate(txt_files):
-        lines = txt_path.read_text().strip().split("\n")
-        for line in lines:
-            if not line.strip():
-                continue
-            parts = line.strip().split()
-            cls_id = int(parts[0])
-            cx, cy, w, h = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
-            conf = float(parts[5])
-            rows.append([img_id, cls_id, cx, cy, w, h, conf])
-
-    if not rows:
-        return torch.zeros((0, 7))
+    for _, row in df.iterrows():
+        img_id = name_to_id[row["image"]]
+        rows.append([img_id, int(row["class"]),
+                     float(row["cx"]), float(row["cy"]),
+                     float(row["w"]), float(row["h"]),
+                     float(row["confidence"])])
 
     preds = torch.tensor(rows, dtype=torch.float32)
     # Convertir bbox cxcywh -> xyxy (colonnes 2:6)
     preds[:, 2:6] = bbox_convert(preds[:, 2:6], "cxcywh", "xyxy")
-    return preds
+    return preds, image_names
 
 
 def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | None = None) -> torch.Tensor:
@@ -95,29 +96,30 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
     return torch.tensor(rows, dtype=torch.float32)
 
 
-def evaluate(labels_dir: Path, csv_path: Path, iou_thresh: float = 0.5, iou_method: str = "CIOU",
+def evaluate(predictions_csv: Path, csv_path: Path, iou_thresh: float = 0.5, iou_method: str = "CIOU",
              runway: str | None = None, results_dir: Path | None = None):
     """Lance l'evaluation IoU et affiche les metriques.
 
     Args:
-        labels_dir: Dossier des .txt predictions YOLO.
+        predictions_csv: Fichier predictions.csv (genere par predict.py).
         csv_path: Fichier .csv ground truth LARD.
         iou_thresh: Seuil IoU.
         iou_method: Methode IoU (IOU/GIOU/DIOU/CIOU).
         runway: Filtrer GT sur une piste.
-        results_dir: Dossier ou sauvegarder eval_results.json (defaut: parent de labels_dir).
+        results_dir: Dossier ou sauvegarder eval_results.json (defaut: parent du CSV).
     """
 
-    # Noms des images (stems des .txt) pour le mapping img_id
-    txt_files = sorted(labels_dir.glob("*.txt"))
-    image_names = [f.stem for f in txt_files]
-
-    if not image_names:
-        print(f"Aucun fichier .txt trouve dans {labels_dir}")
+    if not predictions_csv.exists():
+        print(f"Fichier predictions introuvable : {predictions_csv}")
         return
 
     # Charger donnees
-    preds = load_predictions(labels_dir)
+    preds, image_names = load_predictions(predictions_csv)
+
+    if not image_names:
+        print(f"Aucune prediction dans {predictions_csv.name}")
+        return
+
     gts = load_ground_truths(csv_path, image_names, runway=runway)
 
     rwy_info = f" (runway {runway})" if runway else " (toutes pistes)"
@@ -147,7 +149,7 @@ def evaluate(labels_dir: Path, csv_path: Path, iou_thresh: float = 0.5, iou_meth
     print(f"  TP={metrics['tp']}, FP={metrics['fp']}, FN={metrics['fn']}")
 
     # Sauvegarder
-    save_dir = results_dir or labels_dir.parent
+    save_dir = results_dir or predictions_csv.parent
     results_file = save_dir / "eval_results.json"
     results = {
         "iou_thresh": iou_thresh,
@@ -177,7 +179,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Evaluation IoU predictions YOLO vs GT LARD")
-    parser.add_argument("--labels", type=str, required=True, help="Dossier des .txt predictions YOLO")
+    parser.add_argument("--predictions", type=str, required=True, help="Fichier predictions.csv")
     parser.add_argument("--csv", type=str, required=True, help="Fichier .csv ground truth LARD")
     parser.add_argument("--iou-thresh", type=float, default=0.5, help="Seuil IoU (defaut: 0.5)")
     parser.add_argument("--iou-method", type=str, default="CIOU", choices=["IOU", "GIOU", "DIOU", "CIOU"], help="Methode IoU (defaut: CIOU)")
@@ -185,7 +187,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     evaluate(
-        labels_dir=Path(args.labels),
+        predictions_csv=Path(args.predictions),
         csv_path=Path(args.csv),
         iou_thresh=args.iou_thresh,
         iou_method=args.iou_method,

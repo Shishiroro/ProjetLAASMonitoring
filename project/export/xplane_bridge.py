@@ -27,7 +27,7 @@ Conventions de poses :
 Usage :
     from xplane_bridge import render_scenario, XPlaneConfig
     config = XPlaneConfig(xplane_dir="C:/X-Plane 12")
-    render_scenario("runs/LFPO_24/poses.json", "runs/LFPO_24/footage", config)
+    render_scenario("runs/LFPO_24/poses_cam_export.json", "runs/LFPO_24/footage", config)
 """
 
 import struct
@@ -608,7 +608,7 @@ def convert_pose_ges_to_xplane(lon, lat, alt, yaw, pitch_ges, roll):
 
 
 # ---------------------------------------------------------------------------
-# Fichier poses.json (format universel, independant du renderer)
+# Fichier poses_cam_export.json (format universel, independant du renderer)
 # ---------------------------------------------------------------------------
 
 def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
@@ -650,7 +650,7 @@ def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
 
 
 def load_poses_json(path):
-    """Charge un fichier poses.json.
+    """Charge un fichier poses_cam_export.json.
 
     :return: dict {scenario_name, n_frames, fps, poses: [{lon,lat,alt_m,heading,pitch_ges,roll}]}
     """
@@ -665,10 +665,10 @@ def load_poses_json(path):
 def render_scenario(poses_path, output_dir, config=None, weather_profile_path=None):
     """Rend un scenario complet via X-Plane.
 
-    Lit le fichier poses.json, injecte chaque pose dans X-Plane,
+    Lit le fichier poses_cam_export.json, injecte chaque pose dans X-Plane,
     capture la fenetre via mss, et sauve les images en JPEG.
 
-    :param poses_path: chemin vers le fichier poses.json
+    :param poses_path: chemin vers le fichier poses_cam_export.json
     :param output_dir: dossier de sortie pour les images (footage/)
     :param config: XPlaneConfig (optionnel)
     :param weather_profile_path: chemin vers weather_profile.json (optionnel)
@@ -731,7 +731,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
             "pilot_eye_y": conn.pilot_eye_y,  # vertical (m, + = haut)
             "pilot_eye_z": conn.pilot_eye_z,  # longitudinal (m, + = avant/nez)
         }
-        render_cfg_file = output_dir.parent / "render_config.json"
+        render_cfg_file = output_dir.parent / "xplane_config.json"
         with open(render_cfg_file, "w") as rf:
             json.dump(render_cfg, rf, indent=2)
         print(f"  [XPLANE] Render config : {render_cfg['width']}x{render_cfg['height']}"
@@ -741,8 +741,6 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
         # Padding identique a LARD : img_digits = len(str(n_frames - 1))
         img_digits = len(str(n_frames - 1))
-
-        actual_poses = []  # Poses reelles lues depuis X-Plane
 
         for i, pose in enumerate(data["poses"]):
             xp = convert_pose_ges_to_xplane(
@@ -759,13 +757,6 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
             dst = output_dir / f"{scenario_name}_{str(i).zfill(img_digits)}.jpg"
             conn.capture_frame(dst)
 
-            # Utiliser la pose commandee (double precision) pour le GT.
-            # Le readback RREF est float32 (~4m de precision) — trop imprecis
-            # pour le labeling, surtout a grande distance ou la piste est petite.
-            # VEHS place l'avion avec la precision double, donc la pose commandee
-            # est plus fiable que le readback.
-            actual_poses.append(pose)
-
             if (i + 1) % 50 == 0 or (i + 1) == n_frames:
                 elapsed = time.perf_counter() - t_start
                 fps = (i + 1) / elapsed
@@ -778,12 +769,6 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
         if n_rendered < n_frames:
             print(f"  [XPLANE] ATTENTION : {n_frames - n_rendered} frames manquantes")
-
-        # Sauver les poses reelles pour regeneration GT
-        actual_path = output_dir.parent / "poses_actual.json"
-        with open(actual_path, "w") as f:
-            json.dump(actual_poses, f, indent=2)
-        print(f"  [XPLANE] Poses reelles -> {actual_path}")
 
     finally:
         # Pas de clear meteo ici — le prochain set_weather (isIncremental=False)

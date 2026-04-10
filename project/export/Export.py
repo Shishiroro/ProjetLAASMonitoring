@@ -140,7 +140,7 @@ def export(root_node, path):
     # --- Renderer (ges ou xplane, via variable d'environnement) ---
     renderer = os.environ.get("LARD_RENDERER", "ges").lower()
 
-    # --- Exporter .esp + .yaml + poses.json ---
+    # --- Exporter .esp + .yaml + poses_cam_export.json ---
     weather_arg = weather_cfg if has_weather(weather_cfg) else None
     export_scenario(
         flight_data, cfg, ou,

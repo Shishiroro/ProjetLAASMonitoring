@@ -119,11 +119,11 @@
         <parameter name="visibility_m"     type="real" min="5000" max="50000"/>
 
         <!-- Temperature : controle pluie vs neige. 15 = standard -->
-        <parameter name="temperature_c"    type="real" min="0" max="45"/>
+        <parameter name="temperature_c"    type="real" min="-15" max="45"/>
 
         <!-- Heure du jour : controle la lumiere. 12 = midi (defaut)
          MODIF FAITE : Heure local convertie en UTC de manière approximative (Erreur de 10min-1h10 max)-->
-        <parameter name="time_of_day_h"    type="real" min="12" max="12"/>
+        <parameter name="time_of_day_h"    type="real" min="12" max="24"/>
 
         <!-- ===== Fautes capteur camera ===== -->
         <!--
@@ -142,7 +142,7 @@
 
         <!-- ===== Bruits ===== -->
 
-        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0"/>
+        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0.2"/>
         <parameter name="gaussian_noise_from_pct"   type="real" min="0" max="0"/>
         <parameter name="gaussian_noise_to_pct"     type="real" min="100" max="100"/>
 

@@ -2,9 +2,9 @@
 run_pipeline.py — Orchestrateur bout-en-bout du pipeline LARD-LAAS-TAF
 =======================================================================
 Tout est centralise dans runs/<ICAO_RWY>/ :
-  - .esp/.yaml/poses.json generes par TAF
+  - .esp/.yaml/poses_cam_export.json generes par TAF
   - .zip GES (renderer=ges) OU images X-Plane (renderer=xplane)
-  - footage/ images/ predictions/ annotated/ eval_results.json (auto)
+  - footage/ images/ predictions.csv/ annotated/ eval_results.json (auto)
 
 Renderers :
     --renderer ges     : Google Earth Studio (defaut, etape manuelle)
@@ -52,7 +52,7 @@ def reciprocal_runway(rwy):
 
 
 def _find_runs(run_name=None, all_runs=False, renderer="ges"):
-    """Trouve les runs evaluables (ont un .yaml + des images ou un .zip ou poses.json)."""
+    """Trouve les runs evaluables (ont un .yaml + des images ou un .zip ou poses_cam_export.json)."""
     runs = []
 
     if run_name:
@@ -72,7 +72,7 @@ def _find_runs(run_name=None, all_runs=False, renderer="ges"):
     for run_dir in runs:
         yamls = list(run_dir.glob("*.yaml"))
         has_zip = bool(list(run_dir.glob("*.zip")))
-        has_poses = (run_dir / "poses.json").exists()
+        has_poses = (run_dir / "poses_cam_export.json").exists()
         footage = run_dir / "footage"
         has_images = footage.exists() and bool(
             list(footage.glob("*.jpeg")) + list(footage.glob("*.jpg")) + list(footage.glob("*.png"))
@@ -82,10 +82,10 @@ def _find_runs(run_name=None, all_runs=False, renderer="ges"):
             print(f"[SKIP] {run_dir.name} : pas de .yaml")
             continue
 
-        # Pour xplane, on accepte les runs avec poses.json (pas encore rendus)
+        # Pour xplane, on accepte les runs avec poses_cam_export.json (pas encore rendus)
         if renderer == "xplane":
             if not has_poses and not has_images:
-                print(f"[SKIP] {run_dir.name} : ni poses.json ni images dans footage/")
+                print(f"[SKIP] {run_dir.name} : ni poses_cam_export.json ni images dans footage/")
                 continue
         else:
             if not has_zip and not has_images:
@@ -165,13 +165,13 @@ def _unzip_ges(run_dir):
 
 
 # ---------------------------------------------------------------------------
-# Etape 1b : Rendu X-Plane (poses.json → footage/)
+# Etape 1b : Rendu X-Plane (poses_cam_export.json → footage/)
 # ---------------------------------------------------------------------------
 
 def step_render_xplane(run_info, xplane_dir):
     """Rend les images d'un run via X-Plane 12.
 
-    Lit poses.json, injecte les poses dans X-Plane, capture les screenshots.
+    Lit poses_cam_export.json, injecte les poses dans X-Plane, capture les screenshots.
     Les images sont sauvees dans footage/.
 
     :param run_info: dict avec dir, name, etc.
@@ -179,11 +179,11 @@ def step_render_xplane(run_info, xplane_dir):
     :return: True si les images ont ete rendues, False sinon
     """
     run_dir = run_info["dir"]
-    poses_file = run_dir / "poses.json"
+    poses_file = run_dir / "poses_cam_export.json"
     footage_dir = run_dir / "footage"
 
     if not poses_file.exists():
-        print(f"  [XPLANE] Pas de poses.json pour {run_info['name']}")
+        print(f"  [XPLANE] Pas de poses_cam_export.json pour {run_info['name']}")
         return False
 
     # Skip si footage/ existe deja avec des images
@@ -271,13 +271,13 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
         # Copier le .xml des parametres du scenario (ex: scenario_0.xml)
         scenario_xml = yf.parent.parent / f"{yf.parent.parent.name}.xml"
         if scenario_xml.exists():
-            shutil.copy2(scenario_xml, run_dir / "params.xml")
+            shutil.copy2(scenario_xml, run_dir / "params_trace.xml")
 
-        # Copier poses.json (format universel pour renderers)
+        # Copier poses_cam_export.json (format universel pour renderers)
         # Mettre a jour scenario_name si le dossier a un suffixe (_002, _003...)
-        poses_json = yf.parent / "poses.json"
+        poses_json = yf.parent / "poses_cam_export.json"
         if poses_json.exists():
-            poses_dst = run_dir / "poses.json"
+            poses_dst = run_dir / "poses_cam_export.json"
             shutil.copy2(poses_json, poses_dst)
             if run_name != name:
                 import json as _json
@@ -298,7 +298,7 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
 
         # Sauver le renderer utilise dans un fichier de config
         run_config = {"renderer": renderer}
-        with open(run_dir / "run_config.json", "w") as f:
+        with open(run_dir / "renderer_choice.json", "w") as f:
             json.dump(run_config, f, indent=2)
 
         created_runs.append(run_dir)
@@ -308,9 +308,9 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
         if weather_json.exists():
             extras += " + weather_profile.json"
         if renderer == "ges":
-            print(f"  [RUNS] {run_dir.name}/ <- .esp + .yaml + poses.json{extras}")
+            print(f"  [RUNS] {run_dir.name}/ <- .esp + .yaml + poses_cam_export.json{extras}")
         else:
-            print(f"  [RUNS] {run_dir.name}/ <- .yaml + poses.json{extras}")
+            print(f"  [RUNS] {run_dir.name}/ <- .yaml + poses_cam_export.json{extras}")
 
     print(f"\n[Pipeline] {len(created_runs)} run(s) cree(s) dans runs/")
     if renderer == "ges":
@@ -325,60 +325,12 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
 # Etape 2 : Ground truth LARD (.csv)
 # ---------------------------------------------------------------------------
 
-def _patch_yaml_with_actual_poses(yaml_path, actual_poses_path):
-    """Remplace les poses du YAML par les poses reelles lues depuis X-Plane.
-
-    Apres le rendu X-Plane, les poses reelles (lat/lon/alt/heading/pitch/roll)
-    peuvent differer des poses commandees a cause de la conversion locale.
-    En utilisant les poses reelles, le GT LARD correspondra exactement au rendu.
-    """
-    import yaml as yaml_mod
-
-    with open(actual_poses_path, "r") as f:
-        actual = json.load(f)
-
-    with open(yaml_path, "r") as f:
-        y = yaml_mod.safe_load(f)
-
-    if len(actual) != len(y["poses"]):
-        print(f"  [GT] WARN: {len(actual)} poses reelles vs {len(y['poses'])} dans YAML")
-        return yaml_path
-
-    for i, (pose_yaml, pose_real) in enumerate(zip(y["poses"], actual)):
-        # YAML pose format: [lon, lat, alt, yaw, pitch_ges, roll]
-        pose_yaml["pose"] = [
-            pose_real["lon"],
-            pose_real["lat"],
-            pose_real["alt_m"],
-            pose_real["heading"],
-            pose_real["pitch_ges"],
-            pose_real["roll"],
-        ]
-
-    # Sauver un YAML corrige (garder l'original intact)
-    corrected_path = str(yaml_path).replace(".yaml", "_actual.yaml")
-    with open(corrected_path, "w") as f:
-        yaml_mod.dump(y, f, default_flow_style=False, allow_unicode=True)
-
-    print(f"  [GT] YAML corrige avec poses reelles -> {corrected_path}")
-    return corrected_path
-
-
 def step_generate_gt(run_info, renderer="ges"):
     """Genere le CSV ground truth pour un run."""
     run_dir = run_info["dir"]
     yaml_path = run_info["yaml"]
 
     print(f"\n  [GT] Generation CSV pour {run_info['name']}...")
-
-    # X-Plane : patcher le YAML avec les poses reelles lues depuis X-Plane
-    # (corrige le decalage entre pose commandee et pose rendue)
-    if renderer == "xplane":
-        actual_poses_path = run_dir / "poses_actual.json"
-        if actual_poses_path.exists():
-            yaml_path = _patch_yaml_with_actual_poses(yaml_path, actual_poses_path)
-        else:
-            print(f"  [GT] WARN: pas de poses_actual.json, GT sur poses commandees")
 
     # Pipeline LARD pour GES et X-Plane
     lard_path = str(ROOT / "LARD")
@@ -566,27 +518,26 @@ def step_predict(run_info, conf=0.25, imgsz=512, images_dir=None):
 
     from predict import predict
 
-    predictions_dir, annotated_dir = predict(
+    predictions_csv, annotated_dir = predict(
         images_dir=footage_dir,
         conf=conf,
         imgsz=imgsz,
         output_dir=run_dir,
     )
 
-    if predictions_dir and predictions_dir.exists():
-        n_labels = len(list(predictions_dir.glob("*.txt")))
-        print(f"  [YOLO] {n_labels} labels generes dans predictions/")
+    if predictions_csv and predictions_csv.exists():
+        print(f"  [YOLO] Predictions dans {predictions_csv.name}")
     else:
-        print(f"  [YOLO] ATTENTION : pas de labels generes")
+        print(f"  [YOLO] ATTENTION : pas de predictions generees")
 
-    return predictions_dir
+    return predictions_csv
 
 
 # ---------------------------------------------------------------------------
 # Etape 4 : Evaluation IoU
 # ---------------------------------------------------------------------------
 
-def step_evaluate(run_dir, predictions_dir, csv_path, runway=None, iou_thresh=0.5, iou_method="CIOU"):
+def step_evaluate(run_dir, predictions_csv, csv_path, runway=None, iou_thresh=0.5, iou_method="CIOU"):
     """Evalue IoU predictions vs GT."""
     print(f"\n  [EVAL] IoU evaluation...")
 
@@ -600,7 +551,7 @@ def step_evaluate(run_dir, predictions_dir, csv_path, runway=None, iou_thresh=0.
     from evaluate import evaluate
 
     metrics = evaluate(
-        labels_dir=predictions_dir,
+        predictions_csv=predictions_csv,
         csv_path=csv_path,
         iou_thresh=iou_thresh,
         iou_method=iou_method,
@@ -674,9 +625,9 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
             if m:
                 rwy = m.group(1)
 
-        # Detecter le renderer du run (run_config.json) ou utiliser celui passe
+        # Detecter le renderer du run (renderer_choice.json) ou utiliser celui passe
         run_renderer = renderer
-        run_config_file = run_dir / "run_config.json"
+        run_config_file = run_dir / "renderer_choice.json"
         if run_config_file.exists():
             with open(run_config_file) as f:
                 run_cfg = json.load(f)
@@ -710,13 +661,13 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
 
         # YOLO
         try:
-            predictions_dir = step_predict(run_info, conf=conf, imgsz=imgsz,
+            predictions_csv = step_predict(run_info, conf=conf, imgsz=imgsz,
                                            images_dir=yolo_images_dir)
         except Exception as e:
             print(f"  [YOLO] ERREUR : {e}")
             continue
 
-        if predictions_dir is None or not predictions_dir.exists():
+        if predictions_csv is None or not predictions_csv.exists():
             print(f"  [SKIP] Pas de predictions pour {run_info['name']}")
             continue
 
@@ -724,7 +675,7 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
         try:
             metrics = step_evaluate(
                 run_dir=run_dir,
-                predictions_dir=predictions_dir,
+                predictions_csv=predictions_csv,
                 csv_path=csv_path,
                 runway=rwy,
                 iou_thresh=iou_thresh,
@@ -784,7 +735,7 @@ def run_full(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
     """Pipeline complet : generate + rendu + evaluate.
 
     Avec GES : pause manuelle pour le rendu (import .esp, download .zip).
-    Avec X-Plane : rendu automatise (poses.json → screenshots → footage/).
+    Avec X-Plane : rendu automatise (poses_cam_export.json → screenshots → footage/).
     """
 
     # Etape 1 : generation
@@ -860,15 +811,19 @@ def main():
 Structure runs/ :
   runs/
     LFPO_24/
-      LFPO_24.esp           <- genere par 'generate' (GES seulement)
-      LFPO_24.yaml          <- genere par 'generate'
-      poses.json            <- genere par 'generate' (format universel)
-      run_config.json       <- renderer utilise
-      footage/              <- images (dezip GES ou rendu X-Plane)
-      gt_labels.csv         <- GT auto
-      predictions/          <- YOLO auto
-      annotated/            <- images annotees auto
-      eval_results.json     <- metriques auto
+      LFPO_24.esp              <- genere par 'generate' (GES seulement)
+      LFPO_24.yaml             <- genere par 'generate'
+      poses_cam_export.json    <- poses camera (format universel)
+      renderer_choice.json     <- renderer utilise (ges/xplane)
+      params_trace.xml         <- parametres TAF du scenario
+      footage/                 <- images (dezip GES ou rendu X-Plane)
+      LFPO_24_labels.csv       <- GT LARD auto
+      predictions.csv          <- predictions YOLO auto
+      annotated/               <- images annotees auto
+      eval_results.json        <- metriques IoU auto
+      xplane_config.json       <- config rendu X-Plane (X-Plane only)
+      fault_profile.json       <- profil fautes capteur (si actif)
+      weather_profile.json     <- profil meteo X-Plane (si actif)
     pipeline_report.json    <- rapport agrege
 
 Exemples :
