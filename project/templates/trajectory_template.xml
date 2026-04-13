@@ -79,7 +79,7 @@
             Meteo injectee UNE FOIS avant le rendu du scenario via le plugin
             XPPython3 (PI_lard_weather.py) + XPLMWeather API. Ignores si renderer=ges.
 
-            La meteo ne change pas pendant les ~30s d'une approche.
+            La meteo ne change pas pendant les ~Xs d'une approche.
             Les nuages sont places automatiquement au-dessus de l'avion (alt max + cloud_margin_m).
 
             COMPORTEMENT :
@@ -107,9 +107,28 @@
               Neige           : precip=0.5, temperature_c=-5
         -->
 
-        <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1 
+        <!-- ===== Raccourci rain_intensity (optionnel) ===== -->
+        <!--
+            rain_intensity : controle unique de l'intensite de pluie [0, 1]
+            Si > 0, OVERRIDE precip_rate, visibility_m, cloud_type, cloud_coverage.
+            Si = 0, les 4 params individuels ci-dessous sont utilises normalement.
+
+            Mapping rain_intensity → params XP12 :
+              0.0  Sec            precip=0.0  vis=inchangee  clouds=inchanges
+              0.1  Bruine         precip=0.2  vis=12000m     Stratus   cov=0.5
+              0.3  Pluie legere   precip=0.4  vis=7000m      Stratus   cov=0.7
+              0.5  Pluie moderee  precip=0.6  vis=4000m      Cumulus   cov=0.85
+              0.7  Forte pluie    precip=0.8  vis=2000m      Cb        cov=1.0
+              1.0  Deluge/orage   precip=1.0  vis=800m       Cb        cov=1.0
+            Valeurs intermediaires interpolees lineairement.
+        -->
+        <parameter name="rain_intensity"   type="real" min="0.1" max="0.1"/>
+
+        <!-- ===== Params individuels (utilises si rain_intensity = 0) ===== -->
+
+        <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1
         0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
-        <parameter name="precip_rate"      type="real" min="1" max="1"/>
+        <parameter name="precip_rate"      type="real" min="0" max="0"/>
 
         <!-- Nuages :
              cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)
@@ -117,6 +136,7 @@
                            1 = Stratus (couche uniforme, gris, bas)
                            2 = Cumulus (moutonnes, beau temps)
                            3 = Cumulonimbus (epais, sombres, orage/pluie)
+                           XP12 génère des éclairs automatiquement quand il y a des Cumulonimbus (cloud_type=3)
              cloud_coverage : proportion du ciel couvert [0, 1]
                               0 = ciel degage, 0.5 = moitie couvert, 1 = completement couvert
                               Ignore si cloud_type = -1 -->
@@ -128,10 +148,10 @@
         <parameter name="cloud_margin_m"   type="real" min="200" max="200"/>
 
         <!-- Visibilite : 50000 = clair (defaut). Valeurs basses = brouillard -->
-        <parameter name="visibility_m"     type="real" min="50000" max="50000"/>
+        <parameter name="visibility_m"     type="real" min="3000" max="3000"/>
 
         <!-- Temperature : controle pluie vs neige. 15 = standard -->
-        <parameter name="temperature_c"    type="real" min="-15" max="45"/>
+        <parameter name="temperature_c"    type="real" min="15" max="45"/>
 
         <!-- Heure du jour : controle la lumiere. 12 = midi (defaut)
          MODIF FAITE : Heure local convertie en UTC de manière approximative (Erreur de 10min-1h10 max)-->
@@ -154,7 +174,7 @@
 
         <!-- ===== Bruits ===== -->
 
-        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0.2"/>
+        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0"/>
         <parameter name="gaussian_noise_from_pct"   type="real" min="0" max="0"/>
         <parameter name="gaussian_noise_to_pct"     type="real" min="100" max="100"/>
 

@@ -24,6 +24,7 @@ from sensor_faults import (
 )
 from xplane_weather import (
     WeatherConfig, validate_weather, has_weather, save_weather_profile,
+    expand_rain_intensity,
 )
 
  
@@ -74,6 +75,7 @@ def export(root_node, path):
 
     # --- Lire les effets meteo X-Plane (per-scenario) ---
     weather_cfg = WeatherConfig(
+        rain_intensity=float(_read_param(scenario_node, "rain_intensity")),
         precip_rate=float(_read_param(scenario_node, "precip_rate")),
         cloud_type=float(_read_param(scenario_node, "cloud_type")),
         cloud_coverage=float(_read_param(scenario_node, "cloud_coverage")),
@@ -82,6 +84,13 @@ def export(root_node, path):
         temperature_c=float(_read_param(scenario_node, "temperature_c")),
         time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),
     )
+
+    # Expanser rain_intensity en params individuels si actif
+    if weather_cfg.rain_intensity > 0:
+        expand_rain_intensity(weather_cfg)
+        print(f"[Export] rain_intensity={weather_cfg.rain_intensity:.2f} -> "
+              f"precip={weather_cfg.precip_rate:.2f}, vis={weather_cfg.visibility_m:.0f}m, "
+              f"cloud_type={weather_cfg.cloud_type:.0f}, cov={weather_cfg.cloud_coverage:.2f}")
 
     if has_weather(weather_cfg):
         validate_weather(weather_cfg)

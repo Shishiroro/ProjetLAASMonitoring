@@ -5,6 +5,7 @@ Calcule AP, F1, Precision, Recall via le module yolo/eval/.
 
 from pathlib import Path
 import json
+import re
 import numpy as np
 import pandas as pd
 import torch
@@ -17,6 +18,18 @@ from eval.metrics import compute_metrics
 # --- Colonnes GT LARD (NEW_CORNERS_NAMES = TR, TL, BL, BR) ---
 CORNER_X_COLS = ["x_TR", "x_TL", "x_BL", "x_BR"]
 CORNER_Y_COLS = ["y_TR", "y_TL", "y_BL", "y_BR"]
+
+
+def _reciprocal_runway(rwy: str) -> str:
+    """Retourne le reciprocal d'une piste (ex: 10L -> 28R, 10 -> 28)."""
+    m = re.match(r"^(\d{1,2})([LRC]?)$", str(rwy))
+    if not m:
+        return rwy
+    num = int(m.group(1))
+    letter = m.group(2)
+    recip_num = (num + 18) % 36 or 36
+    recip_letter = {"L": "R", "R": "L", "C": "C", "": ""}.get(letter, "")
+    return f"{recip_num:02d}{recip_letter}"
 
 
 def load_predictions(csv_path: Path) -> tuple[torch.Tensor, list[str]]:
@@ -57,7 +70,10 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
     """
     df = pd.read_csv(csv_path, sep=";")
     if runway is not None:
-        df = df[df["runway"].astype(str) == str(runway)]
+        # LARD stocke le nom de piste du cote LARD (ex: approche 10L → label 28L).
+        # On accepte le runway demande ET son reciprocal.
+        recip = _reciprocal_runway(str(runway))
+        df = df[df["runway"].astype(str).isin([str(runway), recip])]
     rows = []
 
     # Creer un mapping nom_image -> img_id

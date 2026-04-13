@@ -1,3 +1,4 @@
+# Core pipeline
 numpy
 pyproj
 pyaml
@@ -6,3 +7,18 @@ scikit-spatial
 z3-solver
 timezonefinder
 pytz
+
+# X-Plane capture
+mss
+Pillow
+
+# YOLOv8
+ultralytics
+torch
+
+# Windows only (gestion fenetre X-Plane, DPI-aware)
+pywin32; sys_platform == "win32"
+
+# NOTE Linux : installer xdotool via le gestionnaire de paquets
+#   apt install xdotool   (Debian/Ubuntu)
+#   dnf install xdotool   (Fedora)

@@ -51,6 +51,7 @@ class PythonInterface:
         self.dr_lon = None
         self.dr_elev = None
         self.dr_change_mode = None
+        self.dr_rain_scale = None   # sim/private/controls/rain/scale (taille gouttes)
         # Command handle for regen_weather
         self.cmd_regen_weather = None
 
@@ -63,7 +64,7 @@ class PythonInterface:
         try:
             EXCHANGE_DIR = os.path.join(
                 xp.getSystemPath(),
-                "Resources", "plugins", "FlyWithLua", "Scripts", "lard_exchange"
+                "Resources", "plugins", "PythonPlugins", "lard_exchange"
             )
             CMD_FILE = os.path.join(EXCHANGE_DIR, "weather_command.json")
             STS_FILE = os.path.join(EXCHANGE_DIR, "weather_status.json")
@@ -91,6 +92,12 @@ class PythonInterface:
             # Time of day
             self.dr_zulu_time = xp.findDataRef("sim/time/zulu_time_sec")
             self.dr_use_system_time = xp.findDataRef("sim/time/use_system_time")
+
+            # Rain drop scale (private dataref, may not exist on all XP12 versions)
+            try:
+                self.dr_rain_scale = xp.findDataRef("sim/private/controls/rain/scale")
+            except Exception:
+                self.dr_rain_scale = None
 
             # Regen weather command
             self.cmd_regen_weather = xp.findCommand("sim/operation/regen_weather")
@@ -264,6 +271,13 @@ class PythonInterface:
         # Apply weather — isIncremental=False to replace all prior records
         with xp.weatherUpdateContext(isIncremental=False, updateImmediately=True):
             xp.setWeatherAtLocation(lat, lon, elev, info)
+
+        # -- Rain drop scale (private dataref, hors XPLMWeather) --
+        if "rain_scale" in weather and self.dr_rain_scale is not None:
+            try:
+                xp.setDataf(self.dr_rain_scale, float(weather["rain_scale"]))
+            except Exception as e:
+                xp.log(f"LARD Weather v2: rain_scale error: {e}")
 
         time_str = f" time={weather['time_of_day_h']}h" if "time_of_day_h" in weather else ""
         cloud_str = "auto (XP12)" if cloud_type is None else f"type={cloud_type:.0f} cov={cloud_coverage:.1f} {cloud_base:.0f}-{cloud_top:.0f}m"

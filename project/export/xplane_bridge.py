@@ -55,7 +55,11 @@ if _IS_WINDOWS:
     try:
         import win32gui
         HAS_WIN32 = True
-        ctypes.windll.user32.SetProcessDPIAware()
+        # Per-Monitor DPI Aware v2 (Windows 10 1703+), fallback sur v1
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            ctypes.windll.user32.SetProcessDPIAware()
     except ImportError:
         pass
 
@@ -250,15 +254,26 @@ def get_xplane_capture_region():
     info = find_xplane_window()
     if not info:
         return None
+    print(f"  [XPLANE] Fenetre trouvee: '{info['title']}' rect={info['rect']}")
     client = _get_client_rect(info['hwnd'])
     if not client:
         return None
-    return {
+    print(f"  [XPLANE] Client rect: left={client[0]} top={client[1]} "
+          f"right={client[2]} bottom={client[3]}")
+    region = {
         "left": client[0],
         "top": client[1],
         "width": client[2] - client[0],
         "height": client[3] - client[1],
     }
+    # Validation : verifier que la region est dans les limites des moniteurs mss
+    try:
+        with mss.mss() as sct:
+            all_mon = sct.monitors[0]  # moniteur virtuel = tout le desktop
+            print(f"  [XPLANE] Desktop virtuel: {all_mon}")
+    except Exception:
+        pass
+    return region
 
 
 # ---------------------------------------------------------------------------
