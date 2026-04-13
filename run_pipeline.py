@@ -842,8 +842,9 @@ Exemples :
     renderer_args.add_argument("--renderer", type=str, default="xplane",
                                choices=["ges", "xplane"],
                                help="Renderer d'images (defaut: xplane)")
-    renderer_args.add_argument("--xplane-dir", type=str, default="C:/X-Plane 12",
-                               help="Repertoire X-Plane 12 (defaut: C:/X-Plane 12)")
+    _default_xp = "C:/X-Plane 12" if os.name == "nt" else os.path.expanduser("~/X-Plane 12")
+    renderer_args.add_argument("--xplane-dir", type=str, default=_default_xp,
+                               help=f"Repertoire X-Plane 12 (defaut: {_default_xp})")
 
     # --- generate ---
     p_gen = sub.add_parser("generate", parents=[renderer_args],

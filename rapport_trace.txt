@@ -1,0 +1,732 @@
+================================================================
+TRACE DETAILLEE DU PROJET LARD-LAAS-TAF
+Pour rapport de stage
+================================================================
+
+Projet : Pipeline de generation de trajectoires d'approche realistes
+         pour validation de modeles de vision embarques (YOLOv8)
+Organismes : ONERA, IRT Saint Exupery, Airbus, DGA
+Framework : TAF (Testing Automation Framework, LAAS-CNRS)
+Stagiaire : ONERA / IRT Saint Exupery
+
+
+================================================================
+1. CONTEXTE ET OBJECTIFS DU STAGE
+================================================================
+
+1.1 Problematique generale
+--------------------------
+Les avions modernes utilisent des systemes de vision embarques pour
+detecter les pistes d'atterrissage pendant l'approche. Ces systemes
+reposent sur des modeles de deep learning (ici YOLOv8) qui doivent
+etre valides avant deploiement.
+
+La validation necessite :
+- Des trajectoires d'approche realistes (pas juste des poses aleatoires)
+- Des images synthetiques de qualite (rendues par simulateur)
+- Des perturbations capteur realistes (brouillard, bruit, etc.)
+- Une evaluation quantitative (IoU, precision, recall)
+
+Le projet LARD (Landing Approach Runway Detection) existe deja pour
+generer des datasets d'images d'approche, mais ses trajectoires sont
+des poses independantes (pas de coherence temporelle).
+
+1.2 Objectif du stage
+---------------------
+Developper un pipeline bout-en-bout qui :
+1. Genere des trajectoires d'approche temporellement realistes
+   (processus stochastique, pas des poses aleatoires)
+2. Echantillonne des scenarios sous contraintes (via TAF/z3)
+3. Rend les images via simulateur (Google Earth Studio ou X-Plane 12)
+4. Applique des fautes capteur camera parametrables
+5. Evalue le modele YOLOv8 embarque (IoU predictions vs ground truth)
+
+Le tout en zero intervention humaine (pipeline full auto avec X-Plane).
+
+1.3 Partenaires et roles
+-------------------------
+- LARD : projet existant (IRT Saint Exupery) — librairie de generation
+  d'images d'approche, base de donnees pistes, export .esp/.yaml
+- TAF : framework de test du LAAS-CNRS — sampling de scenarios sous
+  contraintes via solveur z3 (satisfiabilite)
+- YOLOv8 : modele de detection entraine sur LARD, destine a l'embarque
+- Ce projet : orchestration pipeline complet, trajectoires realistes,
+  fautes capteur, evaluation
+
+
+================================================================
+2. TRAVAIL PRELIMINAIRE SUR LARDv2
+================================================================
+
+Avant le projet actuel, un travail exploratoire a ete realise
+directement dans le code source de LARDv2.
+
+Repo : C:\Users\Sr-Sh\Desktop\LARDV2\
+Branch : trajectoireRealiste
+
+2.1 Ce qui a ete fait
+---------------------
+- Ajout d'un mode "sequentiel" dans LARD : trajectoires d'approche
+  temporellement correlees (au lieu de poses independantes)
+- Implementation du processus Ornstein-Uhlenbeck a dt variable
+- Timeline spatiale (frames uniformes en distance, pas en temps)
+- Convergence en finale (l'avion se stabilise pres de la piste)
+- Calcul du crab angle (correction vent)
+- Profils d'approche (ILS, visual, windy, unstabilized)
+
+Fichiers crees dans LARD :
+- src/trajectory/sequence_generator.py
+- src/trajectory/ou_process.py
+- src/trajectory/approach_profiles.py
+
+2.2 Problemes identifies → decision de decoupler
+-------------------------------------------------
+- Les parametres utilisateur etaient melanges au code LARD de base
+- L'interface Streamlit ajoutait de la complexite inutile
+- Pas de separation claire entre generation et calcul
+- Impossible de piloter par un framework de test (TAF)
+- Maintenance difficile : chaque modif risquait de casser LARD
+
+Decision : creer un projet independant (LARD-LAAS-TAF) qui :
+- Importe LARD comme bibliotheque (sans le modifier)
+- Utilise TAF pour le sampling de scenarios
+- Pilote tout via code/CLI (pas de Streamlit)
+
+
+================================================================
+3. ARCHITECTURE DU PROJET
+================================================================
+
+3.1 Pipeline complet
+--------------------
+[1] trajectory_template.xml  — Contraintes utilisateur
+         |
+[2] TAF Generation (z3)     — Sample N scenarios valides
+         |
+[3] Export.py                — Calcul trajectoire OU + export LARD
+         |
+[4] Sorties                  — .esp (GES) ou poses.json (X-Plane)
+         |
+[5] Rendu images             — GES (manuel) ou X-Plane 12 (auto)
+         |
+[6] Fautes capteur           — Degradation realiste des images
+         |
+[7] YOLOv8 predict           — Detection piste sur images
+         |
+[8] Evaluation IoU           — Comparaison predictions vs GT LARD
+         |
+[9] Rapport                  — Metriques finales
+
+3.2 Choix technologiques et justifications
+------------------------------------------
+- Python : coherent avec LARD et l'ecosysteme ML
+- TAF/z3 : sampling sous contraintes (pas juste random), reproductible
+- Processus Ornstein-Uhlenbeck : modele stochastique standard en
+  aeronautique (modele de turbulence Dryden)
+- Dataclasses : configs typees, pas de dictionnaires
+- Fonctions pures : testables, pas d'effets de bord
+- CLI (pas Streamlit) : automatisable, scriptable
+
+3.3 Structure des fichiers
+--------------------------
+LARD-LAAS-TAF/
+├── LARD/                    # Clone vierge — NE PAS MODIFIER
+├── taf/                     # Clone TAF LAAS — NE PAS MODIFIER
+├── project/                 # Notre code (generation)
+│   ├── templates/           # XML contraintes utilisateur
+│   ├── export/              # Export.py, trajectory_builder, bridges
+│   └── settings.xml         # Config TAF
+├── yolo/                    # Detection + evaluation
+│   ├── predict.py           # Inference YOLOv8
+│   ├── evaluate.py          # Evaluation IoU
+│   └── eval/                # Module metriques (box, IoU, AP)
+├── runs/                    # Donnees par scenario (auto-genere)
+├── tests/                   # Scripts de test
+└── run_pipeline.py          # Orchestrateur bout-en-bout
+
+3.4 Ce qu'on importe de LARD (sans modifier)
+---------------------------------------------
+- geo_utils.py : conversions ECEF/LLH, geodesie
+- GEODataset : creation de scenarios .esp (Google Earth Studio)
+- ScenarioConfig : configuration de scenario LARD
+- write_scenario : generation fichiers .yaml
+- export_labels / computeLabels : projection 3D→2D piste (ground truth)
+- filtered_runways_database_Final.json : base de donnees pistes
+
+
+================================================================
+4. PROCESSUS ORNSTEIN-UHLENBECK — MODELE DE TRAJECTOIRE
+================================================================
+
+4.1 Pourquoi Ornstein-Uhlenbeck ?
+----------------------------------
+Le processus OU est le modele standard pour la turbulence atmospherique
+(modele de Dryden, MIL-F-8785C). Il genere des signaux :
+- Temporellement correles (pas de sauts brusques)
+- Mean-reverting (retour vers une valeur moyenne)
+- Parametrables (intensite, correlation temporelle)
+
+Formule discrete :
+  x[i+1] = mean + (x[i] - mean) * exp(-dt/tau) + sigma_d * N(0,1)
+
+Ou :
+- mean : valeur nominale (trajectoire ideale)
+- tau : temps de correlation (inertie du processus)
+- sigma_d : ecart-type discret (intensite perturbation)
+- dt : pas de temps (variable car timeline spatiale)
+
+4.2 Variables OU
+----------------
+5 variables independantes sont generees par processus OU :
+- alpha_h : deviation laterale (angle par rapport a l'axe piste)
+- alpha_v : deviation verticale (angle par rapport au glide slope)
+- yaw : lacet (orientation horizontale camera/avion)
+- pitch : tangage (orientation verticale)
+- roll : roulis (inclinaison laterale)
+
+4.3 Timeline spatiale
+---------------------
+Les frames sont uniformes en DISTANCE (pas en temps).
+L'avion vole a vitesse constante (145 kts = Vref approche standard),
+donc dt est constant en pratique. Mais la timeline spatiale permet
+de garantir un echantillonnage uniforme de la trajectoire quels que
+soient les parametres de vitesse.
+
+4.4 Convergence en finale
+--------------------------
+Proche de la piste, les deviations doivent diminuer (l'avion se
+stabilise pour l'atterrissage). La fonction de convergence :
+
+  conv(d) = 0.08 + 0.92 * clamp((d - end) / (stab - end), 0, 1)^0.5
+
+- d : distance courante a la piste
+- end : distance fin scenario (minimum 280m)
+- stab : distance de stabilisation (parametre utilisateur)
+- 0.08 : deviation residuelle (8%) — jamais parfaitement aligne
+- ^0.5 : convergence rapide au debut, lente a la fin
+
+4.5 Crab angle (correction vent)
+---------------------------------
+En presence de vent de travers, l'avion corrige en se tournant
+face au vent (crab angle). Ce crab diminue lineairement dans les
+derniers 300m (de-crab) pour s'aligner avec la piste a l'atterrissage.
+
+  crab = arctan(Vw_cross / Va)
+  En dessous de 300m : crab *= (d - end) / (300 - end)
+
+4.6 Surechantillonnage (Phase 2)
+---------------------------------
+Probleme : le processus OU applique frame par frame donnait un aspect
+saccade (sauts visibles entre frames consecutives).
+
+Solution : surechantillonnage interne (oversample_factor=50).
+Entre chaque paire de frames, l'OU simule 50 micro-pas avec dt/50.
+Les facteurs de convergence sont interpoles lineairement.
+Sous-echantillonnage final : on ne garde que les frames reelles.
+→ Meme nombre de frames en sortie, mais trajectoire beaucoup plus lisse.
+
+4.7 Auto-calcul de tau (Phase 3)
+---------------------------------
+tau (temps de correlation) retire du XML utilisateur.
+Calcul automatique base sur le modele Dryden simplifie :
+  tau = h / V
+  h = segment_start_m * tan(3°)    (altitude max, glide slope 3°)
+  V = ground_speed_kts * 0.514444  (conversion noeuds → m/s)
+
+A nos altitudes d'approche (<300m), L ≈ h (echelle de turbulence
+Dryden), donc tau ≈ h/V directement.
+
+Valeurs resultantes :
+- segment_start=6000m → h=314m → tau=4.2s
+- segment_start=3000m → h=157m → tau=2.1s
+- segment_start=2000m → h=105m → tau=1.4s
+
+
+================================================================
+5. CALIBRATION DES PARAMETRES OU (v1 → v4)
+================================================================
+
+5.1 Problemes avec les parametres initiaux (v1, herites de LARDv2)
+-------------------------------------------------------------------
+Les parametres OU etaient calibres "a l'oeil" dans LARDv2 :
+- Trajectoires irrealistes : l'avion zigzaguait lateralement
+  (deviation laterale max ~83m en turbulence maximale)
+- Camera qui secouait trop (pitch ±2°, roll ±10°)
+- Roll completement independant de la trajectoire laterale
+  (l'avion s'inclinait aleatoirement sans rapport avec son mouvement)
+
+5.2 Evolution des versions (sweep scenarios)
+---------------------------------------------
+v1 (baseline) : parametres LARDv2, pas de rate limit
+v2 : + rate limit yaw/pitch/roll (deg/s)
+v3 : + rate limit alpha_h/alpha_v (5 canaux complets)
+v4 : + couplage roll-lateral + tau separes + std recales
+
+Chaque version a ete generee en sweep (20 scenarios .esp) pour
+comparaison visuelle dans Google Earth Studio.
+
+5.3 Solutions implementees (v4 finale)
+---------------------------------------
+1) Tau separes position/attitude
+   - tau_position = 5 * tau_attitude (~10s vs ~2s)
+   - Justification : la position de l'avion (alpha_h, alpha_v) change
+     lentement (inertie masse), l'attitude (yaw, pitch, roll) oscille
+     plus vite (surfaces de controle aerodynamiques)
+
+2) Std position cales sur specs ILS Cat I
+   - std_alpha_h : 1.0° → 0.35° (~half-dot localizer, ±15m a 3km)
+   - std_alpha_v : 0.4° → 0.25° (~half-dot glide slope)
+   - Justification : ILS Cat I autorise ±0.5 dot (≈ ±0.35° lateral)
+     pour une approche stabilisee
+
+3) Std attitude cales approche stabilisee A320
+   - std_yaw   : 2.5° → 1.2°
+   - std_pitch : 2.0° → 0.7°
+   - std_roll  : 5.0° → 2.5°
+   - Justification : valeurs typiques A320 en approche finale stabilisee
+
+4) Couplage roll-lateral amorti
+   - roll += gain * derivee_filtree(alpha_h)
+   - Filtre EMA passe-bas (alpha=0.15, ~1Hz a 10fps)
+   - Gain = 2.0
+   - Justification : physiquement, un avion s'incline pour tourner.
+     Sans couplage, le roll est purement aleatoire (irrealiste).
+   - Note : la v3 avait echoue avec derivee brute → oscillations
+     excessives. Le filtre EMA a resolu le probleme.
+
+5) Rate limiting (5 canaux)
+   - alpha_h : 1.5 °/s, alpha_v : 0.5 °/s
+   - yaw : 3 °/s, pitch : 2 °/s, roll : 5 °/s
+   - Rate limit altitude : montee 1.5 m/s, descente 5.0 m/s
+   - Justification : limites physiques des surfaces de controle
+     et de l'inertie de l'avion
+
+5.4 Resultats v1 → v4 (turbulence maximale, 10fps)
+----------------------------------------------------
+  Metrique              v1        v4
+  Dev laterale max      83m       34m
+  Yaw std               2.09°     1.11°
+  Pitch std             1.58°     0.60°
+  Roll max              ±10.4°    ±5.0°
+
+
+================================================================
+6. SAMPLING TAF / Z3
+================================================================
+
+6.1 Principe
+------------
+TAF (Testing Automation Framework, LAAS-CNRS) utilise le solveur z3
+pour echantillonner des scenarios qui satisfont un ensemble de
+contraintes definies dans un fichier XML.
+
+Avantages par rapport au random :
+- Garantie que tous les scenarios sont valides (contraintes respectees)
+- Diversite maximale (z3 explore l'espace des solutions)
+- Reproductible (meme seed → meme scenario)
+- Extensible (ajout de contraintes sans changer le code)
+
+6.2 Parametres utilisateur (XML)
+---------------------------------
+Definis dans trajectory_template.xml :
+- fps : frames par seconde (10-15)
+- segment_start_m : distance debut approche (2000-3000m)
+- segment_end_m : distance fin approche (min 280m)
+- ground_speed_kts : vitesse sol (145 kts fixe)
+- turbulence_intensity : intensite turbulence [0, 1]
+- wind_speed_kts, wind_direction_deg : vent
+- stabilization_distance_m : distance de convergence finale
+- airport, runway : piste cible
+- nb_test_cases : nombre de scenarios a generer
+
+6.3 Contraintes z3
+-------------------
+- segment_start > segment_end + stabilization_distance
+- stabilization_distance > segment_end (convergence possible)
+- wind_direction dans [0, 360]
+- Pour les fautes capteur : from_pct < to_pct (progression temporelle)
+
+6.4 Integration TAF
+---------------------
+- Export.py est le point d'extension prevu par TAF
+- Il est copie automatiquement de project/export/ vers taf/src/
+- TAF l'appelle avec les parametres z3 resolus
+- Export.py construit la trajectoire OU et appelle LARD pour l'export
+
+
+================================================================
+7. RENDERERS : GOOGLE EARTH STUDIO ET X-PLANE 12
+================================================================
+
+7.1 Google Earth Studio (GES) — renderer initial
+--------------------------------------------------
+Workflow :
+1. Pipeline genere des fichiers .esp (format projet GES)
+2. L'utilisateur importe manuellement les .esp dans GES (navigateur)
+3. GES rend les images (satellite + 3D Google)
+4. L'utilisateur telecharge les .zip et les place dans runs/
+5. Le pipeline dezippe et continue (GT + YOLO + IoU)
+
+Avantages : qualite d'image realiste (imagerie satellite Google)
+Inconvenients : etape manuelle, lent, pas automatisable, dependant
+de la connexion internet et du service Google
+
+Resolution : 1024x1024 pixels
+
+7.2 X-Plane 12 — renderer automatise (Phase 10)
+-------------------------------------------------
+Objectif : remplacer l'etape manuelle GES par un rendu 100% automatise.
+
+Workflow :
+1. Pipeline genere poses.json (format universel)
+2. xplane_bridge.py se connecte a X-Plane 12 via UDP (port 49000)
+3. Pour chaque frame : positionne la camera, capture l'ecran
+4. Images sauvees directement dans footage/
+5. Le pipeline continue automatiquement
+
+Protocole UDP X-Plane :
+- DREF : ecriture de datarefs (variables internes X-Plane)
+- CMND : envoi de commandes
+- RREF : lecture de datarefs (souscription periodique)
+
+7.3 Problemes techniques X-Plane resolus
+------------------------------------------
+
+Probleme 1 — Precision positionnement
+  DREF lat/lon utilise float32 → precision insuffisante (~1m d'erreur)
+  pour distinguer des poses proches.
+  Solution : pause simulation + override planepath + coordonnees locales
+  OpenGL (local_x/y/z en metres, precision parfaite).
+  Conversion lat/lon → local via point de reference lu au setup.
+
+Probleme 2 — Capture d'ecran
+  La fonction screenshot native X-Plane prend ~300ms/frame et les
+  fichiers sont verrouilles temporairement (PermissionError).
+  Solution : mss (screen grab Python) cible la fenetre X-Plane.
+  ~30ms/frame en JPEG, 10x plus rapide.
+
+Probleme 3 — DPI Windows
+  Sur Windows avec scaling DPI (125%, 150%), les coordonnees de
+  fenetre sont fausses → capture decalee ou tronquee.
+  Solution : ctypes.windll.user32.SetProcessDPIAware() au demarrage
+  + GetClientRect pour zone client sans bordures/barre titre.
+
+Probleme 4 — Resolution minimale
+  X-Plane impose minimum 1280px de large (pas de 1024x1024 carre).
+  Resolution finale : 1280x1024 (X-Plane) vs 1024x1024 (GES).
+
+Probleme 5 — Curseur reticule
+  Sans joystick connecte, X-Plane active le mouse yoke (le curseur
+  controle l'avion). Un reticule apparait au centre de l'ecran.
+  Solution : override_joystick + mouse_is_yoke=0 + deplacement
+  souris hors fenetre avant capture.
+
+Probleme 6 — Nommage images
+  LARD attend {name}_{i:0Nd}.ext (0-based, padding dynamique).
+  Corrige dans render_scenario() pour compatibilite export_labels.
+
+7.4 Architecture dual renderer
+-------------------------------
+- --renderer ges (defaut, retrocompatible) | --renderer xplane (auto)
+- poses.json : format universel genere pour les deux renderers
+- run_config.json : stocke le renderer utilise par chaque run
+- LARD_RENDERER env var : passe le renderer a Export.py (via TAF)
+
+7.5 Benchmarks X-Plane (RTX 4060 Laptop, 1280x1024)
+-----------------------------------------------------
+- Capture mss + JPEG : ~30ms/frame
+- Total par frame (positionne + stabilise + capture) : ~130ms/frame
+- 300 frames : ~40 secondes
+
+
+================================================================
+8. FAUTES CAPTEUR CAMERA
+================================================================
+
+8.1 Objectif
+------------
+Simuler des degradations realistes de la camera embarquee pour
+tester la robustesse du modele YOLOv8 dans des conditions adverses.
+
+8.2 Les 22 types de fautes implementes
+----------------------------------------
+gaussian_noise     — bruit gaussien additif
+shot_noise         — bruit de photon (Poisson)
+salt_pepper        — pixels aleatoires noir/blanc
+dead_pixels        — pixels bloques (clusters + isoles)
+motion_blur        — flou de mouvement (direction, intensite)
+defocus_blur       — flou de mise au point
+rolling_shutter    — distorsion capteur CMOS (lecture ligne par ligne)
+overexposure       — surexposition (saturation hautes lumieres)
+underexposure      — sous-exposition (perte details sombres)
+vignetting         — assombrissement des bords de l'image
+chromatic_aberration — decalage couleur sur les bords
+radial_distortion  — distorsion en barillet/coussinet
+lens_flare         — reflet parasite (soleil dans l'objectif)
+banding            — bandes horizontales (interference electronique)
+jpeg_artifacts     — artefacts de compression (blocs 8x8)
+color_shift        — derive colorimetrique du capteur
+condensation       — buee sur l'objectif
+dirt_on_lens       — salete sur l'objectif (taches, traces)
+fog                — brouillard atmospherique
+zoom_blur          — flou de zoom (radial)
+contrast           — perte de contraste
+pixelate           — effet de pixelisation (resolution reduite)
+
+8.3 Configuration dans le XML
+-------------------------------
+Chaque faute a 3 parametres dans le XML :
+- {type}_severity : intensite [0, 1] (0 = desactivee)
+- {type}_from_pct : debut d'application (% progression approche)
+- {type}_to_pct : fin d'application (% progression approche)
+
+Exemples :
+  severity min=max=0 → faute desactivee
+  severity min=0.3 max=0.7 → TAF sample entre 0.3 et 0.7
+  from_pct=20, to_pct=80 → faute active entre 20% et 80% de l'approche
+
+Contraintes z3 : from_pct < to_pct pour chaque faute active.
+
+8.4 Pipeline d'application
+----------------------------
+1. generate : TAF sample les params, Export.py cree fault_profile.json
+2. evaluate : apres rendu (GES dezip ou X-Plane), step_apply_faults
+   lit le profil et degrade les images
+3. Images degradees dans degraded/, originales conservees dans footage/
+4. YOLO tourne sur degraded/ (ou footage/ si pas de fautes)
+5. GT calculee sur les positions originales (geometrie non affectee)
+
+8.5 Tracabilite
+----------------
+- fault_profile.json : config fautes + resume par frame
+- params.xml : parametres TAF du scenario
+- .yaml : section sensor_faults dans les metadonnees
+
+
+================================================================
+9. DETECTION YOLOv8 ET EVALUATION IoU
+================================================================
+
+9.1 Modele YOLOv8
+-----------------
+- Architecture : YOLOv8n (nano, le plus leger)
+- Entraine sur : dataset LARD (images d'approche synthetiques)
+- Tache : detection de pistes d'atterrissage (1 classe)
+- Destination : embarque avion (inference hors ligne)
+- imgsz=512 : resize interne pour inference
+
+9.2 Prediction (yolo/predict.py)
+---------------------------------
+- Entree : dossier d'images (footage/ ou degraded/)
+- Sortie : .txt par image (format YOLO : classe cx cy w h confiance)
+           + images annotees (bbox dessinee)
+- Coordonnees normalisees [0, 1]
+
+9.3 Ground truth LARD
+-----------------------
+- Genere par LARD export_labels() / computeLabels()
+- Projection 3D → 2D : coins 3D de la piste → pixels image
+- Format CSV : 4 coins piste (x_TR, y_TR, x_TL, y_TL, x_BL, y_BL, x_BR, y_BR)
+- Genere post-rendu (les images doivent exister)
+
+9.4 Module evaluation (yolo/eval/)
+------------------------------------
+Inspire du projet lardv2-ml-detect-develop :
+- box.py : conversions formats bbox (tlbr, tlwh, xywh, xyxy)
+- metrics_utils.py : IoU torch (IOU, GIOU, DIOU, CIOU)
+- metrics.py : match_predictions, AP, F1, Precision, Recall
+
+Methode : greedy matching par IoU decroissant (predictions ↔ GT)
+
+9.5 Bug labeling LARD (BLOQUANT)
+----------------------------------
+Probleme identifie : les bbox GT generees par LARD ne correspondent
+pas aux positions reelles des pistes dans les images.
+
+Bugs identifies :
+1. pointcam_to_pix : x_pixel = x_norm * img_h (au lieu de img_w)
+   → convention coordonnees inversee par rapport au standard image
+
+2. runway_is_facing_us : exclut la piste d'approche avec les poses GES
+   → convention yaw GES ≠ yaw LARD
+   → contourne via monkey-patch dans generate_gt.py
+
+Statut : pipeline d'evaluation pret et fonctionnel, en attente de
+fix par l'equipe LARD pour obtenir des GT fiables.
+
+
+================================================================
+10. PIPELINE CLI (run_pipeline.py)
+================================================================
+
+10.1 Commandes
+--------------
+# Google Earth Studio (defaut)
+python run_pipeline.py generate -n 5
+python run_pipeline.py evaluate LFPO_24
+python run_pipeline.py evaluate --all
+python run_pipeline.py full -n 5
+
+# X-Plane 12 (full auto)
+python run_pipeline.py full -n 5 --renderer xplane
+python run_pipeline.py generate -n 5 --renderer xplane
+python run_pipeline.py evaluate --all --renderer xplane
+
+10.2 Organisation des donnees
+------------------------------
+Tout centralise dans runs/<ICAO_RWY>/ :
+- .esp, .yaml, poses.json, params.xml (generation)
+- run_config.json (renderer utilise)
+- fault_profile.json (fautes capteur)
+- footage/ (images brutes)
+- degraded/ (images avec fautes)
+- predictions/ (labels YOLO .txt)
+- annotated/ (images annotees YOLO)
+- *_labels.csv (GT LARD)
+- eval_results.json (metriques IoU)
+
+Suffixe auto si meme piste generee 2x : LFPO_24, LFPO_24_002, etc.
+
+10.3 Etapes du pipeline evaluate
+----------------------------------
+1. Dezip GES (ou rendu X-Plane deja fait)
+2. Generation GT CSV (via LARD export_labels)
+3. Application fautes capteur (footage/ → degraded/)
+4. Prediction YOLO (degraded/ ou footage/)
+5. Evaluation IoU (predictions vs GT)
+6. Sauvegarde eval_results.json
+
+
+================================================================
+11. DIFFICULTES RENCONTREES ET SOLUTIONS
+================================================================
+
+11.1 Trajectoires saccadees
+  Cause : processus OU applique frame par frame (sauts visibles)
+  Solution : surechantillonnage interne (50 micro-pas entre frames)
+
+11.2 Parametres OU irrealistes
+  Cause : valeurs heritees de LARDv2, calibrees "a l'oeil"
+  Solution : 4 iterations de calibration (v1→v4), comparaison visuelle
+  via sweep de 20 scenarios par version dans GES
+
+11.3 Roll independant de la trajectoire
+  Cause : les 5 variables OU etaient independantes
+  Solution : couplage roll-lateral amorti (derivee filtree EMA)
+
+11.4 Tau dans le XML
+  Cause : parametre utilisateur mal compris, valeurs aberrantes possibles
+  Solution : retire du XML, calcul automatique via Dryden simplifie
+
+11.5 Precision float32 X-Plane
+  Cause : DREF lat/lon en float32 → ~1m d'erreur
+  Solution : coordonnees locales OpenGL (metres, precision parfaite)
+
+11.6 Capture lente X-Plane
+  Cause : screenshot natif X-Plane ~300ms + fichiers verrouilles
+  Solution : mss (screen grab) ~30ms, 10x plus rapide
+
+11.7 DPI Windows
+  Cause : scaling DPI → coordonnees fenetre fausses
+  Solution : SetProcessDPIAware() + GetClientRect
+
+11.8 Bug labeling LARD
+  Cause : convention coordonnees inversee dans pointcam_to_pix
+  Statut : contourne partiellement, en attente fix equipe LARD
+
+11.9 Compatibilite numpy
+  Cause : np.trapezoid n'existe pas dans numpy <2.0
+  Solution : fallback np.trapz dans metrics.py
+
+11.10 CWD LARD
+  Cause : LARD cherche template.json relatif au CWD
+  Solution : context manager _lard_cwd() qui change temporairement le CWD
+
+11.11 Mouse yoke X-Plane
+  Cause : reticule curseur au centre de l'ecran sans joystick
+  Solution : override_joystick + mouse_is_yoke=0 + deplacement souris
+
+
+================================================================
+12. DECISIONS TECHNIQUES CLES ET JUSTIFICATIONS
+================================================================
+
+12.1 Vitesse constante 145 kts
+  Justification : Vref approche standard A320. Simplification acceptee
+  car la variation de vitesse en finale est faible (<5 kts).
+
+12.2 Distance fin minimum 280m
+  Justification : en dessous, l'avion est trop pres du sol pour que
+  le modele de trajectoire reste valide (ground effect, flare).
+
+12.3 fps 10-15
+  Justification : compromis entre fluidite video et taille dataset.
+  Au-dessus de 15, les frames consecutives sont trop similaires.
+
+12.4 Dataclasses + fonctions pures
+  Justification : testable, pas d'effets de bord, coherent avec LARD.
+
+12.5 LARD comme bibliotheque (non modifie)
+  Justification : separation des responsabilites, pas de regression
+  possible dans LARD, mises a jour LARD transparentes.
+
+12.6 Dual renderer (GES + X-Plane)
+  Justification : GES = meilleure qualite, X-Plane = automatise.
+  Les deux sont utiles selon le contexte d'utilisation.
+
+12.7 Fautes capteur dans le XML (pas dans le code)
+  Justification : TAF/z3 peut explorer l'espace des fautes,
+  tracabilite complete, reproductibilite des scenarios.
+
+
+================================================================
+13. CHRONOLOGIE RESUMEE
+================================================================
+
+Phase 0 — LARDv2 (avant le stage dans ce repo)
+  - Mode sequentiel, processus OU, convergence, crab angle
+  - Identification des limites → decision de decoupler
+
+Phase 1 — Decouplage LARD-LAAS-TAF (2026-02-28)
+  - Architecture TAF + LARD, XML template, Export.py
+  - 3 scenarios generes avec succes
+
+Phase 2 — Surechantillonnage OU (2026-03-04)
+  - Lissage trajectoires par micro-pas internes
+
+Phase 3 — Auto-calcul tau (2026-03-04)
+  - Retrait du XML, formule Dryden simplifiee
+
+Phase 4 — Module YOLOv8 (2026-03-05)
+  - predict.py, modele yolov8n.pt, dataset test
+
+Phase 5 — Evaluation IoU + GT (2026-03-06)
+  - eval/ module, evaluate.py, generate_gt.py
+  - Identification bug labeling LARD
+
+Phase 6 — Calibration OU v4 (2026-03-10)
+  - 4 iterations, sweep 20 scenarios, resultats valides
+
+Phase 9 — Fautes capteur camera (2026-03-16)
+  - 22 types, pilotage XML/z3, pipeline complet
+
+Phase 10 — Integration X-Plane 12 (2026-03-17)
+  - Rendu full auto, UDP, mss capture, zero intervention
+
+
+================================================================
+14. PERSPECTIVES ET TRAVAIL RESTANT
+================================================================
+
+- Resolution du bug labeling LARD (equipe LARD)
+- Evaluation quantitative complete (IoU, AP, F1) une fois GT fiables
+- Tests sur un plus grand nombre de pistes/scenarios
+- Ajout de nouvelles pistes dans la base de donnees
+- Evaluation de l'impact des fautes capteur sur les performances YOLO
+- Potentielle integration d'autres renderers (FlightGear, MSFS)
+- Optimisation performances X-Plane (batching de frames)
+
+
+================================================================
+FIN DU DOCUMENT
+================================================================
