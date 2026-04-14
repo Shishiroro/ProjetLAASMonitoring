@@ -720,11 +720,7 @@ class XPlaneConnection:
         self.send_dref("sim/operation/override/override_throttles", 0.0)
 
     def close(self):
-        """Libere les ressources."""
-        try:
-            self.release()
-        except Exception:
-            pass
+        """Ferme les sockets sans relacher les overrides (l'avion reste fige)."""
         if self.sct:
             self.sct.close()
         self.sock.close()
@@ -838,26 +834,6 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     data = load_poses_json(poses_path)
     ltp_alt = data.get("ltp_alt", 0.0)
 
-    # Charger et injecter la meteo (per-scenario, une seule fois)
-    weather_active = False
-    if weather_profile_path and Path(weather_profile_path).exists():
-        from xplane_weather import (
-            load_weather_profile, inject_weather, set_exchange_dir, check_plugin,
-        )
-        weather_cfg = load_weather_profile(weather_profile_path)
-        if weather_cfg:
-            if config.xplane_dir:
-                set_exchange_dir(config.xplane_dir)
-                if check_plugin():
-                    print(f"  [XPLANE] Plugin XPPython3 weather OK")
-                    # Altitude max avion pour placer les nuages au-dessus
-                    max_alt_m = max(p["alt_m"] for p in data["poses"])
-                    # Longitude pour conversion heure locale → UTC
-                    avg_lon = data["poses"][0]["lon"]
-                    weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=avg_lon)
-                else:
-                    print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
-
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -878,7 +854,37 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
         conn.setup_view()
 
-        # La meteo est geree par le plugin XPPython3 (pas de setup UDP)
+        # Teleporter l'avion a la premiere pose AVANT la meteo
+        # pour que X-Plane charge les textures de la zone pendant la stabilisation
+        first_pose = data["poses"][0]
+        xp_first = convert_pose_ges_to_xplane(
+            first_pose["lon"], first_pose["lat"], first_pose["alt_m"],
+            first_pose["heading"], first_pose["pitch_ges"], first_pose["roll"],
+        )
+        conn.set_camera_pose(
+            xp_first["lat"], xp_first["lon"], xp_first["alt_m"],
+            xp_first["heading"], xp_first["pitch"], xp_first["roll"],
+        )
+
+        # Injecter la meteo (per-scenario, une seule fois) APRES teleportation
+        # La stabilisation de 15s laisse le temps a X-Plane de charger les textures
+        weather_active = False
+        if weather_profile_path and Path(weather_profile_path).exists():
+            from xplane_weather import (
+                load_weather_profile, inject_weather, set_exchange_dir, check_plugin,
+            )
+            weather_cfg = load_weather_profile(weather_profile_path)
+            if weather_cfg:
+                if config.xplane_dir:
+                    set_exchange_dir(config.xplane_dir)
+                    if check_plugin():
+                        print(f"  [XPLANE] Plugin XPPython3 weather OK")
+                        max_alt_m = max(p["alt_m"] for p in data["poses"])
+                        avg_lon = data["poses"][0]["lon"]
+                        weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=avg_lon)
+                    else:
+                        print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
+
         # Positionnement via VEHS (double precision) — pas besoin de reference locale
 
         # Sauver la config de rendu (FOV + resolution + pilot eye) pour le labeling GT
@@ -929,6 +935,13 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
         if n_rendered < n_frames:
             print(f"  [XPLANE] ATTENTION : {n_frames - n_rendered} frames manquantes")
+
+        # Geler l'avion sur la derniere position pour eviter un crash au sol
+        conn.send_dref("sim/time/paused", 1.0)
+        conn.send_dref("sim/flightmodel/position/local_vx", 0.0)
+        conn.send_dref("sim/flightmodel/position/local_vy", 0.0)
+        conn.send_dref("sim/flightmodel/position/local_vz", 0.0)
+        # override_planepath[0] reste a 1.0 (pas de release)
 
     finally:
         # Pas de clear meteo ici — le prochain set_weather (isIncremental=False)
