@@ -147,9 +147,6 @@ def export(root_node, path):
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
-    # --- Renderer (ges ou xplane, via variable d'environnement) ---
-    renderer = os.environ.get("LARD_RENDERER", "ges").lower()
-
     # --- Exporter .esp + .yaml + poses_cam_export.json ---
     weather_arg = weather_cfg if has_weather(weather_cfg) else None
     export_scenario(

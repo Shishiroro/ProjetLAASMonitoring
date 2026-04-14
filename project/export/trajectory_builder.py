@@ -182,11 +182,12 @@ def compute_convergence_factors(distances_m, segment_end_m,
     if stabilization_distance_m <= segment_end_m:
         return factors
 
-    for i, d in enumerate(distances_m):
-        if d < stabilization_distance_m:
-            ratio = (d - segment_end_m) / (stabilization_distance_m - segment_end_m)
-            raw = np.clip(ratio, 0.0, 1.0) ** exponent
-            factors[i] = residual + (1.0 - residual) * raw
+    mask = distances_m < stabilization_distance_m
+    ratio = np.clip(
+        (distances_m[mask] - segment_end_m) / (stabilization_distance_m - segment_end_m),
+        0.0, 1.0,
+    )
+    factors[mask] = residual + (1.0 - residual) * ratio ** exponent
 
     return factors
 

@@ -122,13 +122,13 @@
               1.0  Deluge/orage   precip=1.0  vis=800m       Cb        cov=1.0
             Valeurs intermediaires interpolees lineairement.
         -->
-        <parameter name="rain_intensity"   type="real" min="0.1" max="0.1"/>
+        <parameter name="rain_intensity"   type="real" min="0" max="0"/>
 
         <!-- ===== Params individuels (utilises si rain_intensity = 0) ===== -->
 
         <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1
         0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
-        <parameter name="precip_rate"      type="real" min="0" max="0"/>
+        <parameter name="precip_rate"      type="real" min="0" max="1"/>
 
         <!-- Nuages :
              cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)

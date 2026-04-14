@@ -272,13 +272,11 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
 
     # --- Fautes capteur (optionnel) ---
     if faults:
-        from dataclasses import asdict as _asdict
-        yaml_content['sensor_faults'] = [_asdict(f) for f in faults]
+        yaml_content['sensor_faults'] = [asdict(f) for f in faults]
 
     # --- Effets meteo X-Plane (optionnel) ---
     if weather:
-        from dataclasses import asdict as _asdict2
-        yaml_content['xplane_weather'] = _asdict2(weather)
+        yaml_content['xplane_weather'] = asdict(weather)
 
     yaml_file = output_path / f"{scenario_name}.yaml"
     with open(yaml_file, "w") as f:
