@@ -4,6 +4,7 @@ pyproj
 pyyaml
 opencv-python
 scikit-spatial
+scipy>=1.11
 z3-solver
 timezonefinder
 pytz

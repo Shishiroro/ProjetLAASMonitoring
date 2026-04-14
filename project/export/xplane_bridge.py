@@ -235,15 +235,16 @@ def _find_xplane_window_xlib():
 
 
 def _get_client_rect_xlib(wid):
-    """Zone client en coords ecran (Linux xlib — pas de bordures a soustraire)."""
+    """Zone client en coords ecran (Linux xlib — gere le reparenting WM)."""
     try:
-        from Xlib import X
         d = _get_xlib_disp()
         root = d.screen().root
         win = d.create_resource_object('window', wid)
         geom = win.get_geometry()
-        transl = win.translate_coords(root, 0, 0)
-        x, y = transl.x, transl.y
+        # translate_coords donne les coords absolues du point (0,0) de win
+        # dans le repere de root — c'est le coin haut-gauche de la zone client
+        coords = root.translate_coords(win, 0, 0)
+        x, y = coords.x, coords.y
         return x, y, x + geom.width, y + geom.height
     except Exception:
         return None
@@ -281,7 +282,7 @@ def resize_xplane_window(width=1280, height=1024):
         try:
             d = _get_xlib_disp()
             win = d.create_resource_object('window', hwnd)
-            win.configure(width=width, height=height)
+            win.configure(x=0, y=0, width=width, height=height)
             d.sync()
         except Exception as e:
             print(f"  [XPLANE] Resize xlib failed: {e}")

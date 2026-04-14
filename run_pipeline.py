@@ -377,9 +377,17 @@ def step_annotate_lard(run_info, csv_path, max_images=0, target_runway=None):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Police lisible (taille adaptee a l'image)
-    try:
-        font = ImageFont.truetype("arial.ttf", 20)
-    except OSError:
+    # arial.ttf = Windows, DejaVuSans/Liberation = Linux
+    font = None
+    for ttf in ["arial.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"]:
+        try:
+            font = ImageFont.truetype(ttf, 20)
+            break
+        except OSError:
+            continue
+    if font is None:
         font = ImageFont.load_default()
 
     # Charger le CSV
