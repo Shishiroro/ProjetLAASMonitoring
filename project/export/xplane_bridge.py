@@ -89,8 +89,8 @@ class XPlaneConfig:
     window_width: int = 1024        # Largeur zone client X-Plane (carre)
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 60.0             # FOV horizontal (reglages X-Plane, 60° comme LARD)
-    fov_v: float = 60.0             # FOV vertical (= horizontal car fenetre carree)
-    exchange_dir: str = ""          # Dossier echange XPPython3 (auto si vide)
+    fov_v: float = 60.0             # FOV vertical (= horizontal car fenetre carrée)
+    exchange_dir: str = ""          # Dossier echange XPPython3 (auto si vide) 
 
 
 # ---------------------------------------------------------------------------

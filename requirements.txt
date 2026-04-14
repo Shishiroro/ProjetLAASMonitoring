@@ -1,7 +1,7 @@
 # Core pipeline
 numpy
 pyproj
-pyaml
+pyyaml
 opencv-python
 scikit-spatial
 z3-solver
@@ -12,9 +12,11 @@ pytz
 mss
 Pillow
 
-# YOLOv8
+# YOLOv8 + evaluation
 ultralytics
 torch
+pandas
+matplotlib
 
 # Windows only (gestion fenetre X-Plane, DPI-aware)
 pywin32; sys_platform == "win32"

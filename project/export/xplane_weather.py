@@ -254,17 +254,15 @@ def _send_weather_command(action, weather=None, timeout=5.0):
     if weather:
         cmd["weather"] = weather
 
-    # Ecriture atomique
+    # Ecriture atomique (os.replace = atomique sur POSIX, remplace sur Windows)
     tmp = cmd_file + ".tmp"
     with open(tmp, "w") as f:
         json.dump(cmd, f)
     for _ in range(20):
         try:
-            if os.path.exists(cmd_file):
-                os.remove(cmd_file)
-            os.rename(tmp, cmd_file)
+            os.replace(tmp, cmd_file)
             break
-        except PermissionError:
+        except OSError:
             time.sleep(0.05)
 
     # Attente ack
