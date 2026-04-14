@@ -21,6 +21,5 @@ matplotlib
 # Windows only (gestion fenetre X-Plane, DPI-aware)
 pywin32; sys_platform == "win32"
 
-# NOTE Linux : installer xdotool via le gestionnaire de paquets
-#   apt install xdotool   (Debian/Ubuntu)
-#   dnf install xdotool   (Fedora)
+# Linux only (gestion fenetre X-Plane, sans droits systeme)
+python-xlib; sys_platform == "linux"

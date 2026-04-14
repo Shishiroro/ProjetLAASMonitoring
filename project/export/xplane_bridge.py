@@ -44,7 +44,6 @@ import mss.tools
 from PIL import Image
 
 import platform
-import subprocess as _sp
 
 _IS_WINDOWS = platform.system() == "Windows"
 _IS_LINUX = platform.system() == "Linux"
@@ -63,16 +62,27 @@ if _IS_WINDOWS:
     except ImportError:
         pass
 
-# Linux : xdotool pour gestion fenetres (apt install xdotool)
-HAS_XDOTOOL = False
+# Linux : python-xlib pour gestion fenetres (pip install python-xlib)
+HAS_XLIB = False
 if _IS_LINUX:
     try:
-        _sp.run(["xdotool", "--version"], capture_output=True, check=True)
-        HAS_XDOTOOL = True
-    except (FileNotFoundError, _sp.CalledProcessError):
+        from Xlib import display as _XlibDisplay  # noqa: F401
+        HAS_XLIB = True
+    except ImportError:
         pass
 
-HAS_WINDOW_MGMT = HAS_WIN32 or HAS_XDOTOOL
+HAS_WINDOW_MGMT = HAS_WIN32 or HAS_XLIB
+
+# Display Xlib (lazy, une seule connexion par process)
+_xlib_disp = None
+
+
+def _get_xlib_disp():
+    global _xlib_disp
+    if _xlib_disp is None:
+        from Xlib import display as _XD
+        _xlib_disp = _XD.Display()
+    return _xlib_disp
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +135,8 @@ def find_xplane_window():
     """
     if HAS_WIN32:
         return _find_xplane_window_win32()
-    if HAS_XDOTOOL:
-        return _find_xplane_window_linux()
+    if HAS_XLIB:
+        return _find_xplane_window_xlib()
     return None
 
 
@@ -156,60 +166,87 @@ def _get_client_rect_win32(hwnd):
     return left, top, right, bottom
 
 
-# --- Linux impl (xdotool) ---
+# --- Linux impl (python-xlib) ---
 
-def _find_xplane_window_linux():
+def _xlib_window_name(d, win):
+    """Retourne le titre de la fenetre (tente _NET_WM_NAME puis WM_NAME)."""
+    from Xlib import X
     try:
-        out = _sp.run(
-            ["xdotool", "search", "--name", "X-Plane"],
-            capture_output=True, text=True, check=True,
-        )
-    except _sp.CalledProcessError:
-        return None
-    wids = out.stdout.strip().splitlines()
-    if not wids:
-        return None
-    # Prendre la plus grande fenetre
-    best, best_area = None, 0
-    for wid in wids:
-        geo = _xdotool_geometry(wid)
-        if not geo:
-            continue
-        area = geo['width'] * geo['height']
-        if area > best_area:
-            best_area = area
-            best = {'hwnd': wid, 'rect': (geo['x'], geo['y'],
-                     geo['x'] + geo['width'], geo['y'] + geo['height']),
-                     'title': 'X-Plane'}
-    return best
-
-
-def _xdotool_geometry(wid):
-    """Retourne {x, y, width, height} pour un window ID xdotool."""
+        atom = d.intern_atom('_NET_WM_NAME')
+        utf8 = d.intern_atom('UTF8_STRING')
+        prop = win.get_full_property(atom, utf8)
+        if prop and prop.value:
+            return prop.value.decode('utf-8', errors='replace')
+    except Exception:
+        pass
     try:
-        geo = _sp.run(
-            ["xdotool", "getwindowgeometry", "--shell", str(wid)],
-            capture_output=True, text=True, check=True,
-        )
-    except _sp.CalledProcessError:
-        return None
-    vals = {}
-    for line in geo.stdout.strip().splitlines():
-        if "=" in line:
-            k, v = line.split("=", 1)
-            vals[k.strip()] = int(v.strip())
-    if all(k in vals for k in ("X", "Y", "WIDTH", "HEIGHT")):
-        return {'x': vals['X'], 'y': vals['Y'],
-                'width': vals['WIDTH'], 'height': vals['HEIGHT']}
+        name = win.get_wm_name()
+        if name:
+            return name
+    except Exception:
+        pass
     return None
 
 
-def _get_client_rect_linux(wid):
-    """Zone client en coords ecran (Linux — pas de bordures a soustraire avec xdotool)."""
-    geo = _xdotool_geometry(wid)
-    if not geo:
+def _find_xplane_window_xlib():
+    """Trouve la fenetre X-Plane via python-xlib."""
+    try:
+        from Xlib import X
+        d = _get_xlib_disp()
+        root = d.screen().root
+        # _NET_CLIENT_LIST = fenetres top-level (EWMH, supporte par tous les WM modernes)
+        try:
+            prop = root.get_full_property(d.intern_atom('_NET_CLIENT_LIST'), X.AnyPropertyType)
+            wids = list(prop.value) if prop else []
+        except Exception:
+            wids = []
+        if not wids:
+            # Fallback : parcours recursif de l'arbre
+            def _collect(win):
+                ids = []
+                try:
+                    for child in win.query_tree().children:
+                        ids.append(child.__resource_id)
+                        ids.extend(_collect(child))
+                except Exception:
+                    pass
+                return ids
+            wids = _collect(root)
+        candidates = []
+        for wid in wids:
+            try:
+                win = d.create_resource_object('window', wid)
+                name = _xlib_window_name(d, win)
+                if not name or 'X-Plane' not in name:
+                    continue
+                geom = win.get_geometry()
+                transl = win.translate_coords(root, 0, 0)
+                x, y, w, h = transl.x, transl.y, geom.width, geom.height
+                candidates.append({'hwnd': wid, 'rect': (x, y, x + w, y + h),
+                                   'title': name, 'area': w * h})
+            except Exception:
+                continue
+        if not candidates:
+            return None
+        best = max(candidates, key=lambda c: c['area'])
+        return {'hwnd': best['hwnd'], 'rect': best['rect'], 'title': best['title']}
+    except Exception:
         return None
-    return geo['x'], geo['y'], geo['x'] + geo['width'], geo['y'] + geo['height']
+
+
+def _get_client_rect_xlib(wid):
+    """Zone client en coords ecran (Linux xlib — pas de bordures a soustraire)."""
+    try:
+        from Xlib import X
+        d = _get_xlib_disp()
+        root = d.screen().root
+        win = d.create_resource_object('window', wid)
+        geom = win.get_geometry()
+        transl = win.translate_coords(root, 0, 0)
+        x, y = transl.x, transl.y
+        return x, y, x + geom.width, y + geom.height
+    except Exception:
+        return None
 
 
 # --- Fonctions cross-platform ---
@@ -218,8 +255,8 @@ def _get_client_rect(hwnd):
     """Zone client en coords ecran (dispatch OS)."""
     if HAS_WIN32:
         return _get_client_rect_win32(hwnd)
-    if HAS_XDOTOOL:
-        return _get_client_rect_linux(hwnd)
+    if HAS_XLIB:
+        return _get_client_rect_xlib(hwnd)
     return None
 
 
@@ -240,9 +277,14 @@ def resize_xplane_window(width=1280, height=1024):
             hwnd, full[0], full[1],
             width + border_w, height + border_h, True,
         )
-    elif HAS_XDOTOOL:
-        _sp.run(["xdotool", "windowsize", str(hwnd), str(width), str(height)],
-                check=True)
+    elif HAS_XLIB:
+        try:
+            d = _get_xlib_disp()
+            win = d.create_resource_object('window', hwnd)
+            win.configure(width=width, height=height)
+            d.sync()
+        except Exception as e:
+            print(f"  [XPLANE] Resize xlib failed: {e}")
 
     time.sleep(0.5)
     info['rect'] = find_xplane_window()['rect'] if find_xplane_window() else info['rect']
