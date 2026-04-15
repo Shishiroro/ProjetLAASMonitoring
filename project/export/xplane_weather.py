@@ -33,6 +33,12 @@ MAX_VISIBILITY_FOR_RAIN_M = 10000.0
 # Teste a ~5-10s avec updateImmediately=True sur XP12
 CLOUD_STABILIZATION_DELAY_S = 15
 
+# Acceleration sim pour accumulation effets sol (flaques, neige)
+# On accelere la sim a SIM_SPEED_BOOST pendant ACCUMULATION_REAL_S secondes
+# puis on revient a 1x. Ex: 8x pendant 5s reel = 40s de meteo simulee.
+SIM_SPEED_BOOST = 8
+ACCUMULATION_REAL_S = 5
+
 
 @dataclass
 class WeatherConfig:
@@ -347,14 +353,56 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
     # Attente stabilisation nuages GPU
     needs_cloud_wait = (config.cloud_type >= 0 and config.cloud_coverage > 0) or config.precip_rate > 0
     if needs_cloud_wait:
-        print(f"  [WEATHER] Attente {CLOUD_STABILIZATION_DELAY_S}s stabilisation nuages...")
-        time.sleep(CLOUD_STABILIZATION_DELAY_S)
+        # Si precip active, accelerer pendant la stabilisation nuages
+        # pour accumuler les effets sol (flaques, neige) sans temps supplementaire
+        if config.precip_rate > 0:
+            print(f"  [WEATHER] Stabilisation {CLOUD_STABILIZATION_DELAY_S}s en {SIM_SPEED_BOOST}x "
+                  f"(accumulation flaques/neige)...")
+            set_sim_speed(SIM_SPEED_BOOST)
+            time.sleep(CLOUD_STABILIZATION_DELAY_S)
+            set_sim_speed(1)
+        else:
+            print(f"  [WEATHER] Attente {CLOUD_STABILIZATION_DELAY_S}s stabilisation nuages...")
+            time.sleep(CLOUD_STABILIZATION_DELAY_S)
     else:
         # Visibilite/brouillard seul = quasi-instantane
         time.sleep(3)
 
     print(f"  [WEATHER] Stabilisation terminee")
     return True
+
+
+def set_sim_speed(speed):
+    """Change la vitesse de simulation X-Plane (1=normal, 2=2x, ..., 16=max)."""
+    global _seq_counter
+    if DEFAULT_EXCHANGE_DIR is None:
+        return False
+    _seq_counter += 1
+    seq = _seq_counter
+    cmd_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_command.json")
+    cmd = {"seq": seq, "action": "set_sim_speed", "speed": int(speed)}
+    tmp = cmd_file + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cmd, f)
+    for _ in range(20):
+        try:
+            os.replace(tmp, cmd_file)
+            break
+        except OSError:
+            time.sleep(0.05)
+    # Attente ack
+    sts_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_status.json")
+    deadline = time.time() + 3.0
+    while time.time() < deadline:
+        try:
+            with open(sts_file, "r") as f:
+                status = json.load(f)
+            if status.get("ack_seq") == seq:
+                return status.get("ok", False)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass
+        time.sleep(0.05)
+    return False
 
 
 def reset_weather():

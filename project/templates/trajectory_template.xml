@@ -144,13 +144,13 @@
              cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)
                            0 = Cirrus (fins, haute altitude, transparents)
                            1 = Stratus (couche uniforme, gris, bas)
-                           2 = Cumulus (moutonnes, beau temps)
+                           2 = Cumulus (moutonnes, beau temps) // PAS DE PLUIE 
                            3 = Cumulonimbus (epais, sombres, orage/pluie)
                            XP12 génère des éclairs automatiquement quand il y a des Cumulonimbus (cloud_type=3)
              cloud_coverage : proportion du ciel couvert [0, 1]
                               0 = ciel degage, 0.5 = moitie couvert, 1 = completement couvert
                               Ignore si cloud_type = -1 -->
-        <parameter name="cloud_type"       type="real" min="0" max="0"/>
+        <parameter name="cloud_type"       type="real" min="-1" max="-1"/>
         <parameter name="cloud_coverage"   type="real" min="0.8" max="0.8"/>
 
 
@@ -162,7 +162,7 @@
              1.0 = defaut, 0.1 = tres fines, 5.0 = tres grosses
              N'affecte pas la quantite de pluie (utiliser precip_rate pour ca)
              Ignore si precip_rate = 0 -->
-        <parameter name="rain_scale"       type="real" min="0" max="5"/>
+        <parameter name="rain_scale"       type="real" min="5" max="5"/>
 
         <!-- Marge nuages : hauteur en metres au-dessus de l'avion pour placer la base des nuages.
              Ex: 200 = nuages 200m au-dessus de l'altitude max avion.  -->

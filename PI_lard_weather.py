@@ -52,6 +52,7 @@ class PythonInterface:
         self.dr_elev = None
         self.dr_change_mode = None
         self.dr_rain_scale = None   # sim/private/controls/rain/scale (taille gouttes)
+        self.dr_sim_speed = None    # sim/time/sim_speed (multiplicateur vitesse sim)
         # Command handle for regen_weather
         self.cmd_regen_weather = None
 
@@ -98,6 +99,9 @@ class PythonInterface:
                 self.dr_rain_scale = xp.findDataRef("sim/private/controls/rain/scale")
             except Exception:
                 self.dr_rain_scale = None
+
+            # Sim speed (for accelerating weather accumulation)
+            self.dr_sim_speed = xp.findDataRef("sim/time/sim_speed")
 
             # Regen weather command
             self.cmd_regen_weather = xp.findCommand("sim/operation/regen_weather")
@@ -158,6 +162,8 @@ class PythonInterface:
                 self._apply_weather(cmd.get("weather", {}))
             elif action == "clear_weather":
                 self._clear_weather()
+            elif action == "set_sim_speed":
+                self._set_sim_speed(cmd.get("speed", 1))
             elif action == "noop":
                 pass
             else:
@@ -285,6 +291,42 @@ class PythonInterface:
                f"precip={info.precip_rate:.2f} "
                f"vis={info.visibility:.0f}m radius={info.radius_nm:.0f}nm"
                f"{time_str} at ({lat:.4f}, {lon:.4f})")
+
+    def _set_sim_speed(self, speed):
+        """Set simulation speed multiplier (1=normal, 2=2x, 4=4x, etc.).
+
+        Essaie d'abord le dataref sim/time/sim_speed,
+        puis fallback sur les commandes sim_speed_up/down.
+        """
+        speed = max(1, min(int(speed), 16))  # clamp [1, 16]
+
+        # Methode 1 : dataref direct
+        try:
+            current = xp.getDatai(self.dr_sim_speed)
+            xp.setDatai(self.dr_sim_speed, speed)
+            after = xp.getDatai(self.dr_sim_speed)
+            if after == speed:
+                xp.log(f"LARD Weather v2: sim_speed {current}x -> {speed}x (dataref)")
+                return
+            xp.log(f"LARD Weather v2: dataref write ignored ({after} != {speed}), fallback commands")
+        except Exception as e:
+            xp.log(f"LARD Weather v2: dataref sim_speed error: {e}, fallback commands")
+
+        # Methode 2 : commandes sim_speed_up / sim_speed_down
+        try:
+            cmd_up = xp.findCommand("sim/operation/sim_speed_up")
+            cmd_down = xp.findCommand("sim/operation/sim_speed_down")
+            # D'abord revenir a 1x
+            for _ in range(8):
+                xp.commandOnce(cmd_down)
+            # Puis monter au niveau voulu (chaque appui double la vitesse)
+            import math
+            steps = int(math.log2(speed)) if speed > 1 else 0
+            for _ in range(steps):
+                xp.commandOnce(cmd_up)
+            xp.log(f"LARD Weather v2: sim_speed -> {speed}x (commands, {steps} steps up)")
+        except Exception as e:
+            xp.log(f"LARD Weather v2: sim_speed command error: {e}")
 
     def _clear_weather(self):
         """Reset to default weather.
