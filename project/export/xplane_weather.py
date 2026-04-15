@@ -26,9 +26,6 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 
 
-# Visibilite max pour que la pluie soit visible dans XP12
-MAX_VISIBILITY_FOR_RAIN_M = 10000.0
-
 # Temps de stabilisation nuages GPU (secondes)
 # Teste a ~5-10s avec updateImmediately=True sur XP12
 CLOUD_STABILIZATION_DELAY_S = 15
@@ -155,10 +152,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
         Les nuages sont places au-dessus avec une marge de config.cloud_margin_m.
     :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     """
-    # Cap visibilite si pluie active : au-dela de 10km la pluie est quasi invisible
     visibility = config.visibility_m
-    if config.precip_rate > 0:
-        visibility = min(visibility, MAX_VISIBILITY_FOR_RAIN_M)
 
     params = {
         "precip_rate": config.precip_rate,
