@@ -18,11 +18,9 @@ Capture :
   - mss (screen grab) cible sur la fenetre X-Plane
   - JPEG pour la vitesse (~25ms/frame vs 300ms avec screenshot X-Plane)
 
-Conventions de poses :
-  - Notre flight_data (GES) : (lon, lat, alt, yaw, pitch_ges, roll)
-    pitch_ges : 90 = level (convention Google Earth Studio)
-  - X-Plane : pitch 0 = level, negatif = nez en bas
-  - Conversion : xplane_pitch = pitch_ges - 90
+Convention pitch stockee : 90 = regard horizontal (level).
+X-Plane : pitch 0 = level, negatif = nez en bas.
+Conversion : xplane_pitch = pitch_stocke - 90.
 
 Usage :
     from xplane_bridge import render_scenario, XPlaneConfig
@@ -710,8 +708,6 @@ class XPlaneConnection:
         pil_img.save(str(output_path), quality=90)
         return True
 
-    # Weather is now handled by xplane_weather.py via XPPython3 plugin
-
     def release(self):
         """Rend le controle de l'avion a X-Plane."""
         self.send_dref("sim/time/paused", 0.0)
@@ -727,11 +723,7 @@ class XPlaneConnection:
 
 
 # ---------------------------------------------------------------------------
-# Conversion de poses GES → X-Plane
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Connexion UDP (seul backend, position uniquement)
+# Connexion UDP
 # ---------------------------------------------------------------------------
 
 def create_connection(config=None):
@@ -745,11 +737,11 @@ def create_connection(config=None):
     return XPlaneConnection(config)
 
 
-def convert_pose_ges_to_xplane(lon, lat, alt, yaw, pitch_ges, roll):
-    """Convertit une pose du format GES vers le format X-Plane.
+def _convert_pose(lon, lat, alt, yaw, pitch_src, roll):
+    """Convertit une pose stockee vers le format X-Plane.
 
-    GES : pitch 90 = regard horizontal (level)
-    X-Plane : pitch 0 = level, negatif = nez en bas
+    Format stocke : pitch 90 = regard horizontal (level).
+    X-Plane : pitch 0 = level, negatif = nez en bas.
 
     :return: dict {lat, lon, alt_m, heading, pitch, roll}
     """
@@ -758,7 +750,7 @@ def convert_pose_ges_to_xplane(lon, lat, alt, yaw, pitch_ges, roll):
         "lon": float(lon),
         "alt_m": float(alt),
         "heading": float(yaw),
-        "pitch": float(pitch_ges) - 90.0,
+        "pitch": float(pitch_src) - 90.0,
         "roll": float(roll),
     }
 
@@ -786,7 +778,7 @@ def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
             "lat": float(lat),
             "alt_m": float(alt),
             "heading": float(yaw),
-            "pitch_ges": float(pitch),
+            "pitch": float(pitch),
             "roll": float(roll),
         })
 
@@ -808,7 +800,7 @@ def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
 def load_poses_json(path):
     """Charge un fichier poses_cam_export.json.
 
-    :return: dict {scenario_name, n_frames, fps, poses: [{lon,lat,alt_m,heading,pitch_ges,roll}]}
+    :return: dict {scenario_name, n_frames, fps, poses: [{lon,lat,alt_m,heading,pitch,roll}]}
     """
     with open(path) as f:
         return json.load(f)
@@ -857,9 +849,9 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         # Teleporter l'avion a la premiere pose AVANT la meteo
         # pour que X-Plane charge les textures de la zone pendant la stabilisation
         first_pose = data["poses"][0]
-        xp_first = convert_pose_ges_to_xplane(
+        xp_first = _convert_pose(
             first_pose["lon"], first_pose["lat"], first_pose["alt_m"],
-            first_pose["heading"], first_pose["pitch_ges"], first_pose["roll"],
+            first_pose["heading"], first_pose["pitch"], first_pose["roll"],
         )
         conn.set_camera_pose(
             xp_first["lat"], xp_first["lon"], xp_first["alt_m"],
@@ -881,8 +873,8 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                     if check_plugin():
                         print(f"  [XPLANE] Plugin XPPython3 weather OK")
                         max_alt_m = max(p["alt_m"] for p in data["poses"])
-                        avg_lon = data["poses"][0]["lon"]
-                        weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=avg_lon)
+                        first_lon = data["poses"][0]["lon"]
+                        weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=first_lon)
                         weather_status = "ok" if weather_active else "inject_failed"
                     else:
                         print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
@@ -913,9 +905,9 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         img_digits = len(str(n_frames - 1))
 
         for i, pose in enumerate(data["poses"]):
-            xp = convert_pose_ges_to_xplane(
+            xp = _convert_pose(
                 pose["lon"], pose["lat"], pose["alt_m"],
-                pose["heading"], pose["pitch_ges"], pose["roll"],
+                pose["heading"], pose["pitch"], pose["roll"],
             )
 
             conn.set_camera_pose(

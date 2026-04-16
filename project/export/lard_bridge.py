@@ -139,7 +139,7 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     :param output_dir: dossier de sortie
     :param scenario_name: nom de base des fichiers
     :param faults: liste de FaultConfig (optionnel)
-    :param weather: liste de WeatherConfig (optionnel)
+    :param weather: WeatherConfig (optionnel)
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)

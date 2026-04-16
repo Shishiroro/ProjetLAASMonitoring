@@ -94,9 +94,6 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
         ys = np.array([row[c] for c in CORNER_Y_COLS], dtype=np.float64)
         bbox_px = box_extract(xs, ys)  # [x_min, y_min, x_max, y_max] pixels
 
-        # TODO: les labels LARD sont incorrects pour les scenarios GES
-        # (bug dans pointcam_to_pix). En attente de fix equipe LARD.
-        # Pour l'instant normalisation standard x/width, y/height.
         bbox_norm = np.clip(np.array([
             bbox_px[0] / img_w,
             bbox_px[1] / img_h,

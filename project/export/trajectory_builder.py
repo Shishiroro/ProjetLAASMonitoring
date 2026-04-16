@@ -163,7 +163,6 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
 # ---------------------------------------------------------------------------
 # Convergence finale
 # ---------------------------------------------------------------------------
-#facteurs [0,1] par frame. Vaut 1.0 loin de la piste, diminue vers residual vers la piste
 
 def compute_convergence_factors(distances_m, segment_end_m,
                                 stabilization_distance_m,
@@ -218,8 +217,7 @@ def compute_crab_angle(wind_speed_kts, wind_direction_deg,
 # ---------------------------------------------------------------------------
 # Generation de trajectoire complete
 # ---------------------------------------------------------------------------
-# Genere une trajectoire d'approche complete, de segment_start_m a segment_end_m,
-# Retourne la liste de poses (lon, lat, alt, yaw, pitch, roll) 
+
 def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
                      ltp_lat, ltp_lon, ltp_alt,
                      runway_heading_deg, runway_back_azimuth_deg):
@@ -281,10 +279,10 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     max_roll_rate_ds = 5.0    # deg/s
     max_yaw_rate_ds = 3.0     # deg/s
     max_pitch_rate_ds = 2.0   # deg/s
-    dt_rl = dt_array[0]  # constant (vitesse constante)
+    dt_frame = dt_array[0]  # constant (vitesse constante)
 
     def _rate_limit(signal, max_rate_ds):
-        max_delta = max_rate_ds * dt_rl
+        max_delta = max_rate_ds * dt_frame
         for i in range(1, len(signal)):
             delta = signal[i] - signal[i - 1]
             if abs(delta) > max_delta:
@@ -305,7 +303,7 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     # Gain ~2.0 : 1 deg/s de deviation laterale → 2 deg de roll.
     roll_lateral_gain = 2.0
     ema_alpha = 0.15  # coeff EMA (0=pas de filtre, 1=tout lisse). 0.15 ≈ cutoff ~1Hz a 10fps
-    d_alpha_h = np.diff(alpha_h_dev, prepend=alpha_h_dev[0]) / dt_rl  # derivee deg/s
+    d_alpha_h = np.diff(alpha_h_dev, prepend=alpha_h_dev[0]) / dt_frame  # derivee deg/s
     # Filtre EMA passe-bas sur la derivee
     d_alpha_h_filtered = np.zeros_like(d_alpha_h)
     d_alpha_h_filtered[0] = d_alpha_h[0]
@@ -347,7 +345,6 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     # Converti en par-frame via dt reel (depend de vitesse + fps).
     max_climb_rate_ms = 1.5
     max_descent_rate_ms = 5.0   # ~1000 ft/min : descente max realiste en approche
-    dt_frame = dt_array[0]  # constant (vitesse constante)
     max_climb_per_frame = max_climb_rate_ms * dt_frame
     max_descent_per_frame = max_descent_rate_ms * dt_frame
     for i in range(1, n_frames):

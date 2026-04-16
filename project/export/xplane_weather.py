@@ -123,10 +123,6 @@ def validate_weather(config):
     if not 0.1 <= config.rain_scale <= 5.0:
         raise ValueError(f"rain_scale={config.rain_scale} hors [0.1, 5.0]")
 
-    # Note : l'ancienne contrainte "pluie necessite vis <= 10km" a ete retiree.
-    # Elle venait de tests avec le code v1 buggé (mauvais enum cloud_type).
-    # A re-evaluer apres tests v2.
-
 
 def local_hour_to_zulu(local_hour, longitude):
     """Convertit une heure locale solaire en heure UTC.
@@ -226,7 +222,7 @@ def load_weather_profile(profile_path):
 # ---------------------------------------------------------------------------
 
 DEFAULT_EXCHANGE_DIR = None
-_seq_counter = 0
+_seq = 0
 
 
 def set_exchange_dir(xplane_dir):
@@ -238,19 +234,20 @@ def set_exchange_dir(xplane_dir):
     os.makedirs(DEFAULT_EXCHANGE_DIR, exist_ok=True)
 
 
-def _send_weather_command(action, weather=None, timeout=5.0, retries=2):
+def _send_weather_command(action, weather=None, timeout=5.0, retries=2, **extra_fields):
     """Envoie une commande au plugin PI_lard_weather.py et attend l'ack.
 
     :param retries: nombre de tentatives supplementaires si timeout (0 = pas de retry)
+    :param extra_fields: champs supplementaires a inclure dans la commande JSON
     """
-    global _seq_counter
+    global _seq
 
     if DEFAULT_EXCHANGE_DIR is None:
         raise RuntimeError("Exchange dir not set. Call set_exchange_dir(xplane_dir) first.")
 
     for attempt in range(1 + retries):
-        _seq_counter += 1
-        seq = _seq_counter
+        _seq += 1
+        seq = _seq
 
         cmd_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_command.json")
         sts_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_status.json")
@@ -258,6 +255,7 @@ def _send_weather_command(action, weather=None, timeout=5.0, retries=2):
         cmd = {"seq": seq, "action": action}
         if weather:
             cmd["weather"] = weather
+        cmd.update(extra_fields)
 
         # Ecriture atomique (os.replace = atomique sur POSIX, remplace sur Windows)
         tmp = cmd_file + ".tmp"
@@ -296,18 +294,6 @@ def check_plugin():
     """Verifie que le plugin XPPython3 est actif."""
     result = _send_weather_command("noop", timeout=3.0)
     return result is not None and result.get("ok", False)
-
-
-def set_time_of_day(hour, xplane_dir=None):
-    """Change l'heure du jour dans X-Plane via dataref UDP.
-
-    :param hour: heure locale [0-24]
-    :param xplane_dir: chemin X-Plane (pour trouver le port UDP) — non utilise
-    """
-    # L'heure est geree par dataref sim/time/zulu_time_sec via UDP
-    # Pour l'instant on l'envoie comme parametre weather au plugin
-    # qui le gere via xp.setDataf()
-    pass
 
 
 def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
@@ -377,35 +363,10 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
 
 def set_sim_speed(speed):
     """Change la vitesse de simulation X-Plane (1=normal, 2=2x, ..., 16=max)."""
-    global _seq_counter
     if DEFAULT_EXCHANGE_DIR is None:
         return False
-    _seq_counter += 1
-    seq = _seq_counter
-    cmd_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_command.json")
-    cmd = {"seq": seq, "action": "set_sim_speed", "speed": int(speed)}
-    tmp = cmd_file + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(cmd, f)
-    for _ in range(20):
-        try:
-            os.replace(tmp, cmd_file)
-            break
-        except OSError:
-            time.sleep(0.05)
-    # Attente ack
-    sts_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_status.json")
-    deadline = time.time() + 3.0
-    while time.time() < deadline:
-        try:
-            with open(sts_file, "r") as f:
-                status = json.load(f)
-            if status.get("ack_seq") == seq:
-                return status.get("ok", False)
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            pass
-        time.sleep(0.05)
-    return False
+    result = _send_weather_command("set_sim_speed", timeout=3.0, retries=0, speed=int(speed))
+    return result is not None and result.get("ok", False)
 
 
 def reset_weather():

@@ -138,7 +138,7 @@
 
         <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1
         0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
-        <parameter name="precip_rate"      type="real" min="0" max="0"/>
+        <parameter name="precip_rate"      type="real" min="1" max="1"/>
 
         <!-- Nuages :
              cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)
