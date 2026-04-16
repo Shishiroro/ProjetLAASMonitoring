@@ -45,6 +45,7 @@ class WeatherConfig:
     cloud_type: float = -1.0         # -1 = pas de nuages
     cloud_coverage: float = 0.0
     cloud_margin_m: float = 200.0    # marge au-dessus de l'avion pour base nuages
+    cloud_thickness_m: float = 2000.0  # epaisseur du nuage (alt_top = alt_base + thickness)
     visibility_m: float = 50000.0
     temperature_c: float = 15.0
     time_of_day_h: float = 12.0
@@ -176,7 +177,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
         params["cloud_type"] = config.cloud_type
         params["cloud_coverage"] = config.cloud_coverage
         params["cloud_base_msl"] = cloud_base
-        params["cloud_top_msl"] = cloud_base + 2000.0
+        params["cloud_top_msl"] = cloud_base + config.cloud_thickness_m
     elif config.precip_rate > 0:
         # Pluie sans nuages manuels : forcer Cumulonimbus
         # XP12 ne genere pas ses propres nuages via l'API setWeatherAtLocation,
@@ -184,7 +185,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
         params["cloud_type"] = 3.0   # Cumulonimbus
         params["cloud_coverage"] = 1.0
         params["cloud_base_msl"] = cloud_base
-        params["cloud_top_msl"] = cloud_base + 2000.0
+        params["cloud_top_msl"] = cloud_base + config.cloud_thickness_m
 
     # Taille des gouttes (dataref prive, ignore si non supporte)
     if config.rain_scale != 1.0:
@@ -237,49 +238,57 @@ def set_exchange_dir(xplane_dir):
     os.makedirs(DEFAULT_EXCHANGE_DIR, exist_ok=True)
 
 
-def _send_weather_command(action, weather=None, timeout=5.0):
-    """Envoie une commande au plugin PI_lard_weather.py et attend l'ack."""
+def _send_weather_command(action, weather=None, timeout=5.0, retries=2):
+    """Envoie une commande au plugin PI_lard_weather.py et attend l'ack.
+
+    :param retries: nombre de tentatives supplementaires si timeout (0 = pas de retry)
+    """
     global _seq_counter
 
     if DEFAULT_EXCHANGE_DIR is None:
         raise RuntimeError("Exchange dir not set. Call set_exchange_dir(xplane_dir) first.")
 
-    _seq_counter += 1
-    seq = _seq_counter
+    for attempt in range(1 + retries):
+        _seq_counter += 1
+        seq = _seq_counter
 
-    cmd_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_command.json")
-    sts_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_status.json")
+        cmd_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_command.json")
+        sts_file = os.path.join(DEFAULT_EXCHANGE_DIR, "weather_status.json")
 
-    cmd = {"seq": seq, "action": action}
-    if weather:
-        cmd["weather"] = weather
+        cmd = {"seq": seq, "action": action}
+        if weather:
+            cmd["weather"] = weather
 
-    # Ecriture atomique (os.replace = atomique sur POSIX, remplace sur Windows)
-    tmp = cmd_file + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(cmd, f)
-    for _ in range(20):
-        try:
-            os.replace(tmp, cmd_file)
-            break
-        except OSError:
+        # Ecriture atomique (os.replace = atomique sur POSIX, remplace sur Windows)
+        tmp = cmd_file + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(cmd, f)
+        for _ in range(20):
+            try:
+                os.replace(tmp, cmd_file)
+                break
+            except OSError:
+                time.sleep(0.05)
+
+        # Attente ack
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                with open(sts_file, "r") as f:
+                    status = json.load(f)
+                if status.get("ack_seq") == seq:
+                    if not status.get("ok"):
+                        print(f"  [WEATHER] Plugin error: {status.get('error')}")
+                    return status
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                pass
             time.sleep(0.05)
 
-    # Attente ack
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            with open(sts_file, "r") as f:
-                status = json.load(f)
-            if status.get("ack_seq") == seq:
-                if not status.get("ok"):
-                    print(f"  [WEATHER] Plugin error: {status.get('error')}")
-                return status
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            pass
-        time.sleep(0.05)
+        if attempt < retries:
+            print(f"  [WEATHER] Timeout (tentative {attempt+1}/{1+retries}) — retry dans 3s...")
+            time.sleep(3.0)
 
-    print(f"  [WEATHER] Timeout — plugin ne repond pas (seq={seq})")
+    print(f"  [WEATHER] Timeout — plugin ne repond pas apres {1+retries} tentatives (seq={seq})")
     return None
 
 
@@ -340,7 +349,7 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
     parts.append(f"avion_max={aircraft_max_alt_m:.0f}m")
     if config.cloud_type >= 0:
         cloud_base = aircraft_max_alt_m + config.cloud_margin_m
-        parts.append(f"nuages={cloud_base:.0f}-{cloud_base + 2000:.0f}m MSL")
+        parts.append(f"nuages={cloud_base:.0f}-{cloud_base + config.cloud_thickness_m:.0f}m MSL")
 
     print(f"  [WEATHER] Injecte : {', '.join(parts)}")
 

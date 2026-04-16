@@ -78,7 +78,7 @@
         <!-- ===== Effets meteo X-Plane 12 (per-scenario) ===== -->
         <!--
             Meteo injectee UNE FOIS avant le rendu du scenario via le plugin
-            XPPython3 (PI_lard_weather.py) + XPLMWeather API. Ignores si renderer=ges.
+            XPPython3 (PI_lard_weather.py) + XPLMWeather API.
 
             La meteo ne change pas pendant les ~Xs d'une approche.
             Les nuages sont places automatiquement au-dessus de l'avion (alt max + cloud_margin_m).
@@ -138,13 +138,13 @@
 
         <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1
         0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
-        <parameter name="precip_rate"      type="real" min="1" max="1"/>
+        <parameter name="precip_rate"      type="real" min="0" max="0"/>
 
         <!-- Nuages :
              cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)
                            0 = Cirrus (fins, haute altitude, transparents)
                            1 = Stratus (couche uniforme, gris, bas)
-                           2 = Cumulus (moutonnes, beau temps) // PAS DE PLUIE 
+                           2 = Cumulus (moutonnes, beau temps) 
                            3 = Cumulonimbus (epais, sombres, orage/pluie)
                            XP12 génère des éclairs automatiquement quand il y a des Cumulonimbus (cloud_type=3)
              cloud_coverage : proportion du ciel couvert [0, 1]
@@ -152,9 +152,6 @@
                               Ignore si cloud_type = -1 -->
         <parameter name="cloud_type"       type="real" min="-1" max="-1"/>
         <parameter name="cloud_coverage"   type="real" min="0.8" max="0.8"/>
-
-
-
 
 
 
@@ -168,8 +165,12 @@
              Ex: 200 = nuages 200m au-dessus de l'altitude max avion.  -->
         <parameter name="cloud_margin_m"   type="real" min="200" max="200"/>
 
+        <!-- Epaisseur du nuage en metres (alt_top = alt_base + thickness).
+             0 = test, 300-500 = stratus, 1500-3000 = cumulus, 6000-10000 = cumulonimbus -->
+        <parameter name="cloud_thickness_m" type="real" min="0" max="0"/>
+
         <!-- Visibilite : 50000 = clair (defaut). Valeurs basses = brouillard -->
-        <parameter name="visibility_m"     type="real" min="3000" max="3000"/>
+        <parameter name="visibility_m"     type="real" min="10000" max="10000"/>
 
         <!-- Temperature : controle pluie vs neige. 15 = standard -->
         <parameter name="temperature_c"    type="real" min="15" max="45"/>

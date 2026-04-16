@@ -2,27 +2,21 @@
 run_pipeline.py — Orchestrateur bout-en-bout du pipeline LARD-LAAS-TAF
 =======================================================================
 Tout est centralise dans runs/<ICAO_RWY>/ :
-  - .esp/.yaml/poses_cam_export.json generes par TAF
-  - .zip GES (renderer=ges) OU images X-Plane (renderer=xplane)
-  - footage/ images/ predictions.csv/ annotated/ eval_results.json (auto)
-
-Renderers :
-    --renderer ges     : Google Earth Studio (defaut, etape manuelle)
-    --renderer xplane  : X-Plane 12 (rendu automatise, necessite --xplane-dir)
+  - .yaml/poses_cam_export.json generes par TAF
+  - images X-Plane 12 (rendu automatise)
+  - footage/ predictions.csv/ annotated/ eval_results.json (auto)
 
 Modes :
-    python run_pipeline.py generate -n 5              # Genere .esp/.yaml dans runs/
+    python run_pipeline.py generate -n 5              # Genere .yaml dans runs/
     python run_pipeline.py evaluate LFPO_24            # GT + YOLO + IoU sur un run
     python run_pipeline.py evaluate --all              # Sur tous les runs
-    python run_pipeline.py full -n 5                   # Generate + GES + evaluate
-    python run_pipeline.py full -n 100 --renderer xplane --xplane-dir "C:/X-Plane 12"
+    python run_pipeline.py full -n 100 --xplane-dir "C:/X-Plane 12"
 """
 
 import os
 import sys
 import json
 import shutil
-import zipfile
 import argparse
 from pathlib import Path
 
@@ -51,8 +45,8 @@ def reciprocal_runway(rwy):
     return f"{recip_num:02d}{recip_suffix}"
 
 
-def _find_runs(run_name=None, all_runs=False, renderer="ges"):
-    """Trouve les runs evaluables (ont un .yaml + des images ou un .zip ou poses_cam_export.json)."""
+def _find_runs(run_name=None, all_runs=False):
+    """Trouve les runs evaluables (ont un .yaml + des images ou poses_cam_export.json)."""
     runs = []
 
     if run_name:
@@ -71,7 +65,6 @@ def _find_runs(run_name=None, all_runs=False, renderer="ges"):
     valid = []
     for run_dir in runs:
         yamls = list(run_dir.glob("*.yaml"))
-        has_zip = bool(list(run_dir.glob("*.zip")))
         has_poses = (run_dir / "poses_cam_export.json").exists()
         footage = run_dir / "footage"
         has_images = footage.exists() and bool(
@@ -82,86 +75,19 @@ def _find_runs(run_name=None, all_runs=False, renderer="ges"):
             print(f"[SKIP] {run_dir.name} : pas de .yaml")
             continue
 
-        # Pour xplane, on accepte les runs avec poses_cam_export.json (pas encore rendus)
-        if renderer == "xplane":
-            if not has_poses and not has_images:
-                print(f"[SKIP] {run_dir.name} : ni poses_cam_export.json ni images dans footage/")
-                continue
-        else:
-            if not has_zip and not has_images:
-                print(f"[SKIP] {run_dir.name} : ni .zip ni images dans footage/")
-                continue
+        if not has_poses and not has_images:
+            print(f"[SKIP] {run_dir.name} : ni poses_cam_export.json ni images dans footage/")
+            continue
 
         valid.append({
             "dir": run_dir,
             "name": run_dir.name,
             "yaml": yamls[0],
-            "has_zip": has_zip,
             "has_poses": has_poses,
             "has_images": has_images,
         })
 
     return valid
-
-
-def _unzip_ges(run_dir):
-    """Dezippe le .zip GES dans le run, extrait les images vers footage/.
-    Renomme les images si leur prefixe ne correspond pas au nom du dossier
-    (cas d'un suffixe _002, _003... quand la meme piste est generee 2x)."""
-    zips = sorted(run_dir.glob("*.zip"))
-    if not zips:
-        return False
-
-    footage_dir = run_dir / "footage"
-    if footage_dir.exists() and list(footage_dir.glob("*.jpeg")):
-        print(f"  [ZIP] footage/ existe deja avec des images, skip dezip")
-        return True
-
-    run_name = run_dir.name  # ex: LFPG_09L_002
-
-    for zp in zips:
-        print(f"  [ZIP] Extraction de {zp.name}...")
-        with zipfile.ZipFile(zp, 'r') as zf:
-            # Lister le contenu pour trouver les images
-            image_files = [
-                f for f in zf.namelist()
-                if f.lower().endswith(('.jpeg', '.jpg', '.png'))
-                and not f.startswith('__MACOSX')
-            ]
-
-            if not image_files:
-                print(f"  [ZIP] Aucune image trouvee dans {zp.name}")
-                continue
-
-            footage_dir.mkdir(parents=True, exist_ok=True)
-
-            # Detecter le prefixe des images dans le zip (ex: LFPG_09L)
-            first_img = Path(image_files[0]).name
-            # Prefixe = tout avant le dernier _NNN.ext
-            import re
-            m = re.match(r"^(.+)_\d+\.\w+$", first_img)
-            zip_prefix = m.group(1) if m else None
-
-            needs_rename = zip_prefix and zip_prefix != run_name
-
-            for img_path in image_files:
-                img_name = Path(img_path).name
-                if needs_rename:
-                    img_name = img_name.replace(zip_prefix, run_name, 1)
-                target = footage_dir / img_name
-                with zf.open(img_path) as src, open(target, 'wb') as dst:
-                    dst.write(src.read())
-
-            if needs_rename:
-                print(f"  [ZIP] Images renommees : {zip_prefix}_* -> {run_name}_*")
-            print(f"  [ZIP] {len(image_files)} images extraites dans footage/")
-
-    # Nettoyer exported_images/ (cree par LARD export_labels, doublon de footage/)
-    exported = run_dir / "exported_images"
-    if exported.exists():
-        shutil.rmtree(exported)
-
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -217,22 +143,19 @@ def step_render_xplane(run_info, xplane_dir):
 
 
 # ---------------------------------------------------------------------------
-# Etape 1 : Generation TAF (.esp/.yaml) → runs/<ICAO_RWY>/
+# Etape 1 : Generation TAF (.yaml) → runs/<ICAO_RWY>/
 # ---------------------------------------------------------------------------
 
-def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
-    """Lance TAF puis reorganise les .esp/.yaml dans runs/."""
+def step_generate(nb_scenarios=None, quiet=False):
+    """Lance TAF puis reorganise les .yaml dans runs/."""
     print("=" * 60)
-    print(f" ETAPE 1 : Generation TAF (renderer={renderer})")
+    print(" ETAPE 1 : Generation TAF")
     print("=" * 60)
 
     project_dir = ROOT / "project"
     sys.path.insert(0, str(project_dir))
 
-    # Passer le renderer a Export.py via variable d'environnement
-    os.environ["LARD_RENDERER"] = renderer
-
-    # Nettoyer output/ avant generation (sinon les anciens .esp s'accumulent)
+    # Nettoyer output/ avant generation
     if TAF_OUTPUT_DIR.exists():
         shutil.rmtree(TAF_OUTPUT_DIR)
 
@@ -242,9 +165,7 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
     # Reorganiser : copier les fichiers de output/ vers runs/<ICAO_RWY>/
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     yaml_files = list(TAF_OUTPUT_DIR.rglob("*.yaml"))
-    esp_files = list(TAF_OUTPUT_DIR.rglob("*.esp"))
 
-    # Iterer sur les .yaml (present avec tout renderer) pour trouver les scenarios
     created_runs = []
     for yf in yaml_files:
         name = yf.stem  # ex: LFPO_24
@@ -263,17 +184,12 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
         # Copier .yaml (renomme si suffixe)
         shutil.copy2(yf, run_dir / f"{run_name}.yaml")
 
-        # Copier .esp si present (GES seulement)
-        matching_esp = [e for e in esp_files if e.stem == name]
-        if matching_esp:
-            shutil.copy2(matching_esp[0], run_dir / f"{run_name}.esp")
-
         # Copier le .xml des parametres du scenario (ex: scenario_0.xml)
         scenario_xml = yf.parent.parent / f"{yf.parent.parent.name}.xml"
         if scenario_xml.exists():
             shutil.copy2(scenario_xml, run_dir / "params_trace.xml")
 
-        # Copier poses_cam_export.json (format universel pour renderers)
+        # Copier poses_cam_export.json
         # Mettre a jour scenario_name si le dossier a un suffixe (_002, _003...)
         poses_json = yf.parent / "poses_cam_export.json"
         if poses_json.exists():
@@ -296,27 +212,16 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
         if weather_json.exists():
             shutil.copy2(weather_json, run_dir / "weather_profile.json")
 
-        # Sauver le renderer utilise dans un fichier de config
-        run_config = {"renderer": renderer}
-        with open(run_dir / "renderer_choice.json", "w") as f:
-            json.dump(run_config, f, indent=2)
-
         created_runs.append(run_dir)
         extras = ""
         if fault_json.exists():
             extras += " + fault_profile.json"
         if weather_json.exists():
             extras += " + weather_profile.json"
-        if renderer == "ges":
-            print(f"  [RUNS] {run_dir.name}/ <- .esp + .yaml + poses_cam_export.json{extras}")
-        else:
-            print(f"  [RUNS] {run_dir.name}/ <- .yaml + poses_cam_export.json{extras}")
+        print(f"  [RUNS] {run_dir.name}/ <- .yaml + poses_cam_export.json{extras}")
 
     print(f"\n[Pipeline] {len(created_runs)} run(s) cree(s) dans runs/")
-    if renderer == "ges":
-        print(f"  Prochaine etape : importer les .esp dans GES, poser les .zip dans runs/<nom>/")
-    else:
-        print(f"  Prochaine etape : lancer le rendu X-Plane (run_pipeline.py full --renderer xplane)")
+    print(f"  Prochaine etape : lancer le rendu X-Plane (run_pipeline.py full)")
 
     return created_runs
 
@@ -325,14 +230,13 @@ def step_generate(nb_scenarios=None, quiet=False, renderer="ges"):
 # Etape 2 : Ground truth LARD (.csv)
 # ---------------------------------------------------------------------------
 
-def step_generate_gt(run_info, renderer="ges"):
+def step_generate_gt(run_info):
     """Genere le CSV ground truth pour un run."""
     run_dir = run_info["dir"]
     yaml_path = run_info["yaml"]
 
     print(f"\n  [GT] Generation CSV pour {run_info['name']}...")
 
-    # Pipeline LARD pour GES et X-Plane
     lard_path = str(ROOT / "LARD")
     export_path = str(ROOT / "project" / "export")
     if lard_path not in sys.path:
@@ -353,7 +257,6 @@ def step_generate_gt(run_info, renderer="ges"):
     csv_file = generate_labels_csv(
         yaml_path=str(yaml_path),
         dataset_dir=str(run_dir),
-        renderer=renderer,
     )
 
     # Restaurer
@@ -575,21 +478,21 @@ def step_evaluate(run_dir, predictions_csv, csv_path, runway=None, iou_thresh=0.
 
 def run_evaluate(run_name=None, all_runs=False, runway=None,
                  conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
-                 renderer="ges", xplane_dir=None):
-    """Enchaine [rendu] → dezip → GT → YOLO → evaluation sur les runs specifies."""
+                 xplane_dir=None):
+    """Enchaine rendu → GT → YOLO → evaluation sur les runs specifies."""
     print("=" * 60)
-    print(f" PIPELINE : {'Render + ' if renderer == 'xplane' else ''}GT + YOLO + Evaluation IoU")
+    print(" PIPELINE : Render + GT + YOLO + Evaluation IoU")
     print("=" * 60)
 
-    runs = _find_runs(run_name, all_runs, renderer=renderer)
+    runs = _find_runs(run_name, all_runs)
     if not runs:
         print("[Pipeline] Aucun run valide trouve.")
-        print(f"  Verifier que runs/<nom>/ contient un .yaml et un .zip ou footage/")
+        print(f"  Verifier que runs/<nom>/ contient un .yaml et poses_cam_export.json ou footage/")
         return []
 
     print(f"\n[Pipeline] {len(runs)} run(s) a evaluer :")
     for r in runs:
-        status = "images" if r["has_images"] else "zip"
+        status = "images" if r["has_images"] else "poses"
         print(f"  {r['name']} ({status})")
 
     all_results = []
@@ -600,21 +503,12 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
         print(f" Run : {run_info['name']}")
         print(f"{'-' * 50}")
 
-        # Obtenir les images selon le renderer
-        if renderer == "xplane":
-            # Rendu X-Plane si pas encore d'images
-            if not run_info["has_images"]:
-                if not step_render_xplane(run_info, xplane_dir or ""):
-                    print(f"  [SKIP] Echec rendu X-Plane pour {run_info['name']}")
-                    continue
-                run_info["has_images"] = True
-        else:
-            # Dezip GES si necessaire
-            if run_info["has_zip"] and not run_info["has_images"]:
-                if not _unzip_ges(run_dir):
-                    print(f"  [SKIP] Echec dezip pour {run_info['name']}")
-                    continue
-                run_info["has_images"] = True
+        # Rendu X-Plane si pas encore d'images
+        if not run_info["has_images"]:
+            if not step_render_xplane(run_info, xplane_dir or ""):
+                print(f"  [SKIP] Echec rendu X-Plane pour {run_info['name']}")
+                continue
+            run_info["has_images"] = True
 
         footage_dir = run_dir / "footage"
         if not footage_dir.exists() or not (
@@ -633,17 +527,9 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
             if m:
                 rwy = m.group(1)
 
-        # Detecter le renderer du run (renderer_choice.json) ou utiliser celui passe
-        run_renderer = renderer
-        run_config_file = run_dir / "renderer_choice.json"
-        if run_config_file.exists():
-            with open(run_config_file) as f:
-                run_cfg = json.load(f)
-                run_renderer = run_cfg.get("renderer", renderer)
-
         # GT
         try:
-            csv_path = step_generate_gt(run_info, renderer=run_renderer)
+            csv_path = step_generate_gt(run_info)
         except Exception as e:
             print(f"  [GT] ERREUR : {e}")
             csv_candidates = list(run_dir.glob("*_labels.csv"))
@@ -701,17 +587,16 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
             continue
 
     # Clear meteo final (une seule fois apres tous les scenarios)
-    if renderer == "xplane":
-        try:
-            export_path = str(ROOT / "project" / "export")
-            if export_path not in sys.path:
-                sys.path.insert(0, export_path)
-            from xplane_weather import reset_weather, set_exchange_dir
-            if xplane_dir:
-                set_exchange_dir(xplane_dir)
-                reset_weather()
-        except Exception:
-            pass
+    try:
+        export_path = str(ROOT / "project" / "export")
+        if export_path not in sys.path:
+            sys.path.insert(0, export_path)
+        from xplane_weather import reset_weather, set_exchange_dir
+        if xplane_dir:
+            set_exchange_dir(xplane_dir)
+            reset_weather()
+    except Exception:
+        pass
 
     # Rapport final
     if all_results:
@@ -734,77 +619,48 @@ def run_evaluate(run_name=None, all_runs=False, runway=None,
 
 
 # ---------------------------------------------------------------------------
-# Mode full : generate + pause GES + evaluate
+# Mode full : generate + rendu X-Plane + evaluate
 # ---------------------------------------------------------------------------
 
 def run_full(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
-             iou_thresh=0.5, iou_method="CIOU",
-             renderer="ges", xplane_dir=None):
-    """Pipeline complet : generate + rendu + evaluate.
-
-    Avec GES : pause manuelle pour le rendu (import .esp, download .zip).
-    Avec X-Plane : rendu automatise (poses_cam_export.json → screenshots → footage/).
-    """
+             iou_thresh=0.5, iou_method="CIOU", xplane_dir=None):
+    """Pipeline complet : generate + rendu X-Plane + evaluate."""
 
     # Etape 1 : generation
-    created_runs = step_generate(nb_scenarios=nb_scenarios, quiet=quiet,
-                                 renderer=renderer)
+    created_runs = step_generate(nb_scenarios=nb_scenarios, quiet=quiet)
 
     if not created_runs:
         print("[Pipeline] Aucun scenario genere, arret.")
         return
 
-    if renderer == "xplane":
-        # Etape 2 : Rendu automatise X-Plane
-        print(f"\n{'=' * 60}")
-        print(" ETAPE 2 : Rendu X-Plane 12")
-        print(f"{'=' * 60}")
+    # Etape 2 : Rendu automatise X-Plane
+    print(f"\n{'=' * 60}")
+    print(" ETAPE 2 : Rendu X-Plane 12")
+    print(f"{'=' * 60}")
 
-        for run_dir in created_runs:
-            run_info = {
-                "dir": run_dir,
-                "name": run_dir.name,
-            }
-            step_render_xplane(run_info, xplane_dir or "")
+    for run_dir in created_runs:
+        run_info = {
+            "dir": run_dir,
+            "name": run_dir.name,
+        }
+        step_render_xplane(run_info, xplane_dir or "")
 
-        # Clear meteo final apres tous les rendus
-        try:
-            export_path = str(ROOT / "project" / "export")
-            if export_path not in sys.path:
-                sys.path.insert(0, export_path)
-            from xplane_weather import reset_weather, set_exchange_dir
-            if xplane_dir:
-                set_exchange_dir(xplane_dir)
-                reset_weather()
-        except Exception:
-            pass
-
-    else:
-        # Etape 2 : Pause manuelle GES
-        print(f"\n{'=' * 60}")
-        print(" ETAPE MANUELLE : Google Earth Studio")
-        print(f"{'=' * 60}")
-        print(f"\n1. Importer les .esp depuis runs/<nom>/ dans Google Earth Studio")
-        print(f"2. Rendre les images")
-        print(f"3. Poser le .zip telecharge dans runs/<nom>/")
-        print()
-
-        for run_dir in created_runs:
-            esp_files = list(run_dir.glob("*.esp"))
-            if esp_files:
-                print(f"   {run_dir.name}/ <- poser le .zip ici")
-
-        print()
-        try:
-            input("Appuyer sur Entree une fois les .zip GES en place...")
-        except (EOFError, KeyboardInterrupt):
-            print("\n[Pipeline] Arret. Relancer avec 'evaluate --all'.")
-            return
+    # Clear meteo final apres tous les rendus
+    try:
+        export_path = str(ROOT / "project" / "export")
+        if export_path not in sys.path:
+            sys.path.insert(0, export_path)
+        from xplane_weather import reset_weather, set_exchange_dir
+        if xplane_dir:
+            set_exchange_dir(xplane_dir)
+            reset_weather()
+    except Exception:
+        pass
 
     # Etape 3+ : evaluate all
     return run_evaluate(all_runs=True, conf=conf, imgsz=imgsz,
                         iou_thresh=iou_thresh, iou_method=iou_method,
-                        renderer=renderer, xplane_dir=xplane_dir)
+                        xplane_dir=xplane_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -813,57 +669,50 @@ def run_full(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Pipeline bout-en-bout LARD-LAAS-TAF",
+        description="Pipeline bout-en-bout LARD-LAAS-TAF (X-Plane 12)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Structure runs/ :
   runs/
     LFPO_24/
-      LFPO_24.esp              <- genere par 'generate' (GES seulement)
       LFPO_24.yaml             <- genere par 'generate'
-      poses_cam_export.json    <- poses camera (format universel)
-      renderer_choice.json     <- renderer utilise (ges/xplane)
+      poses_cam_export.json    <- poses camera
       params_trace.xml         <- parametres TAF du scenario
-      footage/                 <- images (dezip GES ou rendu X-Plane)
+      footage/                 <- images rendu X-Plane
       LFPO_24_labels.csv       <- GT LARD auto
       predictions.csv          <- predictions YOLO auto
       annotated/               <- images annotees auto
       eval_results.json        <- metriques IoU auto
-      xplane_config.json       <- config rendu X-Plane (X-Plane only)
+      xplane_config.json       <- config rendu X-Plane
       fault_profile.json       <- profil fautes capteur (si actif)
       weather_profile.json     <- profil meteo X-Plane (si actif)
     pipeline_report.json    <- rapport agrege
 
 Exemples :
   python run_pipeline.py generate -n 5
-  python run_pipeline.py generate -n 100 --renderer xplane
   python run_pipeline.py evaluate LFPO_24
   python run_pipeline.py evaluate --all
-  python run_pipeline.py full -n 3
-  python run_pipeline.py full -n 100 --renderer xplane --xplane-dir "C:/X-Plane 12"
+  python run_pipeline.py full -n 100 --xplane-dir "C:/X-Plane 12"
         """,
     )
     sub = parser.add_subparsers(dest="mode", required=True)
 
-    # --- Arguments communs renderer ---
-    renderer_args = argparse.ArgumentParser(add_help=False)
-    renderer_args.add_argument("--renderer", type=str, default="xplane",
-                               choices=["ges", "xplane"],
-                               help="Renderer d'images (defaut: xplane)")
+    # --- Arguments communs X-Plane ---
+    xplane_args = argparse.ArgumentParser(add_help=False)
     _default_xp = "C:/X-Plane 12" if os.name == "nt" else os.path.expanduser("~/X-Plane 12")
-    renderer_args.add_argument("--xplane-dir", type=str, default=_default_xp,
-                               help=f"Repertoire X-Plane 12 (defaut: {_default_xp})")
+    xplane_args.add_argument("--xplane-dir", type=str, default=_default_xp,
+                             help=f"Repertoire X-Plane 12 (defaut: {_default_xp})")
 
     # --- generate ---
-    p_gen = sub.add_parser("generate", parents=[renderer_args],
-                           help="Genere les scenarios TAF (.esp/.yaml) dans runs/")
+    p_gen = sub.add_parser("generate", parents=[xplane_args],
+                           help="Genere les scenarios TAF (.yaml) dans runs/")
     p_gen.add_argument("-n", "--nb-scenarios", type=int, default=None,
                        help="Nombre de scenarios (surcharge settings.xml)")
     p_gen.add_argument("-q", "--quiet", action="store_true")
 
     # --- evaluate ---
-    p_eval = sub.add_parser("evaluate", parents=[renderer_args],
-                            help="Dezip + GT + YOLO + IoU sur un ou tous les runs")
+    p_eval = sub.add_parser("evaluate", parents=[xplane_args],
+                            help="GT + YOLO + IoU sur un ou tous les runs")
     p_eval.add_argument("run", nargs="?", default=None, help="Nom du run (ex: LFPO_24)")
     p_eval.add_argument("--all", action="store_true", dest="all_runs",
                         help="Evaluer tous les runs dans runs/")
@@ -875,8 +724,8 @@ Exemples :
                         choices=["IOU", "GIOU", "DIOU", "CIOU"])
 
     # --- full ---
-    p_full = sub.add_parser("full", parents=[renderer_args],
-                            help="Pipeline complet (generate + rendu + evaluate)")
+    p_full = sub.add_parser("full", parents=[xplane_args],
+                            help="Pipeline complet (generate + rendu X-Plane + evaluate)")
     p_full.add_argument("-n", "--nb-scenarios", type=int, default=None)
     p_full.add_argument("-q", "--quiet", action="store_true")
     p_full.add_argument("--conf", type=float, default=0.25)
@@ -888,8 +737,7 @@ Exemples :
     args = parser.parse_args()
 
     if args.mode == "generate":
-        step_generate(nb_scenarios=args.nb_scenarios, quiet=args.quiet,
-                      renderer=args.renderer)
+        step_generate(nb_scenarios=args.nb_scenarios, quiet=args.quiet)
 
     elif args.mode == "evaluate":
         if not args.run and not args.all_runs:
@@ -903,7 +751,6 @@ Exemples :
             imgsz=args.imgsz,
             iou_thresh=args.iou_thresh,
             iou_method=args.iou_method,
-            renderer=args.renderer,
             xplane_dir=args.xplane_dir,
         )
 
@@ -915,7 +762,6 @@ Exemples :
             imgsz=args.imgsz,
             iou_thresh=args.iou_thresh,
             iou_method=args.iou_method,
-            renderer=args.renderer,
             xplane_dir=args.xplane_dir,
         )
 

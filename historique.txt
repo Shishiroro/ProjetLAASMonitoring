@@ -667,3 +667,27 @@ Fichiers modifies :
 - [x] tests/xplane/test_weather_v2.py — 8 tests (timing, clear, chaine scenarios)
 
 ================================================================
+Phase 9 — Retrait support GES (2026-04-16)
+================================================================
+Decision : utilisation exclusive de X-Plane 12, GES n'est plus supporte.
+
+Ce qui a ete retire :
+- renderer_choice.json (fichier de config par run)
+- Parametre --renderer CLI (ges/xplane) → plus besoin de choisir
+- Variable d'env LARD_RENDERER dans Export.py
+- Fonction _unzip_ges() dans run_pipeline.py
+- Pause manuelle GES (import .esp, download .zip)
+- Generation .esp via GEODataset.create_scenario()
+- Branche FOV 30° (GES) dans lard_bridge.py
+- DatasetTypes.EARTH_STUDIO / RUNWAY_DB (DB GES)
+- Import GEODataset (plus utilise)
+- Import zipfile (plus utilise)
+- Parametre renderer= dans toutes les fonctions
+
+Fichiers modifies :
+- [x] run_pipeline.py — suppression _unzip_ges, renderer_choice.json, branches GES, CLI simplifie
+- [x] project/export/lard_bridge.py — retrait .esp, FOV 30°, DB GES, param renderer
+- [x] project/export/Export.py — retrait LARD_RENDERER, param renderer
+- [x] CLAUDE.md — mise a jour documentation
+
+================================================================

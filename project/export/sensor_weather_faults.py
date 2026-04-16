@@ -4,7 +4,7 @@ sensor_weather_faults.py — Effets meteo post-traitement sur capteur camera
 Simule les degradations visuelles causees par la meteo sur la lentille
 de la camera embarquee (pluie sur lentille, condensation, givre, etc.).
 
-Appliques en post-traitement (OpenCV) apres la capture X-Plane ou GES,
+Appliques en post-traitement (OpenCV) apres la capture X-Plane,
 independamment des effets meteo injectes dans X-Plane (xplane_weather.py).
 
 TODO: A implementer. Types prevus :

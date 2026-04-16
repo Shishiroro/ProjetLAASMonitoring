@@ -869,6 +869,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         # Injecter la meteo (per-scenario, une seule fois) APRES teleportation
         # La stabilisation de 15s laisse le temps a X-Plane de charger les textures
         weather_active = False
+        weather_status = "no_weather"  # no_weather | ok | plugin_timeout | inject_failed
         if weather_profile_path and Path(weather_profile_path).exists():
             from xplane_weather import (
                 load_weather_profile, inject_weather, set_exchange_dir, check_plugin,
@@ -882,8 +883,10 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                         max_alt_m = max(p["alt_m"] for p in data["poses"])
                         avg_lon = data["poses"][0]["lon"]
                         weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=avg_lon)
+                        weather_status = "ok" if weather_active else "inject_failed"
                     else:
                         print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
+                        weather_status = "plugin_timeout"
 
         # Positionnement via VEHS (double precision) — pas besoin de reference locale
 
@@ -896,6 +899,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
             "pilot_eye_x": conn.pilot_eye_x,  # lateral (m, + = droite)
             "pilot_eye_y": conn.pilot_eye_y,  # vertical (m, + = haut)
             "pilot_eye_z": conn.pilot_eye_z,  # longitudinal (m, + = avant/nez)
+            "weather_status": weather_status,
         }
         render_cfg_file = output_dir.parent / "xplane_config.json"
         with open(render_cfg_file, "w") as rf:

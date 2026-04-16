@@ -4,10 +4,9 @@ Export.py — Point d'entree TAF (PONT TAF -> LE CODE)
 TAF appelle export(root_node, path) apres chaque generation de test case.
 Ce module fait le lien entre les parametres TAF et notre pipeline.
 
-Chaine : TAF root_node → TrajectoryConfig → build_trajectory → export .esp/.yaml
+Chaine : TAF root_node → TrajectoryConfig → build_trajectory → export .yaml
 """
 
-import os
 import sys
 import math
 from pathlib import Path
@@ -80,6 +79,7 @@ def export(root_node, path):
         cloud_type=float(_read_param(scenario_node, "cloud_type")),
         cloud_coverage=float(_read_param(scenario_node, "cloud_coverage")),
         cloud_margin_m=float(_read_param(scenario_node, "cloud_margin_m")),
+        cloud_thickness_m=float(_read_param(scenario_node, "cloud_thickness_m")),
         visibility_m=float(_read_param(scenario_node, "visibility_m")),
         temperature_c=float(_read_param(scenario_node, "temperature_c")),
         time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),
@@ -128,11 +128,8 @@ def export(root_node, path):
     )
     ou = OUParams()
 
-    # --- Renderer (ges ou xplane, via variable d'environnement) ---
-    renderer = os.environ.get("LARD_RENDERER", "ges").lower()
-
     # --- Geometrie piste ---
-    rwy = get_runway_geometry(airport, runway, dist_ap_m=ou.dist_ap_m, renderer=renderer)
+    rwy = get_runway_geometry(airport, runway, dist_ap_m=ou.dist_ap_m)
 
     # --- Generer la trajectoire ---
     print(f"[Export] {airport}/{runway} | fps={fps} | "
@@ -148,7 +145,7 @@ def export(root_node, path):
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
-    # --- Exporter .esp + .yaml + poses_cam_export.json ---
+    # --- Exporter .yaml + poses_cam_export.json ---
     weather_arg = weather_cfg if has_weather(weather_cfg) else None
     export_scenario(
         flight_data, cfg, ou,
@@ -157,7 +154,6 @@ def export(root_node, path):
         scenario_name=f"{airport}_{runway}",
         faults=faults,
         weather=weather_arg,
-        renderer=renderer,
         ltp_alt=rwy["ltp_alt"],
     )
 

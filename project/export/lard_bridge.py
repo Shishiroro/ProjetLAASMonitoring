@@ -3,15 +3,10 @@ lard_bridge.py — Interface avec LARD (import uniquement, rien modifie)
 ======================================================================
 Responsabilites :
     1. Obtenir la geometrie piste via compute_aiming_point
-    2. Convertir flight_data en .esp via GEODataset.create_scenario (si renderer=ges)
-    3. Ecrire les fichiers .esp et .yaml de sortie
-    4. Sauver les poses dans poses_cam_export.json (format universel pour tout renderer)
+    2. Ecrire le fichier .yaml de sortie
+    3. Sauver les poses dans poses_cam_export.json
 
-Renderers supportes :
-    - "ges" : Google Earth Studio (genere .esp + .yaml + poses_cam_export.json)
-    - "xplane" : X-Plane 12 (genere .yaml + poses_cam_export.json, pas de .esp)
-
-Note : create_scenario lit 'data/template.json' relativement au CWD,
+Note : export_labels lit des fichiers relativement au CWD,
        donc on change temporairement vers LARD_ROOT.
 """
 
@@ -29,7 +24,6 @@ from dataclasses import asdict
 # --- Chemins LARD ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # LARD-LAAS-TAF/
 LARD_ROOT = PROJECT_ROOT / "LARD"
-RUNWAY_DB = str(LARD_ROOT / "data" / "filtered_runways_database_Final.json")
 # DB LARD X-Plane (meme DB que le labeling LARD pour coherence trajectoire/GT)
 RUNWAY_DB_XPLANE = str(LARD_ROOT / "data" / "runways_db_V2_XPlane.json")
 
@@ -37,7 +31,7 @@ RUNWAY_DB_XPLANE = str(LARD_ROOT / "data" / "runways_db_V2_XPlane.json")
 if str(LARD_ROOT) not in sys.path:
     sys.path.insert(0, str(LARD_ROOT))
 
-from src.geo.geo_dataset import compute_aiming_point, GEODataset
+from src.geo.geo_dataset import compute_aiming_point
 from src.geo.geo_utils import ecef2llh
 from src.labeling.label_export import export_labels
 from src.labeling.export_config import DatasetTypes
@@ -61,20 +55,15 @@ def _lard_cwd():
         os.chdir(prev)
 
 
-def get_runway_geometry(airport, runway, dist_ap_m=300.0, renderer="ges"):
+def get_runway_geometry(airport, runway, dist_ap_m=300.0):
     """
-    Recupere la geometrie d'une piste.
-
-    Utilise la DB LARD correspondant au renderer pour que la trajectoire
-    vise exactement les memes coordonnees que le labeling GT.
+    Recupere la geometrie d'une piste (DB X-Plane).
 
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
-    db = RUNWAY_DB_XPLANE if renderer == "xplane" else RUNWAY_DB
-
     _, _, rwy_psi, ltp, fpap = compute_aiming_point(
-        db, airport, runway, dist_ap_m
+        RUNWAY_DB_XPLANE, airport, runway, dist_ap_m
     )
     # FPAP = vrai seuil d'approche dans la convention LARD
     fpap_lat, fpap_lon, fpap_alt = ecef2llh(fpap[0], fpap[1], fpap[2])
@@ -89,14 +78,14 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0, renderer="ges"):
 
 
 # ---------------------------------------------------------------------------
-# Generation de timestamps pour chaque frame (au format attendu par LARD/GES)
+# Generation de timestamps pour chaque frame (au format attendu par LARD)
 # ---------------------------------------------------------------------------
 
 def generate_frame_times(n_frames, fps):
     """
     Genere un timestamp par frame (date/heure aleatoire, increment 1/fps).
 
-    LARD/GES attend un dict {year, month, day, hour, minute, second} par frame.
+    LARD attend un dict {year, month, day, hour, minute, second} par frame.
     On choisit une date/heure de base aleatoire puis on incremente.
     """
     base_year = random.randint(2020, 2025)
@@ -130,18 +119,14 @@ def generate_frame_times(n_frames, fps):
 
 
 # ---------------------------------------------------------------------------
-# Export .esp + .yaml
+# Export .yaml + poses
 # ---------------------------------------------------------------------------
 
 def export_scenario(flight_data, cfg, ou_params, airport, runway,
                     output_dir, scenario_name="scenario", faults=None,
-                    weather=None, renderer="ges", ltp_alt=0.0):
+                    weather=None, ltp_alt=0.0):
     """
-    Exporte un scenario complet.
-
-    Selon le renderer :
-      - "ges"    : .esp + .yaml + poses_cam_export.json
-      - "xplane" : .yaml + poses_cam_export.json (pas de .esp)
+    Exporte un scenario complet (.yaml + poses_cam_export.json).
 
     Le .yaml est fidele au format LARD (poses, image, trajectory)
     pour etre compatible avec export_labels() de LARD.
@@ -155,7 +140,6 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     :param scenario_name: nom de base des fichiers
     :param faults: liste de FaultConfig (optionnel)
     :param weather: liste de WeatherConfig (optionnel)
-    :param renderer: "ges" ou "xplane"
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -163,43 +147,15 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     n_frames = len(flight_data)
     times = generate_frame_times(n_frames, cfg.fps)
 
-    # --- Params image ---
-    if renderer == "xplane":
-        # X-Plane : fenetre carree 1024x1024, FOV 60° (comme LARD dataset)
-        img_width = 1024
-        img_height = 1024
-        fov_x = 60.0     # horizontal (reglages visuels X-Plane, 60° comme LARD)
-        f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
-        fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
-    else:
-        # GES : 1024x1024 natif, FOV 30°x30°
-        img_width = 1024
-        img_height = 1024
-        fov_x = 30.0
-        f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
-        fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
+    # --- Params image (X-Plane : 1024x1024, FOV 60°) ---
+    img_width = 1024
+    img_height = 1024
+    fov_x = 60.0
+    f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
+    fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
     watermark_height = 0
 
-    # --- .esp via LARD (seulement pour GES) ---
-    esp_file = output_path / f"{scenario_name}.esp"
-    if renderer == "ges":
-        dataset = GEODataset(str(output_path), scenario_name)
-
-        with _lard_cwd():
-            scenario, _ = dataset.create_scenario(
-                flight_data,
-                fov_vertical=fov_x,
-                width=img_width,
-                height=img_height,
-                nb_frames=n_frames,
-                fps=cfg.fps,
-                times=times,
-            )
-
-        with open(esp_file, "w") as f:
-            json.dump(scenario, f, indent=2)
-
-    # --- poses_cam_export.json (format universel, pour tout renderer) ---
+    # --- poses_cam_export.json ---
     poses_file = output_path / "poses_cam_export.json"
     save_poses_json(flight_data, cfg.fps, scenario_name, poses_file, ltp_alt=ltp_alt)
 
@@ -282,22 +238,19 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     with open(yaml_file, "w") as f:
         yaml.dump(yaml_content, f, sort_keys=False, default_flow_style=False)
 
-    if renderer == "ges":
-        print(f"  .esp -> {esp_file}")
     print(f"  .yaml -> {yaml_file}")
 
-    return str(esp_file), str(yaml_file)
+    return str(yaml_file)
 
 
-def generate_labels_csv(yaml_path, dataset_dir, csv_name=None, renderer="ges"):
+def generate_labels_csv(yaml_path, dataset_dir, csv_name=None):
     """
     Genere le .csv ground truth LARD a partir du .yaml et des images dans footage/.
-    A appeler APRES avoir recupere les images (GES ou X-Plane).
+    A appeler APRES avoir recupere les images X-Plane.
 
     :param yaml_path: chemin vers le .yaml du scenario
     :param dataset_dir: dossier contenant footage/ avec les images
     :param csv_name: nom du fichier CSV (defaut: <yaml_stem>_labels.csv)
-    :param renderer: "ges" ou "xplane" (determine la base de pistes LARD)
     """
     yaml_path = Path(yaml_path).resolve()
     dataset_dir = Path(dataset_dir).resolve()
@@ -306,15 +259,9 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None, renderer="ges"):
         csv_name = f"{yaml_path.stem}_labels.csv"
     csv_file = dataset_dir / csv_name
 
-    # Choisir la base de pistes selon le renderer
-    if renderer == "xplane":
-        ds_type = DatasetTypes.XPLANE
-    else:
-        ds_type = DatasetTypes.EARTH_STUDIO
-
     with _lard_cwd():
         export_labels(
-            dataset_type=ds_type,
+            dataset_type=DatasetTypes.XPLANE,
             yaml_scenario_path=yaml_path,
             export_dir=dataset_dir,
             out_labels_file=csv_file,

@@ -292,6 +292,17 @@ class PythonInterface:
                f"vis={info.visibility:.0f}m radius={info.radius_nm:.0f}nm"
                f"{time_str} at ({lat:.4f}, {lon:.4f})")
 
+        # Readback : verifier ce que XP12 a reellement applique
+        try:
+            rb = xp.getWeatherAtLocation(lat, lon, elev)
+            for i in range(min(3, len(rb.cloud_layers))):
+                cl = rb.cloud_layers[i]
+                xp.log(f"LARD Weather v2: READBACK layer[{i}] "
+                       f"type={cl.cloud_type:.0f} cov={cl.coverage:.2f} "
+                       f"base={cl.alt_base:.0f}m top={cl.alt_top:.0f}m")
+        except Exception as e:
+            xp.log(f"LARD Weather v2: readback error: {e}")
+
     def _set_sim_speed(self, speed):
         """Set simulation speed multiplier (1=normal, 2=2x, 4=4x, etc.).
 
