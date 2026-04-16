@@ -84,6 +84,7 @@ def export(root_node, path):
         temperature_c=float(_read_param(scenario_node, "temperature_c")),
         time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),
         rain_scale=float(_read_param(scenario_node, "rain_scale")),
+        thunderstorm_pct=float(_read_param(scenario_node, "thunderstorm_pct")),
     )
 
     # Expanser rain_intensity en params individuels si actif

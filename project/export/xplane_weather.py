@@ -50,6 +50,7 @@ class WeatherConfig:
     temperature_c: float = 15.0
     time_of_day_h: float = 12.0
     rain_scale: float = 1.0          # taille visuelle des gouttes (sim/private/controls/rain/scale)
+    thunderstorm_pct: float = 0.0    # probabilite eclairs [0, 1] (sim/weather/thunderstorm_percent)
 
 
 def expand_rain_intensity(config):
@@ -69,14 +70,14 @@ def expand_rain_intensity(config):
     if ri <= 0:
         return config
 
-    # Paliers : (rain_intensity, precip_rate, visibility_m, cloud_type, cloud_coverage)
+    # Paliers : (rain_intensity, precip_rate, visibility_m, cloud_type, cloud_coverage, thunderstorm_pct)
     PALIERS = [
-        (0.0, 0.0, 50000, -1, 0.0),
-        (0.1, 0.2, 12000,  1, 0.5),
-        (0.3, 0.4,  7000,  1, 0.7),
-        (0.5, 0.6,  4000,  2, 0.85),
-        (0.7, 0.8,  2000,  3, 1.0),
-        (1.0, 1.0,   800,  3, 1.0),
+        (0.0, 0.0, 50000, -1, 0.0, 0.0),
+        (0.1, 0.2, 12000,  1, 0.5, 0.0),
+        (0.3, 0.4,  7000,  1, 0.7, 0.0),
+        (0.5, 0.6,  4000,  2, 0.85, 0.0),
+        (0.7, 0.8,  2000,  3, 1.0, 0.5),
+        (1.0, 1.0,   800,  3, 1.0, 1.0),
     ]
 
     # Trouver les 2 paliers encadrants
@@ -89,6 +90,7 @@ def expand_rain_intensity(config):
             # cloud_type : pas d'interpolation, on prend celui du palier superieur
             config.cloud_type = hi[3] if t > 0 else lo[3]
             config.cloud_coverage = lo[4] + t * (hi[4] - lo[4])
+            config.thunderstorm_pct = lo[5] + t * (hi[5] - lo[5])
             break
 
     return config
@@ -122,6 +124,8 @@ def validate_weather(config):
         raise ValueError(f"time_of_day_h={config.time_of_day_h} hors [0, 24]")
     if not 0.1 <= config.rain_scale <= 5.0:
         raise ValueError(f"rain_scale={config.rain_scale} hors [0.1, 5.0]")
+    if not 0.0 <= config.thunderstorm_pct <= 1.0:
+        raise ValueError(f"thunderstorm_pct={config.thunderstorm_pct} hors [0, 1]")
 
     # Note : l'ancienne contrainte "pluie necessite vis <= 10km" a ete retiree.
     # Elle venait de tests avec le code v1 buggé (mauvais enum cloud_type).
@@ -190,6 +194,10 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
     # Taille des gouttes (dataref prive, ignore si non supporte)
     if config.rain_scale != 1.0:
         params["rain_scale"] = config.rain_scale
+
+    # Eclairs / orages (0 = aucun, 1 = max)
+    if config.thunderstorm_pct > 0:
+        params["thunderstorm_pct"] = config.thunderstorm_pct
 
     return params
 
@@ -339,6 +347,8 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
         cloud_names = {0: "Cirrus", 1: "Stratus", 2: "Cumulus", 3: "Cumulonimbus"}
         parts.append(f"clouds={cloud_names.get(int(config.cloud_type), '?')}"
                      f"({config.cloud_coverage:.0%})")
+    if config.thunderstorm_pct > 0:
+        parts.append(f"eclairs={config.thunderstorm_pct:.0%}")
     if config.visibility_m < 50000:
         parts.append(f"vis={config.visibility_m:.0f}m")
     if config.temperature_c < 0:

@@ -71,7 +71,8 @@
         -->
         <parameter name="airport_runway"
                    type="string"
-                   values="KPDX_10L"/> <!--;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;
+                   values="KPDX_10L;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;
+                   KPDX_21;PHNL_22L;PHNL_04R;PHNL_22R;PHNL_04L;PHNL_26L;PHNL_08R"/> <!--;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;
                    KPDX_21;PHNL_22L;PHNL_04R;PHNL_22R;PHNL_04L;PHNL_26L;PHNL_08R-->
                    
 
@@ -127,7 +128,7 @@
               1.0  Deluge/orage   precip=1.0  vis=800m       Cb        cov=1.0
             Valeurs intermediaires interpolees lineairement.
         -->
-        <parameter name="rain_intensity"   type="real" min="0" max="0"/>
+        <parameter name="rain_intensity"   type="real" min="1" max="1"/>
 
 
 
@@ -154,6 +155,13 @@
         <parameter name="cloud_coverage"   type="real" min="0.8" max="0.8"/>
 
 
+
+        <!-- Eclairs / orages : probabilite d'eclairs [0, 1]
+             0 = aucun eclair, 0.5 = orages moderes, 1.0 = eclairs max (tres frequent)
+             Necessite Cumulonimbus (cloud_type=3) pour etre visible.
+             Si rain_intensity >= 0.7, thunderstorm_pct est auto-set (0.5-1.0)
+             Dataref : sim/weather/thunderstorm_percent -->
+        <parameter name="thunderstorm_pct" type="real" min="0" max="0"/>
 
         <!-- Taille des gouttes de pluie (visuel uniquement, dataref prive XP12)
              1.0 = defaut, 0.1 = tres fines, 5.0 = tres grosses

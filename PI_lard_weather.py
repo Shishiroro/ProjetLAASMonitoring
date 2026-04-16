@@ -52,6 +52,7 @@ class PythonInterface:
         self.dr_elev = None
         self.dr_change_mode = None
         self.dr_rain_scale = None   # sim/private/controls/rain/scale (taille gouttes)
+        self.dr_thunderstorm = None # sim/weather/thunderstorm_percent (eclairs)
         self.dr_sim_speed = None    # sim/time/sim_speed (multiplicateur vitesse sim)
         # Command handle for regen_weather
         self.cmd_regen_weather = None
@@ -99,6 +100,12 @@ class PythonInterface:
                 self.dr_rain_scale = xp.findDataRef("sim/private/controls/rain/scale")
             except Exception:
                 self.dr_rain_scale = None
+
+            # Thunderstorm / lightning
+            try:
+                self.dr_thunderstorm = xp.findDataRef("sim/weather/thunderstorm_percent")
+            except Exception:
+                self.dr_thunderstorm = None
 
             # Sim speed (for accelerating weather accumulation)
             self.dr_sim_speed = xp.findDataRef("sim/time/sim_speed")
@@ -285,6 +292,15 @@ class PythonInterface:
             except Exception as e:
                 xp.log(f"LARD Weather v2: rain_scale error: {e}")
 
+        # -- Thunderstorm / lightning (dataref direct) --
+        if "thunderstorm_pct" in weather and self.dr_thunderstorm is not None:
+            try:
+                val = max(0.0, min(1.0, float(weather["thunderstorm_pct"])))
+                xp.setDataf(self.dr_thunderstorm, val)
+                xp.log(f"LARD Weather v2: thunderstorm_percent = {val:.2f}")
+            except Exception as e:
+                xp.log(f"LARD Weather v2: thunderstorm_percent error: {e}")
+
         time_str = f" time={weather['time_of_day_h']}h" if "time_of_day_h" in weather else ""
         cloud_str = "auto (XP12)" if cloud_type is None else f"type={cloud_type:.0f} cov={cloud_coverage:.1f} {cloud_base:.0f}-{cloud_top:.0f}m"
         xp.log(f"LARD Weather v2: SET clouds=[{cloud_str}] "
@@ -370,6 +386,13 @@ class PythonInterface:
             xp.setDatai(self.dr_use_system_time, 1)
         except Exception:
             pass
+
+        # Step 5: reset thunderstorm
+        if self.dr_thunderstorm is not None:
+            try:
+                xp.setDataf(self.dr_thunderstorm, 0.0)
+            except Exception:
+                pass
 
         xp.log("LARD Weather v2: CLEARED (regen + real weather + system time)")
 
