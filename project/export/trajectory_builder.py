@@ -132,7 +132,6 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
     total_duration = frame_times[-1]
 
     # --- Grille interne a frequence fixe ---
-    dt_sim = 1.0 / sim_rate_hz
     n_micro = max(int(round(total_duration * sim_rate_hz)), 1) + 1
     micro_times = np.linspace(0.0, total_duration, n_micro)
 

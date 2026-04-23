@@ -405,41 +405,6 @@ class XPlaneConnection:
         print(f"  [XPLANE]   local: x={self.ref_lx:.0f}, y={self.ref_ly:.0f}, "
               f"z={self.ref_lz:.0f}")
 
-    def move_reference_to(self, lat, lon):
-        """Deplace l'avion a lat/lon et relit le point de reference.
-
-        La conversion _latlon_to_local est precise pres du point de reference
-        mais diverge avec la distance (~22m a 3km). En placant le ref au seuil
-        de piste, toutes les positions de la trajectoire (qui convergent vers
-        le seuil) auront une conversion precise la ou ca compte.
-        """
-        # Utiliser la conversion actuelle (approximative) pour deplacer
-        lx, ly, lz = self._latlon_to_local(lat, lon, self.ref_elev)
-        self.send_dref("sim/flightmodel/position/local_x", lx)
-        self.send_dref("sim/flightmodel/position/local_y", ly)
-        self.send_dref("sim/flightmodel/position/local_z", lz)
-        time.sleep(0.15)
-        # Relire : maintenant le ref est pres de la cible
-        self._read_reference_point()
-        print(f"  [XPLANE] Reference deplacee vers lat={lat:.6f}, lon={lon:.6f}")
-
-    def _latlon_to_local(self, lat, lon, alt_m):
-        """Convertit lat/lon/alt en local_x/y/z OpenGL X-Plane.
-
-        Coordonnees OpenGL : x=est, y=up, z=sud (nord=negatif).
-        Utilise le point de reference lu au setup.
-        """
-        dlat = lat - self.ref_lat
-        dlon = lon - self.ref_lon
-        m_per_deg_lat = 111320.0
-        m_per_deg_lon = 111320.0 * math.cos(math.radians(self.ref_lat))
-        dn = dlat * m_per_deg_lat   # metres vers le nord
-        de = dlon * m_per_deg_lon   # metres vers l'est
-        lx = self.ref_lx + de       # est = +x
-        lz = self.ref_lz - dn       # nord = -z
-        ly = self.ref_ly + (alt_m - self.ref_elev)
-        return lx, ly, lz
-
     def setup_view(self):
         """Configure X-Plane pour le rendu automatise.
 
@@ -649,38 +614,6 @@ class XPlaneConnection:
             "heading": psi, "pitch": theta, "roll": phi,
         }
 
-    def read_terrain_elevation(self, lat, lon):
-        """Lit l'altitude terrain reelle a une position lat/lon.
-
-        Deplace temporairement l'avion au sol a cette position,
-        lit l'elevation, puis restaure.
-
-        :return: altitude terrain MSL en metres
-        """
-        # Sauver la position actuelle
-        old_lx = self.read_dref("sim/flightmodel/position/local_x", 20)
-        old_ly = self.read_dref("sim/flightmodel/position/local_y", 21)
-        old_lz = self.read_dref("sim/flightmodel/position/local_z", 22)
-
-        # Deplacer au point cible, altitude basse pour toucher le terrain
-        lx, ly, lz = self._latlon_to_local(lat, lon, 0.0)
-        self.send_dref("sim/flightmodel/position/local_x", lx)
-        self.send_dref("sim/flightmodel/position/local_y", 0.0)  # y=up, poser au sol
-        self.send_dref("sim/flightmodel/position/local_z", lz)
-        time.sleep(0.3)
-
-        # Lire l'elevation terrain (AGL = 0 → elevation = altitude terrain)
-        elev = self.read_dref("sim/flightmodel/position/elevation", 23)
-
-        # Restaurer
-        if old_lx is not None:
-            self.send_dref("sim/flightmodel/position/local_x", old_lx)
-            self.send_dref("sim/flightmodel/position/local_y", old_ly)
-            self.send_dref("sim/flightmodel/position/local_z", old_lz)
-            time.sleep(0.2)
-
-        return elev or 0.0
-
     def capture_frame(self, output_path):
         """Capture la fenetre X-Plane et crop au centre a la taille desiree.
 
@@ -824,7 +757,6 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     """
     config = config or XPlaneConfig()
     data = load_poses_json(poses_path)
-    ltp_alt = data.get("ltp_alt", 0.0)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
