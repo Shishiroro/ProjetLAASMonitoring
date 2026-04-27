@@ -145,3 +145,42 @@ def apply_faults_to_directory(input_dir, output_dir, faults, n_frames):
 
     print(f"  [FAULTS] {count} images traitees, {count_affected} degradees -> {output_dir}")
     return count
+
+
+def apply_faults(run_dir):
+    """Applique les fautes capteur a un run si fault_profile.json est present.
+
+    Lit run_dir/fault_profile.json, applique les fautes aux images de footage/
+    et ecrit dans degraded/. Skip si degraded/ existe deja avec des images.
+
+    :return: dossier d'images a utiliser pour YOLO (degraded/ si fautes appliquees,
+             footage/ sinon)
+    """
+    run_dir = Path(run_dir)
+    fault_json = run_dir / "fault_profile.json"
+    footage_dir = run_dir / "footage"
+    degraded_dir = run_dir / "degraded"
+
+    if not fault_json.exists():
+        return footage_dir
+
+    if degraded_dir.exists() and (
+        list(degraded_dir.glob("*.jpeg"))
+        + list(degraded_dir.glob("*.jpg"))
+        + list(degraded_dir.glob("*.png"))
+    ):
+        print(f"  [FAULTS] degraded/ existe deja, skip application")
+        return degraded_dir
+
+    print(f"\n  [FAULTS] Application des fautes capteur ({run_dir.name})...")
+
+    faults, n_frames = load_fault_profile(fault_json)
+    if not faults:
+        print(f"  [FAULTS] Aucune faute dans le profil, skip")
+        return footage_dir
+
+    fault_str = ", ".join(f"{f.fault_type}({f.severity:.2f})" for f in faults)
+    print(f"  [FAULTS] Fautes : {fault_str}")
+
+    apply_faults_to_directory(footage_dir, degraded_dir, faults, n_frames)
+    return degraded_dir

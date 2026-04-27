@@ -262,3 +262,150 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None):
 
     print(f"  .csv GT -> {csv_file}")
     return str(csv_file)
+
+
+# ---------------------------------------------------------------------------
+# Generation GT pour un run + annotation visuelle
+# ---------------------------------------------------------------------------
+
+def generate_gt(run_dir):
+    """Genere le CSV ground truth LARD pour un run.
+
+    Lit run_dir/<stem>.yaml et les images dans run_dir/footage/, ecrit
+    run_dir/<stem>_labels.csv. Applique le fix yaw +180 (cap de vol -> sens
+    de regard) le temps de l'export.
+
+    :return: Path du CSV genere
+    """
+    from pathlib import Path
+    run_dir = Path(run_dir)
+    yamls = list(run_dir.glob("*.yaml"))
+    if not yamls:
+        raise FileNotFoundError(f"Pas de .yaml dans {run_dir}")
+    yaml_path = yamls[0]
+
+    print(f"\n  [GT] Generation CSV pour {run_dir.name}...")
+
+    # Fix convention yaw : +180 pour passer du cap de vol au sens de regard
+    # (fix envisage par LARD, ligne 132 commentee dans label_export.py)
+    import src.labeling.label_export as _le
+    _original_facing = _le.runway_is_facing_us
+
+    def _fixed_facing(heading, runway):
+        return _original_facing((heading + 180) % 360, runway)
+
+    _le.runway_is_facing_us = _fixed_facing
+    try:
+        csv_file = generate_labels_csv(
+            yaml_path=str(yaml_path),
+            dataset_dir=str(run_dir),
+        )
+    finally:
+        _le.runway_is_facing_us = _original_facing
+
+    return Path(csv_file)
+
+
+def annotate_gt(run_dir, csv_path=None, runway=None, max_images=0):
+    """Dessine les bbox GT LARD sur les images dans run_dir/annotated_lard/.
+
+    :param run_dir: dossier du run (contient footage/ + <stem>_labels.csv)
+    :param csv_path: CSV GT (defaut: auto-detecte run_dir/*_labels.csv)
+    :param runway: filtre une piste (defaut: extrait du nom du run).
+                   Le reciprocal est aussi accepte (meme bande physique).
+    :param max_images: 0 = toutes
+    """
+    import csv as csvmod
+    from pathlib import Path
+    from PIL import Image, ImageDraw, ImageFont
+
+    # Import lazy de l'utilitaire piste (yolo/eval/runway.py)
+    yolo_eval_dir = PROJECT_ROOT / "yolo" / "eval"
+    if str(yolo_eval_dir) not in sys.path:
+        sys.path.insert(0, str(yolo_eval_dir))
+    from runway import reciprocal_runway, runway_from_run_name
+
+    run_dir = Path(run_dir)
+    footage_dir = run_dir / "footage"
+    out_dir = run_dir / "annotated_lard"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if csv_path is None:
+        csvs = list(run_dir.glob("*_labels.csv"))
+        if not csvs:
+            raise FileNotFoundError(f"Pas de *_labels.csv dans {run_dir}")
+        csv_path = csvs[0]
+
+    target_runway = runway or runway_from_run_name(run_dir.name)
+
+    # Police lisible (arial sur Windows, DejaVu/Liberation sur Linux)
+    font = None
+    for ttf in ["arial.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"]:
+        try:
+            font = ImageFont.truetype(ttf, 20)
+            break
+        except OSError:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+
+    entries = {}
+    with open(csv_path, "r") as f:
+        reader = csvmod.DictReader(f, delimiter=";")
+        for row in reader:
+            filename = Path(row["image"]).name
+            corners = (
+                (int(float(row["x_TR"])), int(float(row["y_TR"]))),
+                (int(float(row["x_TL"])), int(float(row["y_TL"]))),
+                (int(float(row["x_BL"])), int(float(row["y_BL"]))),
+                (int(float(row["x_BR"])), int(float(row["y_BR"]))),
+            )
+            rwy_label = row.get("runway", "?")
+            # Filtrer sur la piste cible (et son reciprocal pour la meme bande)
+            if target_runway:
+                norm_target = target_runway.lstrip("0") or "0"
+                norm_runway = str(rwy_label).lstrip("0") or "0"
+                recip_target = reciprocal_runway(target_runway).lstrip("0") or "0"
+                if norm_runway != norm_target and norm_runway != recip_target:
+                    continue
+            entries.setdefault(filename, []).append({"corners": corners, "runway": rwy_label})
+
+    COLORS = ["cyan", "red", "yellow", "lime", "magenta", "orange"]
+    runway_colors = {}
+    color_idx = 0
+    processed = 0
+
+    # Affichage : la piste d'approche (pas le reciprocal LARD)
+    display_runway = target_runway
+
+    for filename in sorted(entries.keys()):
+        if max_images > 0 and processed >= max_images:
+            break
+        img_path = footage_dir / filename
+        if not img_path.exists():
+            continue
+
+        img = Image.open(img_path).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        for entry in entries[filename]:
+            rwy = display_runway or entry["runway"]
+            if rwy not in runway_colors:
+                runway_colors[rwy] = COLORS[color_idx % len(COLORS)]
+                color_idx += 1
+            color = runway_colors[rwy]
+            c = entry["corners"]
+            for i in range(4):
+                draw.line([c[i], c[(i + 1) % 4]], fill=color, width=1)
+            cx = sum(p[0] for p in c) // 4
+            cy = min(p[1] for p in c) - 25
+            bbox = draw.textbbox((cx, cy), rwy, font=font)
+            draw.rectangle([bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2], fill="black")
+            draw.text((cx, cy), rwy, fill=color, font=font)
+
+        img.save(out_dir / f"gt_{filename}")
+        processed += 1
+
+    print(f"  [GT-VIS] {processed} images annotees dans annotated_lard/")

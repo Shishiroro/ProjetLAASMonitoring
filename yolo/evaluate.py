@@ -5,7 +5,6 @@ Calcule AP, F1, Precision, Recall via le module yolo/eval/.
 
 from pathlib import Path
 import json
-import re
 import numpy as np
 import pandas as pd
 import torch
@@ -13,23 +12,12 @@ import torch
 from eval.box import box_extract
 from eval.metrics_utils import bbox_convert
 from eval.metrics import compute_metrics
+from eval.runway import reciprocal_runway, runway_from_run_name
 
 
 # --- Colonnes GT LARD (NEW_CORNERS_NAMES = TR, TL, BL, BR) ---
 CORNER_X_COLS = ["x_TR", "x_TL", "x_BL", "x_BR"]
 CORNER_Y_COLS = ["y_TR", "y_TL", "y_BL", "y_BR"]
-
-
-def _reciprocal_runway(rwy: str) -> str:
-    """Retourne le reciprocal d'une piste (ex: 10L -> 28R, 10 -> 28)."""
-    m = re.match(r"^(\d{1,2})([LRC]?)$", str(rwy))
-    if not m:
-        return rwy
-    num = int(m.group(1))
-    letter = m.group(2)
-    recip_num = (num + 18) % 36 or 36
-    recip_letter = {"L": "R", "R": "L", "C": "C", "": ""}.get(letter, "")
-    return f"{recip_num:02d}{recip_letter}"
 
 
 def load_predictions(csv_path: Path) -> tuple[torch.Tensor, list[str]]:
@@ -72,7 +60,7 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
     if runway is not None:
         # LARD stocke le nom de piste du cote LARD (ex: approche 10L → label 28L).
         # On accepte le runway demande ET son reciprocal.
-        recip = _reciprocal_runway(str(runway))
+        recip = reciprocal_runway(str(runway))
         df = df[df["runway"].astype(str).isin([str(runway), recip])]
     rows = []
 
@@ -186,6 +174,36 @@ def evaluate(predictions_csv: Path, csv_path: Path, iou_thresh: float = 0.5, iou
     print(f"\nResultats sauvegardes dans : {results_file}")
 
     return metrics
+
+
+def evaluate_run(run_dir, runway: str | None = None,
+                 iou_thresh: float = 0.5, iou_method: str = "CIOU"):
+    """Evalue IoU sur un run.
+
+    Auto-trouve run_dir/predictions.csv et run_dir/<stem>_labels.csv.
+    Le runway est extrait du nom du run (ex: LFPG_09L_002 -> 09L) si non fourni.
+
+    :return: dict de metriques (ou None si erreur/pas de donnees)
+    """
+    run_dir = Path(run_dir)
+    predictions_csv = run_dir / "predictions.csv"
+
+    csv_candidates = list(run_dir.glob("*_labels.csv"))
+    if not csv_candidates:
+        raise FileNotFoundError(f"Pas de *_labels.csv dans {run_dir}")
+    csv_path = csv_candidates[0]
+
+    rwy = runway if runway is not None else runway_from_run_name(run_dir.name)
+
+    print(f"\n  [EVAL] IoU evaluation...")
+    return evaluate(
+        predictions_csv=predictions_csv,
+        csv_path=csv_path,
+        iou_thresh=iou_thresh,
+        iou_method=iou_method,
+        runway=rwy,
+        results_dir=run_dir,
+    )
 
 
 if __name__ == "__main__":

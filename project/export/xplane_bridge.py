@@ -877,3 +877,43 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         conn.close()
 
     return output_dir
+
+
+def render_run(run_dir, xplane_dir):
+    """Rend les images d'un run via X-Plane 12.
+
+    Lit run_dir/poses_cam_export.json (+ weather_profile.json si present),
+    sauve les images dans run_dir/footage/. Skip si footage/ contient deja
+    des images.
+
+    :param run_dir: dossier du run
+    :param xplane_dir: chemin du repertoire X-Plane 12
+    :return: True si les images ont ete rendues (ou existaient deja), False sinon
+    """
+    run_dir = Path(run_dir)
+    poses_file = run_dir / "poses_cam_export.json"
+    footage_dir = run_dir / "footage"
+
+    if not poses_file.exists():
+        print(f"  [XPLANE] Pas de poses_cam_export.json pour {run_dir.name}")
+        return False
+
+    if footage_dir.exists():
+        imgs = (
+            list(footage_dir.glob("*.png"))
+            + list(footage_dir.glob("*.jpeg"))
+            + list(footage_dir.glob("*.jpg"))
+        )
+        if imgs:
+            print(f"  [XPLANE] footage/ existe deja ({len(imgs)} images), skip rendu")
+            return True
+
+    print(f"\n  [XPLANE] Rendu de {run_dir.name}...")
+
+    config = XPlaneConfig(xplane_dir=xplane_dir)
+    weather_file = run_dir / "weather_profile.json"
+    weather_path = str(weather_file) if weather_file.exists() else None
+
+    render_scenario(str(poses_file), str(footage_dir), config,
+                    weather_profile_path=weather_path)
+    return True

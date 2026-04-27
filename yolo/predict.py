@@ -133,6 +133,45 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
     return predictions_csv, annotated_dir
 
 
+def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512):
+    """Lance YOLO sur un run.
+
+    Utilise run_dir/degraded/ si present (fautes capteur deja appliquees),
+    sinon run_dir/footage/. Sortie : run_dir/predictions.csv + run_dir/annotated/.
+
+    :return: Path du predictions.csv genere (ou None si pas d'images)
+    """
+    run_dir = Path(run_dir)
+    degraded = run_dir / "degraded"
+    footage = run_dir / "footage"
+
+    has_degraded = degraded.exists() and bool(
+        list(degraded.glob("*.jpeg")) + list(degraded.glob("*.jpg")) + list(degraded.glob("*.png"))
+    )
+    images_dir = degraded if has_degraded else footage
+
+    n_images = len(
+        list(images_dir.glob("*.jpeg"))
+        + list(images_dir.glob("*.jpg"))
+        + list(images_dir.glob("*.png"))
+    )
+    print(f"\n  [YOLO] Prediction sur {n_images} images depuis {images_dir.name}/ ({run_dir.name})...")
+
+    predictions_csv, _ = predict(
+        images_dir=images_dir,
+        conf=conf,
+        imgsz=imgsz,
+        output_dir=run_dir,
+    )
+
+    if predictions_csv and predictions_csv.exists():
+        print(f"  [YOLO] Predictions dans {predictions_csv.name}")
+    else:
+        print(f"  [YOLO] ATTENTION : pas de predictions generees")
+
+    return predictions_csv
+
+
 if __name__ == "__main__":
     import argparse
 
