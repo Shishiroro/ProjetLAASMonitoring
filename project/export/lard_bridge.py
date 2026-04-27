@@ -3,8 +3,8 @@ lard_bridge.py — Interface avec LARD (import uniquement, rien modifie)
 ======================================================================
 Responsabilites :
     1. Obtenir la geometrie piste via compute_aiming_point
-    2. Ecrire le fichier .yaml de sortie
-    3. Sauver les poses dans poses_cam_export.json
+    2. Ecrire le fichier .yaml de sortie (format LARD, compatible export_labels)
+    3. Appeler export_labels pour produire le CSV de ground truth
 
 Note : export_labels lit des fichiers relativement au CWD,
        donc on change temporairement vers LARD_ROOT.
@@ -35,9 +35,6 @@ from src.geo.geo_dataset import compute_aiming_point
 from src.geo.geo_utils import ecef2llh
 from src.labeling.label_export import export_labels
 from src.labeling.export_config import DatasetTypes
-
-# Import save_poses_json pour le format universel
-from xplane_bridge import save_poses_json
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +121,11 @@ def generate_frame_times(n_frames, fps):
 
 def export_scenario(flight_data, cfg, ou_params, airport, runway,
                     output_dir, scenario_name="scenario", faults=None,
-                    weather=None, ltp_alt=0.0):
+                    weather=None):
     """
-    Exporte un scenario complet (.yaml + poses_cam_export.json).
+    Exporte le .yaml d'un scenario au format LARD.
 
-    Le .yaml est fidele au format LARD (poses, image, trajectory)
+    Ce .yaml est fidele au format LARD (poses, image, trajectory)
     pour etre compatible avec export_labels() de LARD.
 
     :param flight_data: list de tuples (lon, lat, alt, yaw, pitch, roll)
@@ -154,10 +151,6 @@ def export_scenario(flight_data, cfg, ou_params, airport, runway,
     f_focal = img_height / 2.0 / np.tan(np.deg2rad(fov_x / 2.0))
     fov_y = round(float(2 * np.rad2deg(np.arctan2(img_width / 2.0, f_focal))), 6)
     watermark_height = 0
-
-    # --- poses_cam_export.json ---
-    poses_file = output_path / "poses_cam_export.json"
-    save_poses_json(flight_data, cfg.fps, scenario_name, poses_file, ltp_alt=ltp_alt)
 
     # --- .yaml au format LARD (compatible export_labels) ---
     def _to_python(val):

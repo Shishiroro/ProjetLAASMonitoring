@@ -18,6 +18,7 @@ if str(_export_dir) not in sys.path:
 
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario
+from xplane_bridge import save_poses_json
 from sensor_faults import (
     FaultConfig, KNOWN_FAULT_TYPES, validate_faults, save_fault_profile,
 )
@@ -145,15 +146,22 @@ def export(root_node, path):
         runway_back_azimuth_deg=rwy["runway_back_azimuth_deg"],
     )
 
-    # --- Exporter .yaml + poses_cam_export.json ---
+    # --- Exporter .yaml (format LARD) ---
     weather_arg = weather_cfg if has_weather(weather_cfg) else None
+    scenario_name = f"{airport}_{runway}"
     export_scenario(
         flight_data, cfg, ou,
         airport, runway,
         output_dir=path,
-        scenario_name=f"{airport}_{runway}",
+        scenario_name=scenario_name,
         faults=faults,
         weather=weather_arg,
+    )
+
+    # --- Sauver poses_cam_export.json (format X-Plane, coords locales) ---
+    save_poses_json(
+        flight_data, cfg.fps, scenario_name,
+        output_path=Path(path) / "poses_cam_export.json",
         ltp_alt=rwy["ltp_alt"],
     )
 
