@@ -89,14 +89,8 @@
                Orage + pluie : precip=0.9, cloud_type=3, coverage=1.0
                Neige         : precip=0.5, temperature_c=-5
                Nuit claire   : tout defaut, time_of_day_h=22
-
-             rain_intensity : si > 0, OVERRIDE precip/vis/cloud_type/coverage
-                              (raccourci paliers, voir xplane_weather.expand_rain_intensity)
         -->
         <node name="weather">
-
-            <!-- Raccourci pluie (0 = utiliser params individuels) -->
-            <parameter name="rain_intensity"          type="real" min="0"     max="0"/>
 
             <!-- Precipitation : 0 = desactive. Cumulonimbus auto si cloud_type=-1.
                  0->1 : la pluie reste discrete mais sol mouille / particules denses / eclairage. -->

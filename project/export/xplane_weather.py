@@ -24,7 +24,7 @@ Communication par fichiers JSON :
 import os
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 from pathlib import Path
 
 
@@ -43,7 +43,6 @@ ACCUMULATION_REAL_S = 5
 @dataclass
 class WeatherConfig:
     """Configuration meteo X-Plane per-scenario (genere par TAF)."""
-    rain_intensity: float = 0.0      # 0 = utilise params individuels, >0 = override
     precip_rate: float = 0.0
     cloud_type: float = -1.0         # -1 = pas de nuages
     cloud_coverage: float = 0.0
@@ -56,52 +55,9 @@ class WeatherConfig:
     settle_s: float = DEFAULT_SETTLE_S  # delai stabilisation meteo/textures avant capture (s)
 
 
-def expand_rain_intensity(config):
-    """Expanse rain_intensity en params individuels si > 0.
-
-    Mapping rain_intensity → params XP12 (interpolation lineaire entre paliers) :
-      0.0  Sec            precip=0.0  vis=50000  cloud_type=-1  cov=0.0
-      0.1  Bruine         precip=0.2  vis=12000  Stratus(1)     cov=0.5
-      0.3  Pluie legere   precip=0.4  vis=7000   Stratus(1)     cov=0.7
-      0.5  Pluie moderee  precip=0.6  vis=4000   Cumulus(2)     cov=0.85
-      0.7  Forte pluie    precip=0.8  vis=2000   Cb(3)          cov=1.0
-      1.0  Deluge/orage   precip=1.0  vis=800    Cb(3)          cov=1.0
-
-    Modifie config in-place et retourne config.
-    """
-    ri = config.rain_intensity
-    if ri <= 0:
-        return config
-
-    # Paliers : (rain_intensity, precip_rate, visibility_m, cloud_type, cloud_coverage)
-    PALIERS = [
-        (0.0, 0.0, 50000, -1, 0.0),
-        (0.1, 0.2, 12000,  1, 0.5),
-        (0.3, 0.4,  7000,  1, 0.7),
-        (0.5, 0.6,  4000,  2, 0.85),
-        (0.7, 0.8,  2000,  3, 1.0),
-        (1.0, 1.0,   800,  3, 1.0),
-    ]
-
-    # Trouver les 2 paliers encadrants
-    for i in range(len(PALIERS) - 1):
-        if PALIERS[i][0] <= ri <= PALIERS[i + 1][0]:
-            lo, hi = PALIERS[i], PALIERS[i + 1]
-            t = (ri - lo[0]) / (hi[0] - lo[0]) if hi[0] != lo[0] else 0.0
-            config.precip_rate = lo[1] + t * (hi[1] - lo[1])
-            config.visibility_m = lo[2] + t * (hi[2] - lo[2])
-            # cloud_type : pas d'interpolation, on prend celui du palier superieur
-            config.cloud_type = hi[3] if t > 0 else lo[3]
-            config.cloud_coverage = lo[4] + t * (hi[4] - lo[4])
-            break
-
-    return config
-
-
 def has_weather(config):
     """Retourne True si la config modifie la meteo par rapport au defaut."""
-    return (config.rain_intensity > 0
-            or config.precip_rate > 0
+    return (config.precip_rate > 0
             or config.cloud_type >= 0
             or config.visibility_m < 50000
             or config.temperature_c < 0
@@ -110,8 +66,6 @@ def has_weather(config):
 
 def validate_weather(config):
     """Valide les parametres meteo."""
-    if not 0.0 <= config.rain_intensity <= 1.0:
-        raise ValueError(f"rain_intensity={config.rain_intensity} hors [0, 1]")
     if not 0.0 <= config.precip_rate <= 1.0:
         raise ValueError(f"precip_rate={config.precip_rate} hors [0, 1]")
     if config.cloud_type not in (-1, 0, 1, 2, 3) and not (-1 <= config.cloud_type <= 3):
@@ -228,7 +182,12 @@ def load_weather_profile(profile_path):
         print(f"  [WEATHER] Ancien format v1 ignore : {profile_path}")
         return None
 
-    return WeatherConfig(**profile["weather"])
+    # Filtre les champs inconnus (ex: rain_intensity supprime) pour rester
+    # compat avec les anciens weather_profile.json
+    weather = profile["weather"]
+    valid_fields = {f.name for f in fields(WeatherConfig)}
+    filtered = {k: v for k, v in weather.items() if k in valid_fields}
+    return WeatherConfig(**filtered)
 
 
 # ---------------------------------------------------------------------------
