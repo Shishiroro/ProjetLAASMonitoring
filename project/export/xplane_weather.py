@@ -2,10 +2,12 @@
 xplane_weather.py — Effets meteo X-Plane 12 via XPPython3 (v2, per-scenario)
 =============================================================================
 Gere la configuration et injection des effets meteo dans X-Plane 12
-via le plugin PI_lard_weather.py (XPPython3 / XPLMWeather API).
+via le plugin PI_weather.py (XPPython3 / XPLMWeather API).
 
 La meteo est injectee UNE FOIS avant le rendu d'un scenario (pas per-frame).
-Le pipeline attend ~60s pour la stabilisation GPU des nuages.
+Le pipeline attend WeatherConfig.settle_s secondes (configurable via XML
+parametre xplane_weather_settle_s, defaut 15s) pour la stabilisation GPU
+des nuages et le chargement des textures de la zone teleportee.
 
 Parametres directs XP12 (plus de severity/from_pct/to_pct) :
   - precip_rate     : taux precipitation [0, 1]
@@ -26,9 +28,10 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 
 
-# Temps de stabilisation nuages GPU (secondes)
+# Temps de stabilisation nuages GPU (secondes) — fallback par defaut
 # Teste a ~5-10s avec updateImmediately=True sur XP12
-CLOUD_STABILIZATION_DELAY_S = 15
+# La valeur effective est lue depuis WeatherConfig.settle_s (parametre XML)
+DEFAULT_SETTLE_S = 15.0
 
 # Acceleration sim pour accumulation effets sol (flaques, neige)
 # On accelere la sim a SIM_SPEED_BOOST pendant ACCUMULATION_REAL_S secondes
@@ -50,6 +53,7 @@ class WeatherConfig:
     temperature_c: float = 15.0
     time_of_day_h: float = 12.0
     rain_scale: float = 1.0          # taille visuelle des gouttes (sim/private/controls/rain/scale)
+    settle_s: float = DEFAULT_SETTLE_S  # delai stabilisation meteo/textures avant capture (s)
 
 
 def expand_rain_intensity(config):
@@ -122,6 +126,8 @@ def validate_weather(config):
         raise ValueError(f"time_of_day_h={config.time_of_day_h} hors [0, 24]")
     if not 0.1 <= config.rain_scale <= 5.0:
         raise ValueError(f"rain_scale={config.rain_scale} hors [0.1, 5.0]")
+    if not 0.0 <= config.settle_s <= 60.0:
+        raise ValueError(f"settle_s={config.settle_s} hors [0, 60]")
 
 
 def local_hour_to_zulu(local_hour, longitude):
@@ -140,7 +146,7 @@ def local_hour_to_zulu(local_hour, longitude):
 
 
 def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
-    """Construit les parametres JSON pour PI_lard_weather.py.
+    """Construit les parametres JSON pour PI_weather.py.
 
     Traduit WeatherConfig en params attendus par le plugin.
 
@@ -218,7 +224,7 @@ def load_weather_profile(profile_path):
 
 
 # ---------------------------------------------------------------------------
-# Communication avec le plugin XPPython3 (PI_lard_weather.py)
+# Communication avec le plugin XPPython3 (PI_weather.py)
 # ---------------------------------------------------------------------------
 
 DEFAULT_EXCHANGE_DIR = None
@@ -235,7 +241,7 @@ def set_exchange_dir(xplane_dir):
 
 
 def _send_weather_command(action, weather=None, timeout=5.0, retries=2, **extra_fields):
-    """Envoie une commande au plugin PI_lard_weather.py et attend l'ack.
+    """Envoie une commande au plugin PI_weather.py et attend l'ack.
 
     :param retries: nombre de tentatives supplementaires si timeout (0 = pas de retry)
     :param extra_fields: champs supplementaires a inclure dans la commande JSON
@@ -339,23 +345,24 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
 
     print(f"  [WEATHER] Injecte : {', '.join(parts)}")
 
-    # Attente stabilisation nuages GPU
+    # Attente stabilisation nuages GPU + textures (configurable via XML)
+    settle_s = float(config.settle_s)
     needs_cloud_wait = (config.cloud_type >= 0 and config.cloud_coverage > 0) or config.precip_rate > 0
     if needs_cloud_wait:
         # Si precip active, accelerer pendant la stabilisation nuages
         # pour accumuler les effets sol (flaques, neige) sans temps supplementaire
         if config.precip_rate > 0:
-            print(f"  [WEATHER] Stabilisation {CLOUD_STABILIZATION_DELAY_S}s en {SIM_SPEED_BOOST}x "
+            print(f"  [WEATHER] Stabilisation {settle_s:.1f}s en {SIM_SPEED_BOOST}x "
                   f"(accumulation flaques/neige)...")
             set_sim_speed(SIM_SPEED_BOOST)
-            time.sleep(CLOUD_STABILIZATION_DELAY_S)
+            time.sleep(settle_s)
             set_sim_speed(1)
         else:
-            print(f"  [WEATHER] Attente {CLOUD_STABILIZATION_DELAY_S}s stabilisation nuages...")
-            time.sleep(CLOUD_STABILIZATION_DELAY_S)
+            print(f"  [WEATHER] Attente {settle_s:.1f}s stabilisation nuages...")
+            time.sleep(settle_s)
     else:
-        # Visibilite/brouillard seul = quasi-instantane
-        time.sleep(3)
+        # Visibilite/brouillard seul = quasi-instantane (cap a 3s, ne depasse pas settle_s)
+        time.sleep(min(3.0, settle_s))
 
     print(f"  [WEATHER] Stabilisation terminee")
     return True

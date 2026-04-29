@@ -791,7 +791,8 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         )
 
         # Injecter la meteo (per-scenario, une seule fois) APRES teleportation
-        # La stabilisation de 15s laisse le temps a X-Plane de charger les textures
+        # La stabilisation (WeatherConfig.settle_s, configurable via XML)
+        # laisse le temps a X-Plane de charger les textures
         weather_active = False
         weather_status = "no_weather"  # no_weather | ok | plugin_timeout | inject_failed
         if weather_profile_path and Path(weather_profile_path).exists():
@@ -853,9 +854,9 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
             if (i + 1) % 50 == 0 or (i + 1) == n_frames:
                 elapsed = time.perf_counter() - t_start
-                fps = (i + 1) / elapsed
-                print(f"  [XPLANE] {i + 1}/{n_frames} frames "
-                      f"({fps:.1f} fps, {elapsed:.0f}s)")
+                rate = (i + 1) / elapsed
+                print(f"  [XPLANE] {i + 1}/{n_frames} frames | "
+                      f"capture {rate:.1f} img/s | {elapsed:.0f}s")
 
         n_rendered = len(list(output_dir.glob("*.jpg")))
         total = time.perf_counter() - t_start

@@ -32,8 +32,8 @@ KTS_TO_MS = 0.514444
 class TrajectoryConfig:
     """Parametres utilisateur (viennent du XML via TAF)."""
     fps: int = 5
-    segment_start_m: float = 3000.0
-    segment_end_m: float = 280.0
+    along_track_distance_start: float = 3000.0
+    along_track_distance_end: float = 280.0
     ground_speed_kts: float = 137.0
     correlation_time_s: float = 4.0   # auto-calcule par Export.py (Dryden)
     turbulence_intensity: float = 0.3
@@ -78,11 +78,11 @@ def compute_spatial_timeline(cfg: TrajectoryConfig):
     """
     # crée N frames uniformément espacées en distance (décroissant de start à end), calcule le dt entre chaque frame
     speed_ms = cfg.ground_speed_kts * KTS_TO_MS
-    total_dist = cfg.segment_start_m - cfg.segment_end_m
+    total_dist = cfg.along_track_distance_start - cfg.along_track_distance_end
     duration = total_dist / speed_ms
     n_frames = max(int(round(duration * cfg.fps)), 2)
 
-    distances_m = np.linspace(cfg.segment_start_m, cfg.segment_end_m, n_frames)
+    distances_m = np.linspace(cfg.along_track_distance_start, cfg.along_track_distance_end, n_frames)
     spatial_step = abs(distances_m[1] - distances_m[0]) if n_frames > 1 else 0.0
 
     dt_array = np.full(n_frames - 1, spatial_step / speed_ms)
@@ -163,7 +163,7 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
 # Convergence finale
 # ---------------------------------------------------------------------------
 
-def compute_convergence_factors(distances_m, segment_end_m,
+def compute_convergence_factors(distances_m, along_track_distance_end,
                                 stabilization_distance_m,
                                 exponent=0.5, residual=0.08):
     """
@@ -177,12 +177,12 @@ def compute_convergence_factors(distances_m, segment_end_m,
     :return: ndarray (len(distances_m),) dans [residual, 1]
     """
     factors = np.ones(len(distances_m))
-    if stabilization_distance_m <= segment_end_m:
+    if stabilization_distance_m <= along_track_distance_end:
         return factors
 
     mask = distances_m < stabilization_distance_m
     ratio = np.clip(
-        (distances_m[mask] - segment_end_m) / (stabilization_distance_m - segment_end_m),
+        (distances_m[mask] - along_track_distance_end) / (stabilization_distance_m - along_track_distance_end),
         0.0, 1.0,
     )
     factors[mask] = residual + (1.0 - residual) * ratio ** exponent
@@ -240,7 +240,7 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
 
     # --- Convergence (integree dans l'OU) ---
     conv = compute_convergence_factors(
-        distances_m, cfg.segment_end_m, cfg.stabilization_distance_m
+        distances_m, cfg.along_track_distance_end, cfg.stabilization_distance_m
     )
 
     # --- OU deviations par canal (avec convergence integree) ---
@@ -320,12 +320,12 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
         cfg.wind_speed_kts, cfg.wind_direction_deg,
         runway_heading_deg, cfg.ground_speed_kts
     )
-    decrab_start_m = cfg.segment_end_m + 300.0  # debut du de-crab
+    decrab_start_m = cfg.along_track_distance_end + 300.0  # debut du de-crab
     crab_angles = np.full(n_frames, crab_angle)
     for i in range(n_frames):
         if distances_m[i] < decrab_start_m:
             # Convergence lineaire : plein crab a decrab_start, 0 a segment_end
-            ratio = (distances_m[i] - cfg.segment_end_m) / 300.0
+            ratio = (distances_m[i] - cfg.along_track_distance_end) / 300.0
             ratio = np.clip(ratio, 0.0, 1.0)
             crab_angles[i] = crab_angle * ratio
 

@@ -22,12 +22,12 @@
                    min="10"
                    max="10"/>
 
-        <parameter name="segment_start_m"
+        <parameter name="along_track_distance_start"
                    type="real"
                    min="2000"
                    max="2000"/>
 
-        <parameter name="segment_end_m"
+        <parameter name="along_track_distance_end"
                    type="real"
                    min="280"
                    max="280"/> <!-- 1000 -->
@@ -78,7 +78,7 @@
         <!-- ===== Effets meteo X-Plane 12 (per-scenario) ===== -->
         <!--
             Meteo injectee UNE FOIS avant le rendu du scenario via le plugin
-            XPPython3 (PI_lard_weather.py) + XPLMWeather API.
+            XPPython3 (PI_weather.py) + XPLMWeather API.
 
             La meteo ne change pas pendant les ~Xs d'une approche.
             Les nuages sont places automatiquement au-dessus de l'avion (alt max + cloud_margin_m).
@@ -181,6 +181,14 @@
          MODIF FAITE : Heure local convertie en UTC de manière approximative (Erreur de 10min-1h10 max)-->
         <parameter name="time_of_day_h"    type="real" min="12" max="12"/>
 
+        <!-- Temps de stabilisation meteo/textures X-Plane (secondes).
+             Delai apres injection meteo avant la capture des frames :
+               - laisse XP12 charger les textures de la zone teleportee
+               - laisse les nuages GPU se stabiliser (Cumulonimbus surtout)
+             Recommande : 5-30s. 15 = defaut conservateur teste empiriquement.
+             Plus court si visibilite/heure seules ; plus long si Cb + precip + textures lourdes. -->
+        <parameter name="xplane_weather_settle_s" type="real" min="10" max="10"/>
+
         <!-- ===== Fautes capteur camera ===== -->
         <!--
             Chaque type de faute a 3 parametres :
@@ -199,7 +207,8 @@
         <!-- ===== Bruits ===== -->
 
         <parameter name="gaussian_noise_severity"  type="real" min="0" max="0"/>
-        <parameter name="gaussian_noise_from_pct"   type="real" min="0" max="0"/>
+
+        <parameter name="gaussian_noise_from_pct"   type="real" min="70" max="75"/>
         <parameter name="gaussian_noise_to_pct"     type="real" min="100" max="100"/>
 
         <parameter name="shot_noise_severity"       type="real" min="0" max="0"/>
@@ -370,7 +379,7 @@
 
         <!-- Le debut d'approche doit etre plus loin que la fin -->
         <constraint name="start_gt_end"
-                    expressions="scenario[i]\segment_start_m SUP scenario[i]\segment_end_m"
+                    expressions="scenario[i]\along_track_distance_start SUP scenario[i]\along_track_distance_end"
                     quantifiers="i"
                     ranges="[0, 0]"
                     types="forall"/>
@@ -381,7 +390,7 @@
              500m ≈ 6.7s a 145kts — temps realiste pour stabiliser.
              stab >= end + 500  -->
         <constraint name="stab_margin"
-                    expressions="scenario[i]\stabilization_distance_m SUPEQ scenario[i]\segment_end_m + 500"
+                    expressions="scenario[i]\stabilization_distance_m SUPEQ scenario[i]\along_track_distance_end + 500"
                     quantifiers="i"
                     ranges="[0, 0]"
                     types="forall"/>
@@ -391,7 +400,7 @@
              avant que la convergence ne commence.
              start >= stab + 500  -->
         <constraint name="start_margin"
-                    expressions="scenario[i]\segment_start_m SUPEQ scenario[i]\stabilization_distance_m + 500"
+                    expressions="scenario[i]\along_track_distance_start SUPEQ scenario[i]\stabilization_distance_m + 500"
                     quantifiers="i"
                     ranges="[0, 0]"
                     types="forall"/>

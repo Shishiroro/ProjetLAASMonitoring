@@ -44,8 +44,8 @@ def export(root_node, path):
 
     # --- Lire les parametres TAF ---
     fps = int(_read_param(scenario_node, "fps"))
-    segment_start_m = float(_read_param(scenario_node, "segment_start_m"))
-    segment_end_m = float(_read_param(scenario_node, "segment_end_m"))
+    along_track_distance_start = float(_read_param(scenario_node, "along_track_distance_start"))
+    along_track_distance_end = float(_read_param(scenario_node, "along_track_distance_end"))
     ground_speed_kts = float(_read_param(scenario_node, "ground_speed_kts"))
     turbulence_intensity = float(_read_param(scenario_node, "turbulence_intensity"))
     wind_speed_kts = float(_read_param(scenario_node, "wind_speed_kts"))
@@ -85,6 +85,7 @@ def export(root_node, path):
         temperature_c=float(_read_param(scenario_node, "temperature_c")),
         time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),
         rain_scale=float(_read_param(scenario_node, "rain_scale")),
+        settle_s=float(_read_param(scenario_node, "xplane_weather_settle_s")),
     )
 
     # Expanser rain_intensity en params individuels si actif
@@ -111,15 +112,15 @@ def export(root_node, path):
 
     # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), , donc tau ≈ h / V
-    h_m = segment_start_m * math.tan(math.radians(3.0))
+    h_m = along_track_distance_start * math.tan(math.radians(3.0))
     speed_ms = ground_speed_kts * 0.514444
     correlation_time_s = h_m / speed_ms
 
     # --- Construire les configs ---
     cfg = TrajectoryConfig(
         fps=fps,
-        segment_start_m=segment_start_m,
-        segment_end_m=segment_end_m,
+        along_track_distance_start=along_track_distance_start,
+        along_track_distance_end=along_track_distance_end,
         ground_speed_kts=ground_speed_kts,
         correlation_time_s=correlation_time_s,
         turbulence_intensity=turbulence_intensity,
@@ -134,7 +135,7 @@ def export(root_node, path):
 
     # --- Generer la trajectoire ---
     print(f"[Export] {airport}/{runway} | fps={fps} | "
-          f"dist=[{segment_start_m:.0f}-{segment_end_m:.0f}m] | "
+          f"dist=[{along_track_distance_start:.0f}-{along_track_distance_end:.0f}m] | "
           f"wind={wind_speed_kts:.0f}kts@{wind_direction_deg:.0f}deg")
 
     flight_data, _, _ = build_trajectory(

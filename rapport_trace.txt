@@ -230,7 +230,7 @@ Sous-echantillonnage final : on ne garde que les frames reelles.
 tau (temps de correlation) retire du XML utilisateur.
 Calcul automatique base sur le modele Dryden simplifie :
   tau = h / V
-  h = segment_start_m * tan(3°)    (altitude max, glide slope 3°)
+  h = along_track_distance_start * tan(3°)    (altitude max, glide slope 3°)
   V = ground_speed_kts * 0.514444  (conversion noeuds → m/s)
 
 A nos altitudes d'approche (<300m), L ≈ h (echelle de turbulence
@@ -330,8 +330,8 @@ Avantages par rapport au random :
 ---------------------------------
 Definis dans trajectory_template.xml :
 - fps : frames par seconde (10-15)
-- segment_start_m : distance debut approche (2000-3000m)
-- segment_end_m : distance fin approche (min 280m)
+- along_track_distance_start : distance debut approche (2000-3000m)
+- along_track_distance_end : distance fin approche (min 280m)
 - ground_speed_kts : vitesse sol (145 kts fixe)
 - turbulence_intensity : intensite turbulence [0, 1]
 - wind_speed_kts, wind_direction_deg : vent
