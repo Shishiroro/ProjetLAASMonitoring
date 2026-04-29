@@ -1,5 +1,5 @@
 """
-PI_lard_weather.py  —  XPPython3 plugin for LARD weather injection (v2)
+PI_weather.py  —  XPPython3 plugin for LARD weather injection (v2)
 ========================================================================
 Uses the official XPLMWeather API (X-Plane 12.0+) to inject weather.
 Communicates with the LARD pipeline via JSON files.
@@ -26,7 +26,7 @@ import json
 try:
     import xp
 except ImportError:
-    raise RuntimeError("PI_lard_weather requires XPPython3")
+    raise RuntimeError("PI_weather requires XPPython3")
 
 
 # ---------------------------------------------------------------------------
