@@ -793,6 +793,9 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         # Injecter la meteo (per-scenario, une seule fois) APRES teleportation
         # La stabilisation (WeatherConfig.settle_s, configurable via XML)
         # laisse le temps a X-Plane de charger les textures
+        # IMPORTANT : on unpause la sim avant injection pour que les particules
+        # de pluie/neige soient generees (avec sim pausee, X-Plane ne spawn rien).
+        # override_planepath/flight_control/throttles restent a 1.0 → avion locke.
         weather_active = False
         weather_status = "no_weather"  # no_weather | ok | plugin_timeout | inject_failed
         if weather_profile_path and Path(weather_profile_path).exists():
@@ -807,11 +810,19 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                         print(f"  [XPLANE] Plugin XPPython3 weather OK")
                         max_alt_m = max(p["alt_m"] for p in data["poses"])
                         first_lon = data["poses"][0]["lon"]
+                        # Unpause pour que les particules meteo (pluie/neige) spawn pendant le settle
+                        conn.send_dref("sim/time/paused", 0.0)
                         weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=first_lon)
                         weather_status = "ok" if weather_active else "inject_failed"
                     else:
                         print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
                         weather_status = "plugin_timeout"
+
+        # Garder la sim active pendant la capture pour que les particules continuent
+        # a spawner (sinon X-Plane les fige et la pluie disparait apres quelques frames).
+        # override_planepath verrouille la position avion → seul le rendu temporel avance.
+        if weather_active:
+            conn.send_dref("sim/time/paused", 0.0)
 
         # Positionnement via VEHS (double precision) — pas besoin de reference locale
 

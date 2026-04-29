@@ -41,30 +41,38 @@ def export(root_node, path):
     :param path: chemin du dossier test_artifact courant
     """
     scenario_node = root_node.get_child_n("scenario")
+    trajectory_node = scenario_node.get_child_n("trajectory")
+    weather_node = scenario_node.get_child_n("weather")
+    faults_node = scenario_node.get_child_n("faults")
 
-    # --- Lire les parametres TAF ---
-    fps = int(_read_param(scenario_node, "fps"))
-    along_track_distance_start = float(_read_param(scenario_node, "along_track_distance_start"))
-    along_track_distance_end = float(_read_param(scenario_node, "along_track_distance_end"))
-    ground_speed_kts = float(_read_param(scenario_node, "ground_speed_kts"))
-    turbulence_intensity = float(_read_param(scenario_node, "turbulence_intensity"))
-    wind_speed_kts = float(_read_param(scenario_node, "wind_speed_kts"))
-    wind_direction_deg = float(_read_param(scenario_node, "wind_direction_deg"))
-    stabilization_distance_m = float(_read_param(scenario_node, "stabilization_distance_m"))
+    # --- Trajectoire ---
+    fps = int(_read_param(trajectory_node, "fps"))
+    along_track_distance_start = float(_read_param(trajectory_node, "along_track_distance_start"))
+    along_track_distance_end = float(_read_param(trajectory_node, "along_track_distance_end"))
+    ground_speed_kts = float(_read_param(trajectory_node, "ground_speed_kts"))
+    turbulence_intensity = float(_read_param(trajectory_node, "turbulence_intensity"))
+    wind_speed_kts = float(_read_param(trajectory_node, "wind_speed_kts"))
+    wind_direction_deg = float(_read_param(trajectory_node, "wind_direction_deg"))
+    stabilization_distance_m = float(_read_param(trajectory_node, "stabilization_distance_m"))
 
     # airport_runway : format "ICAO_RWY" (ex: "LFPO_06")
-    airport_runway = str(_read_param(scenario_node, "airport_runway"))
+    airport_runway = str(_read_param(trajectory_node, "airport_runway"))
     if "_" not in airport_runway:
         raise ValueError(f"Format airport_runway invalide : '{airport_runway}' (attendu: ICAO_RWY)")
     airport, runway = airport_runway.split("_", 1)
 
-    # --- Lire les fautes capteur (severity > 0 = actif) ---
+    # --- Fautes capteur (severity > 0 = actif) ---
+    # XML : start_pct + duration_pct (configurables par faute)
+    # Interne : FaultConfig garde from_pct/to_pct ; to_pct = start + duration
     faults = []
     for fault_type in sorted(KNOWN_FAULT_TYPES):
-        severity = float(_read_param(scenario_node, f"{fault_type}_severity"))
+        fault_node = faults_node.get_child_n(fault_type)
+        severity = float(_read_param(fault_node, "severity"))
         if severity > 0:
-            from_pct = float(_read_param(scenario_node, f"{fault_type}_from_pct"))
-            to_pct = float(_read_param(scenario_node, f"{fault_type}_to_pct"))
+            start_pct = float(_read_param(fault_node, "start_pct"))
+            duration_pct = float(_read_param(fault_node, "duration_pct"))
+            from_pct = start_pct
+            to_pct = min(start_pct + duration_pct, 100.0)
             faults.append(FaultConfig(fault_type, severity, from_pct, to_pct))
 
     if faults:
@@ -73,19 +81,19 @@ def export(root_node, path):
                               for f in faults)
         print(f"[Export] Fautes capteur : {fault_str}")
 
-    # --- Lire les effets meteo X-Plane (per-scenario) ---
+    # --- Meteo X-Plane (per-scenario) ---
     weather_cfg = WeatherConfig(
-        rain_intensity=float(_read_param(scenario_node, "rain_intensity")),
-        precip_rate=float(_read_param(scenario_node, "precip_rate")),
-        cloud_type=float(_read_param(scenario_node, "cloud_type")),
-        cloud_coverage=float(_read_param(scenario_node, "cloud_coverage")),
-        cloud_margin_m=float(_read_param(scenario_node, "cloud_margin_m")),
-        cloud_thickness_m=float(_read_param(scenario_node, "cloud_thickness_m")),
-        visibility_m=float(_read_param(scenario_node, "visibility_m")),
-        temperature_c=float(_read_param(scenario_node, "temperature_c")),
-        time_of_day_h=float(_read_param(scenario_node, "time_of_day_h")),
-        rain_scale=float(_read_param(scenario_node, "rain_scale")),
-        settle_s=float(_read_param(scenario_node, "xplane_weather_settle_s")),
+        rain_intensity=float(_read_param(weather_node, "rain_intensity")),
+        precip_rate=float(_read_param(weather_node, "precip_rate")),
+        cloud_type=float(_read_param(weather_node, "cloud_type")),
+        cloud_coverage=float(_read_param(weather_node, "cloud_coverage")),
+        cloud_margin_m=float(_read_param(weather_node, "cloud_margin_m")),
+        cloud_thickness_m=float(_read_param(weather_node, "cloud_thickness_m")),
+        visibility_m=float(_read_param(weather_node, "visibility_m")),
+        temperature_c=float(_read_param(weather_node, "temperature_c")),
+        time_of_day_h=float(_read_param(weather_node, "time_of_day_h")),
+        rain_scale=float(_read_param(weather_node, "rain_scale")),
+        settle_s=float(_read_param(weather_node, "xplane_weather_settle_s")),
     )
 
     # Expanser rain_intensity en params individuels si actif

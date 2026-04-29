@@ -173,21 +173,29 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
     params["time_of_day_h"] = zulu_h
 
     # Nuages — base dynamique : au-dessus de l'avion avec marge
+    # Garde-fou : un nuage avec thickness=0 (base=top) ne genere AUCUNE particule
+    # de pluie/neige (XPLMWeather le considere comme degenere). On force un
+    # minimum coherent avec le type pour eviter une "pluie invisible".
+    MIN_THICKNESS_BY_TYPE = {0: 1000, 1: 500, 2: 2000, 3: 6000}  # Cirrus/Stratus/Cumulus/Cb
     cloud_base = aircraft_max_alt_m + config.cloud_margin_m
     if config.cloud_type >= 0:
         # Nuages manuels demandes par l'utilisateur
+        thickness = config.cloud_thickness_m
+        if thickness <= 0:
+            thickness = MIN_THICKNESS_BY_TYPE.get(int(config.cloud_type), 2000)
         params["cloud_type"] = config.cloud_type
         params["cloud_coverage"] = config.cloud_coverage
         params["cloud_base_msl"] = cloud_base
-        params["cloud_top_msl"] = cloud_base + config.cloud_thickness_m
+        params["cloud_top_msl"] = cloud_base + thickness
     elif config.precip_rate > 0:
         # Pluie sans nuages manuels : forcer Cumulonimbus
         # XP12 ne genere pas ses propres nuages via l'API setWeatherAtLocation,
         # contrairement a l'interface utilisateur
+        thickness = config.cloud_thickness_m if config.cloud_thickness_m > 0 else MIN_THICKNESS_BY_TYPE[3]
         params["cloud_type"] = 3.0   # Cumulonimbus
         params["cloud_coverage"] = 1.0
         params["cloud_base_msl"] = cloud_base
-        params["cloud_top_msl"] = cloud_base + config.cloud_thickness_m
+        params["cloud_top_msl"] = cloud_base + thickness
 
     # Taille des gouttes (dataref prive, ignore si non supporte)
     if config.rain_scale != 1.0:

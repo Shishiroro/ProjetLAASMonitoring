@@ -5,8 +5,21 @@
     TAF (z3 solver) echantillonne des scenarios d'approche valides
     a partir de ces parametres et contraintes.
 
-    L'utilisateur modifie les min/max/values selon ses besoins.
-    TAF genere nb_test_cases scenarios (voir settings.xml).
+    Structure :
+      <node trajectory>     fps, distances, vent, OU, piste
+      <node weather>        meteo X-Plane (precip, nuages, visibilite, heure)
+      <node faults>         22 sub-nodes (1 par type de faute)
+
+    Conventions :
+      - min/max identiques = valeur fixe
+      - min/max differents = TAF sample dans la plage (z3)
+      - severity > 0 active une faute, severity = 0 la desactive
+
+    Modele de duree des fautes (T5) :
+      - start_pct    : debut application en % de la trajectoire [0, 100]
+      - duration_pct : duree de la faute en % de la trajectoire
+      - to_pct (interne, calcule par Export.py) = start_pct + duration_pct
+      - Contrainte z3 : start_pct + duration_pct <= 100 (sinon UNSAT)
 
     airport_runway : format "ICAO_RWY" (ex: "LFPO_06").
     Voir LARD/data/filtered_runways_database_Final.json pour la liste.
@@ -15,395 +28,281 @@
 
     <node name="scenario" nb_instances="1">
 
-        <!-- ===== Parametres temporels / spatiaux ===== -->
-
-        <parameter name="fps"
-                   type="integer"
-                   min="10"
-                   max="10"/>
-
-        <parameter name="along_track_distance_start"
-                   type="real"
-                   min="2000"
-                   max="2000"/>
-
-        <parameter name="along_track_distance_end"
-                   type="real"
-                   min="280"
-                   max="280"/> <!-- 1000 -->
-
-        <parameter name="ground_speed_kts"
-                   type="real"
-                   min="145" 
-                   max="145"/>
-
-        <!-- ===== Processus Ornstein-Uhlenbeck ===== -->
-
-        <parameter name="turbulence_intensity"
-                   type="real"
-                   min="0"
-                   max="1"/>
-
-        <!-- ===== Vent ===== -->
-
-        <parameter name="wind_speed_kts"
-                   type="real"
-                   min="0"
-                   max="30"/>  <!-- 30 -->
-  
-        <parameter name="wind_direction_deg"
-                   type="real"
-                   min="0"
-                   max="359"/>  <!-- 359 -->
-
-        <!-- ===== Convergence finale ===== -->
-
-        <parameter name="stabilization_distance_m"
-                   type="real"
-                   min="1000"
-                   max="1500"/> <!-- 1500 -->
-
-        <!-- ===== Piste cible (format ICAO_RWY) ===== -->
-
-        <!-- Demo X-Plane : KPDX uniquement (Portland)
-             Remettre les autres pistes avec la licence complete :
-             LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;WMKK_33;VHHH_07R;RJTT_22;YSSY_34R
+        <!-- ===========================================================
+             TRAJECTOIRE : timing, distances, vent, OU, piste
+             ===========================================================
         -->
-        <parameter name="airport_runway"
-                   type="string"
-                   values="KPDX_10L"/> <!--;KPDX_28R;KPDX_28L;KPDX_10R;KPDX_3;
-                   KPDX_21;PHNL_22L;PHNL_04R;PHNL_22R;PHNL_04L;PHNL_26L;PHNL_08R-->
-                   
+        <node name="trajectory">
 
-        <!-- ===== Effets meteo X-Plane 12 (per-scenario) ===== -->
-        <!--
-            Meteo injectee UNE FOIS avant le rendu du scenario via le plugin
-            XPPython3 (PI_weather.py) + XPLMWeather API.
+            <parameter name="fps"                          type="integer" min="10"   max="10"/>
 
-            La meteo ne change pas pendant les ~Xs d'une approche.
-            Les nuages sont places automatiquement au-dessus de l'avion (alt max + cloud_margin_m).
+            <parameter name="along_track_distance_start"   type="real"    min="2000" max="2000"/>
+            <parameter name="along_track_distance_end"     type="real"    min="280"  max="280"/>
+            <parameter name="ground_speed_kts"             type="real"    min="145"  max="145"/>
 
-            COMPORTEMENT :
-              - Pluie seule   (precip > 0, cloud_type = -1) : Cumulonimbus forces auto
-              - Nuages seuls  (cloud_type >= 0, precip = 0) : nuages manuels
-              - Pluie + nuages (precip > 0, cloud_type >= 0) : nuages manuels utilises
-              - Rien           (precip = 0, cloud_type = -1) : pas de meteo injectee
+            <!-- Processus Ornstein-Uhlenbeck (turbulence) -->
+            <parameter name="turbulence_intensity"         type="real"    min="0"    max="1"/>
 
-            PARAMETRES :
-              precip_rate     : taux precipitation [0, 1] — 0 = desactive, 1 = deluge
-              cloud_type      : type nuage XPLMWeather API :
-                                0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus
-                                -1 = pas de nuages manuels (auto si pluie active)
-              cloud_coverage  : couverture nuageuse [0, 1] — ignore si cloud_type = -1
-              visibility_m    : visibilite en metres [500, 50000] — 50000 = clair
-              temperature_c   : temperature Celsius [-30, 45] — < 0 = neige au lieu de pluie
-              time_of_day_h   : heure locale [0, 24] — 6=aube, 12=midi, 18=crepuscule, 22=nuit
+            <!-- Vent -->
+            <parameter name="wind_speed_kts"               type="real"    min="0"    max="30"/>
+            <parameter name="wind_direction_deg"           type="real"    min="0"    max="359"/>
 
-            EXEMPLES :
-              Pluie forte     : precip=0.8, cloud_type=-1, vis=50000
-              Brouillard      : precip=0, cloud_type=-1, vis=2000
-              Couvert gris    : precip=0, cloud_type=1 (Stratus), coverage=1.0
-              Orage + pluie   : precip=0.9, cloud_type=3 (Cb), coverage=1.0
-              Nuit claire     : tout defaut, time_of_day_h=22
-              Neige           : precip=0.5, temperature_c=-5
+            <!-- Convergence finale : distance de stabilisation  type="real"    min="1000" max="1500"/> -->
+            <parameter name="stabilization_distance_m"     type="real"    min="1000" max="1500"/>
+
+            <!-- Piste cible (ICAO_RWY) -->
+            <!-- Demo X-Plane : KPDX uniquement (Portland)
+                 Remettre les autres pistes avec la licence complete :
+                 LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;WMKK_33;VHHH_07R;RJTT_22;YSSY_34R
+            -->
+            <parameter name="airport_runway"               type="string"  values="KPDX_10L"/>
+
+            <!-- Contraintes trajectoire :
+                 1) start > end (sens d'approche)
+                 2) stab >= end + 500   (zone de convergence assez large)
+                 3) start >= stab + 500 (trajectoire libre OU avant convergence) -->
+            <constraint name="dist_order"
+                        expressions=".\along_track_distance_start SUP .\along_track_distance_end"/>
+            <constraint name="stab_above_end"
+                        expressions=".\stabilization_distance_m SUPEQ .\along_track_distance_end + 500"/>
+            <constraint name="start_above_stab"
+                        expressions=".\along_track_distance_start SUPEQ .\stabilization_distance_m + 500"/>
+
+        </node>
+
+
+        <!-- ===========================================================
+             METEO X-Plane 12 (per-scenario, injectee 1x avant rendu)
+             ===========================================================
+             COMPORTEMENT :
+               - Pluie seule    (precip > 0, cloud_type = -1) : Cumulonimbus auto
+               - Nuages seuls   (cloud_type >= 0, precip = 0) : nuages manuels
+               - Pluie + nuages (precip > 0, cloud_type >= 0) : nuages manuels
+               - Rien           (precip = 0, cloud_type = -1) : pas d'injection
+
+             cloud_type enum : 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus, -1=auto
+
+             EXEMPLES :
+               Pluie forte   : precip=0.8, cloud_type=-1, vis=50000
+               Brouillard    : precip=0, cloud_type=-1, vis=2000
+               Couvert gris  : precip=0, cloud_type=1, coverage=1.0
+               Orage + pluie : precip=0.9, cloud_type=3, coverage=1.0
+               Neige         : precip=0.5, temperature_c=-5
+               Nuit claire   : tout defaut, time_of_day_h=22
+
+             rain_intensity : si > 0, OVERRIDE precip/vis/cloud_type/coverage
+                              (raccourci paliers, voir xplane_weather.expand_rain_intensity)
         -->
+        <node name="weather">
+
+            <!-- Raccourci pluie (0 = utiliser params individuels) -->
+            <parameter name="rain_intensity"          type="real" min="0"     max="0"/>
+
+            <!-- Precipitation : 0 = desactive. Cumulonimbus auto si cloud_type=-1.
+                 0->1 : la pluie reste discrete mais sol mouille / particules denses / eclairage. -->
+            <parameter name="precip_rate"             type="real" min="1"     max="1"/>
+
+            <!-- cloud_type : -1=auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cb -->
+            <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
+            <parameter name="cloud_coverage"          type="real" min="0.8"   max="0.8"/>
+
+            <!-- Taille gouttes (visuel uniquement, dataref prive XP12)
+                 1.0=defaut, 0.1=fines, 5.0=grosses. Ignore si precip=0. -->
+            <parameter name="rain_scale"              type="real" min="5"     max="5"/>
+
+            <!-- Marge nuages (m) au-dessus de l'avion pour la base nuages -->
+            <parameter name="cloud_margin_m"          type="real" min="200"   max="200"/>
+
+            <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
+                 IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
+                 genere PAS de particules de pluie/neige. Mettre > 0 pour avoir la pluie.
+                 Reperes : 300-500=stratus, 1500-3000=cumulus, 6000-10000=cumulonimbus.
+                 Pluie auto (precip>0, cloud_type=-1) force Cb → epaisseur Cb recommandee. -->
+            <parameter name="cloud_thickness_m"       type="real" min="6000"  max="6000"/>
+
+            <!-- Visibilite (m) : 50000=clair, basses=brouillard -->
+            <parameter name="visibility_m"            type="real" min="10000" max="10000"/>
+
+            <!-- Temperature (°C) : controle pluie vs neige -->
+            <parameter name="temperature_c"           type="real" min="-15"    max="45"/>
+
+            <!-- Heure du jour (locale, conversion UTC approximative) ###################-->
+            <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
+
+            <!-- Delai stabilisation meteo/textures avant capture (s).
+                 Recommande : 5-30s. 15 = defaut conservateur. -->
+            <parameter name="xplane_weather_settle_s" type="real" min="10"    max="10"/>
+
+        </node>
 
 
+        <!-- ===========================================================
+             FAUTES CAPTEUR : 22 sub-nodes, params propres a chaque faute
+             ===========================================================
+             Pour activer une faute :
+               1) severity min/max > 0 (ex: 0.5 0.5 = sevpere fixee a 50%)
+               2) ajuster start_pct + duration_pct selon le moment souhaite
 
+             Plusieurs fautes se cumulent si leurs plages se chevauchent.
 
-
-        <!-- ===== Raccourci rain_intensity (optionnel) ===== -->
-        <!--
-            rain_intensity : controle unique de l'intensite de pluie [0, 1]
-            Si > 0, OVERRIDE precip_rate, visibility_m, cloud_type, cloud_coverage.
-            Si = 0, les 4 params individuels ci-dessous sont utilises normalement.
-
-            Mapping rain_intensity → params XP12 :
-              0.0  Sec            precip=0.0  vis=inchangee  clouds=inchanges
-              0.1  Bruine         precip=0.2  vis=12000m     Stratus   cov=0.5
-              0.3  Pluie legere   precip=0.4  vis=7000m      Stratus   cov=0.7
-              0.5  Pluie moderee  precip=0.6  vis=4000m      Cumulus   cov=0.85
-              0.7  Forte pluie    precip=0.8  vis=2000m      Cb        cov=1.0
-              1.0  Deluge/orage   precip=1.0  vis=800m       Cb        cov=1.0
-            Valeurs intermediaires interpolees lineairement.
+             Categories :
+               Bruits        : gaussian_noise, shot_noise, salt_pepper, dead_pixels
+               Flous         : motion_blur, defocus_blur, rolling_shutter
+               Exposition    : overexposure, underexposure
+               Optique       : vignetting, chromatic_aberration, radial_distortion, lens_flare
+               Artefacts     : banding, jpeg_artifacts, color_shift
+               Salissure     : condensation, dirt_on_lens, fog
+               Geometrie     : zoom_blur, contrast, pixelate
         -->
-        <parameter name="rain_intensity"   type="real" min="0" max="0"/>
+        <node name="faults">
 
+            <!-- ===== Bruits ===== -->
+            <node name="gaussian_noise">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="shot_noise">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="salt_pepper">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="dead_pixels">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
+            <!-- ===== Flous ===== -->
+            <node name="motion_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="defocus_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="rolling_shutter">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
+            <!-- ===== Exposition ===== -->
+            <node name="overexposure">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="underexposure">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
+            <!-- ===== Optique ===== -->
+            <node name="vignetting">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="chromatic_aberration">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="radial_distortion">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="lens_flare">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
+            <!-- ===== Artefacts ===== -->
+            <node name="banding">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="jpeg_artifacts">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="color_shift">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
-        <!-- ===== Params individuels (utilises si rain_intensity = 0) ===== -->
+            <!-- ===== Salissure / environnement ===== -->
+            <node name="condensation">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="dirt_on_lens">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="fog">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
-        <!-- Precipitation : 0 = desactive. Cumulonimbus forces auto si cloud_type=-1
-        0->1 dérisoire pour la pluie mais le sol est plus mouillé, particules plus denses, éclairage..-->
-        <parameter name="precip_rate"      type="real" min="1" max="1"/>
+            <!-- ===== Transformations geometriques ===== -->
+            <node name="zoom_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="contrast">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="pixelate">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
 
-        <!-- Nuages :
-             cloud_type : -1 = auto (Cumulonimbus forces si pluie, rien sinon)
-                           0 = Cirrus (fins, haute altitude, transparents)
-                           1 = Stratus (couche uniforme, gris, bas)
-                           2 = Cumulus (moutonnes, beau temps) 
-                           3 = Cumulonimbus (epais, sombres, orage/pluie)
-                           XP12 génère des éclairs automatiquement quand il y a des Cumulonimbus (cloud_type=3)
-             cloud_coverage : proportion du ciel couvert [0, 1]
-                              0 = ciel degage, 0.5 = moitie couvert, 1 = completement couvert
-                              Ignore si cloud_type = -1 -->
-        <parameter name="cloud_type"       type="real" min="-1" max="-1"/>
-        <parameter name="cloud_coverage"   type="real" min="0.8" max="0.8"/>
-
-
-
-        <!-- Taille des gouttes de pluie (visuel uniquement, dataref prive XP12)
-             1.0 = defaut, 0.1 = tres fines, 5.0 = tres grosses
-             N'affecte pas la quantite de pluie (utiliser precip_rate pour ca)
-             Ignore si precip_rate = 0 -->
-        <parameter name="rain_scale"       type="real" min="5" max="5"/>
-
-        <!-- Marge nuages : hauteur en metres au-dessus de l'avion pour placer la base des nuages.
-             Ex: 200 = nuages 200m au-dessus de l'altitude max avion.  -->
-        <parameter name="cloud_margin_m"   type="real" min="200" max="200"/>
-
-        <!-- Epaisseur du nuage en metres (alt_top = alt_base + thickness).
-             0 = test, 300-500 = stratus, 1500-3000 = cumulus, 6000-10000 = cumulonimbus -->
-        <parameter name="cloud_thickness_m" type="real" min="0" max="0"/>
-
-        <!-- Visibilite : 50000 = clair (defaut). Valeurs basses = brouillard -->
-        <parameter name="visibility_m"     type="real" min="10000" max="10000"/>
-
-        <!-- Temperature : controle pluie vs neige. 15 = standard -->
-        <parameter name="temperature_c"    type="real" min="15" max="45"/>
-
-        
-
-        <!-- Heure du jour : controle la lumiere. 12 = midi (defaut)
-         MODIF FAITE : Heure local convertie en UTC de manière approximative (Erreur de 10min-1h10 max)-->
-        <parameter name="time_of_day_h"    type="real" min="12" max="12"/>
-
-        <!-- Temps de stabilisation meteo/textures X-Plane (secondes).
-             Delai apres injection meteo avant la capture des frames :
-               - laisse XP12 charger les textures de la zone teleportee
-               - laisse les nuages GPU se stabiliser (Cumulonimbus surtout)
-             Recommande : 5-30s. 15 = defaut conservateur teste empiriquement.
-             Plus court si visibilite/heure seules ; plus long si Cb + precip + textures lourdes. -->
-        <parameter name="xplane_weather_settle_s" type="real" min="10" max="10"/>
-
-        <!-- ===== Fautes capteur camera ===== -->
-        <!--
-            Chaque type de faute a 3 parametres :
-              {type}_severity  : severite [0.0, 1.0] — mettre min="0" max="0" pour desactiver
-              {type}_from_pct  : debut d'application en % de la trajectoire [0, 100]
-              {type}_to_pct    : fin d'application en % de la trajectoire [0, 100]
-                                 (0% = debut approche loin, 100% = pres de la piste)
-
-            Pour activer une faute : mettre severity min/max > 0 et ajuster from/to.
-            Plusieurs fautes se cumulent si leurs plages se chevauchent.
-            TAF (z3) sample dans les plages min/max et valide les contraintes.
-        -->
-
-
-
-        <!-- ===== Bruits ===== -->
-
-        <parameter name="gaussian_noise_severity"  type="real" min="0" max="0"/>
-
-        <parameter name="gaussian_noise_from_pct"   type="real" min="70" max="75"/>
-        <parameter name="gaussian_noise_to_pct"     type="real" min="100" max="100"/>
-
-        <parameter name="shot_noise_severity"       type="real" min="0" max="0"/>
-        <parameter name="shot_noise_from_pct"        type="real" min="0" max="0"/>
-        <parameter name="shot_noise_to_pct"          type="real" min="100" max="100"/>
-
-        <parameter name="salt_pepper_severity"      type="real" min="0" max="0"/>
-        <parameter name="salt_pepper_from_pct"       type="real" min="0" max="0"/>
-        <parameter name="salt_pepper_to_pct"         type="real" min="100" max="100"/>
-
-        <parameter name="dead_pixels_severity"      type="real" min="0" max="0"/>
-        <parameter name="dead_pixels_from_pct"       type="real" min="0" max="0"/>
-        <parameter name="dead_pixels_to_pct"         type="real" min="100" max="100"/>
-
-        <!-- ===== Flous ===== -->
-
-        <parameter name="motion_blur_severity"      type="real" min="0" max="0"/>
-        <parameter name="motion_blur_from_pct"       type="real" min="0" max="0"/>
-        <parameter name="motion_blur_to_pct"         type="real" min="100" max="100"/>
-
-        <parameter name="defocus_blur_severity"     type="real" min="0" max="0"/>
-        <parameter name="defocus_blur_from_pct"      type="real" min="0" max="0"/>
-        <parameter name="defocus_blur_to_pct"        type="real" min="100" max="100"/>
-
-        <parameter name="rolling_shutter_severity"  type="real" min="0" max="0"/>
-        <parameter name="rolling_shutter_from_pct"   type="real" min="0" max="0"/>
-        <parameter name="rolling_shutter_to_pct"     type="real" min="100" max="100"/>
-
-        <!-- ===== Exposition ===== -->
-
-        <parameter name="overexposure_severity"     type="real" min="0" max="0"/>
-        <parameter name="overexposure_from_pct"      type="real" min="0" max="0"/>
-        <parameter name="overexposure_to_pct"        type="real" min="100" max="100"/>
-
-        <parameter name="underexposure_severity"    type="real" min="0" max="0"/>
-        <parameter name="underexposure_from_pct"     type="real" min="0" max="0"/>
-        <parameter name="underexposure_to_pct"       type="real" min="100" max="100"/>
-
-        <!-- ===== Optique ===== -->
-
-        <parameter name="vignetting_severity"       type="real" min="0" max="0"/>
-        <parameter name="vignetting_from_pct"        type="real" min="0" max="0"/>
-        <parameter name="vignetting_to_pct"          type="real" min="100" max="100"/>
-
-        <parameter name="chromatic_aberration_severity" type="real" min="0" max="0"/>
-        <parameter name="chromatic_aberration_from_pct"  type="real" min="0" max="0"/>
-        <parameter name="chromatic_aberration_to_pct"    type="real" min="100" max="100"/>
-
-        <parameter name="radial_distortion_severity" type="real" min="0" max="0"/>
-        <parameter name="radial_distortion_from_pct"  type="real" min="0" max="0"/>
-        <parameter name="radial_distortion_to_pct"    type="real" min="100" max="100"/>
-
-        <parameter name="lens_flare_severity"       type="real" min="0" max="0"/>
-        <parameter name="lens_flare_from_pct"        type="real" min="0" max="0"/>
-        <parameter name="lens_flare_to_pct"          type="real" min="100" max="100"/>
-
-        <!-- ===== Artefacts ===== -->
-
-        <parameter name="banding_severity"          type="real" min="0" max="0"/>
-        <parameter name="banding_from_pct"           type="real" min="0" max="0"/>
-        <parameter name="banding_to_pct"             type="real" min="100" max="100"/>
-
-        <parameter name="jpeg_artifacts_severity"   type="real" min="0" max="0"/>
-        <parameter name="jpeg_artifacts_from_pct"    type="real" min="0" max="0"/>
-        <parameter name="jpeg_artifacts_to_pct"      type="real" min="100" max="100"/>
-
-        <parameter name="color_shift_severity"      type="real" min="0" max="0"/>
-        <parameter name="color_shift_from_pct"       type="real" min="0" max="0"/>
-        <parameter name="color_shift_to_pct"         type="real" min="100" max="100"/>
-
-        <!-- ===== Environnement / salissure ===== -->
-
-        <parameter name="condensation_severity"     type="real" min="0" max="0"/>
-        <parameter name="condensation_from_pct"      type="real" min="0" max="0"/>
-        <parameter name="condensation_to_pct"        type="real" min="100" max="100"/>
-
-        <parameter name="dirt_on_lens_severity"     type="real" min="0" max="0"/>
-        <parameter name="dirt_on_lens_from_pct"      type="real" min="0" max="0"/>
-        <parameter name="dirt_on_lens_to_pct"        type="real" min="100" max="100"/>
-
-        <parameter name="fog_severity"              type="real" min="0" max="0"/>
-        <parameter name="fog_from_pct"               type="real" min="0" max="0"/>
-        <parameter name="fog_to_pct"                 type="real" min="100" max="100"/>
-
-        <!-- ===== Transformations geometriques ===== -->
-
-        <parameter name="zoom_blur_severity"        type="real" min="0" max="0"/>
-        <parameter name="zoom_blur_from_pct"         type="real" min="0" max="0"/>
-        <parameter name="zoom_blur_to_pct"           type="real" min="100" max="100"/>
-
-        <parameter name="contrast_severity"         type="real" min="0" max="0"/>
-        <parameter name="contrast_from_pct"          type="real" min="0" max="0"/>
-        <parameter name="contrast_to_pct"            type="real" min="100" max="100"/>
-
-        <parameter name="pixelate_severity"         type="real" min="0" max="0"/>
-        <parameter name="pixelate_from_pct"          type="real" min="0" max="0"/>
-        <parameter name="pixelate_to_pct"            type="real" min="100" max="100"/>
-
-        <!-- Contraintes from < to pour chaque faute -->
-        <constraint name="gaussian_noise_pct_order"
-                    expressions="scenario[i]\gaussian_noise_from_pct INF scenario[i]\gaussian_noise_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="shot_noise_pct_order"
-                    expressions="scenario[i]\shot_noise_from_pct INF scenario[i]\shot_noise_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="salt_pepper_pct_order"
-                    expressions="scenario[i]\salt_pepper_from_pct INF scenario[i]\salt_pepper_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="dead_pixels_pct_order"
-                    expressions="scenario[i]\dead_pixels_from_pct INF scenario[i]\dead_pixels_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="motion_blur_pct_order"
-                    expressions="scenario[i]\motion_blur_from_pct INF scenario[i]\motion_blur_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="defocus_blur_pct_order"
-                    expressions="scenario[i]\defocus_blur_from_pct INF scenario[i]\defocus_blur_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="rolling_shutter_pct_order"
-                    expressions="scenario[i]\rolling_shutter_from_pct INF scenario[i]\rolling_shutter_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="overexposure_pct_order"
-                    expressions="scenario[i]\overexposure_from_pct INF scenario[i]\overexposure_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="underexposure_pct_order"
-                    expressions="scenario[i]\underexposure_from_pct INF scenario[i]\underexposure_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="vignetting_pct_order"
-                    expressions="scenario[i]\vignetting_from_pct INF scenario[i]\vignetting_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="chromatic_aberration_pct_order"
-                    expressions="scenario[i]\chromatic_aberration_from_pct INF scenario[i]\chromatic_aberration_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="radial_distortion_pct_order"
-                    expressions="scenario[i]\radial_distortion_from_pct INF scenario[i]\radial_distortion_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="lens_flare_pct_order"
-                    expressions="scenario[i]\lens_flare_from_pct INF scenario[i]\lens_flare_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="banding_pct_order"
-                    expressions="scenario[i]\banding_from_pct INF scenario[i]\banding_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="jpeg_artifacts_pct_order"
-                    expressions="scenario[i]\jpeg_artifacts_from_pct INF scenario[i]\jpeg_artifacts_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="color_shift_pct_order"
-                    expressions="scenario[i]\color_shift_from_pct INF scenario[i]\color_shift_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="condensation_pct_order"
-                    expressions="scenario[i]\condensation_from_pct INF scenario[i]\condensation_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="dirt_on_lens_pct_order"
-                    expressions="scenario[i]\dirt_on_lens_from_pct INF scenario[i]\dirt_on_lens_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="fog_pct_order"
-                    expressions="scenario[i]\fog_from_pct INF scenario[i]\fog_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="zoom_blur_pct_order"
-                    expressions="scenario[i]\zoom_blur_from_pct INF scenario[i]\zoom_blur_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="contrast_pct_order"
-                    expressions="scenario[i]\contrast_from_pct INF scenario[i]\contrast_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-        <constraint name="pixelate_pct_order"
-                    expressions="scenario[i]\pixelate_from_pct INF scenario[i]\pixelate_to_pct"
-                    quantifiers="i" ranges="[0, 0]" types="forall"/>
-
-        <!-- ===== Contraintes ===== -->
-
-        <!-- Le debut d'approche doit etre plus loin que la fin -->
-        <constraint name="start_gt_end"
-                    expressions="scenario[i]\along_track_distance_start SUP scenario[i]\along_track_distance_end"
-                    quantifiers="i"
-                    ranges="[0, 0]"
-                    types="forall"/>
-
-        <!-- Marge entre stabilisation et fin d'approche :
-             La zone de convergence doit etre assez large pour que
-             la trajectoire ait le temps de se stabiliser naturellement.
-             500m ≈ 6.7s a 145kts — temps realiste pour stabiliser.
-             stab >= end + 500  -->
-        <constraint name="stab_margin"
-                    expressions="scenario[i]\stabilization_distance_m SUPEQ scenario[i]\along_track_distance_end + 500"
-                    quantifiers="i"
-                    ranges="[0, 0]"
-                    types="forall"/>
-
-        <!-- Marge entre debut d'approche et stabilisation :
-             Il faut assez de trajectoire "libre" (deviations OU pleines)
-             avant que la convergence ne commence.
-             start >= stab + 500  -->
-        <constraint name="start_margin"
-                    expressions="scenario[i]\along_track_distance_start SUPEQ scenario[i]\stabilization_distance_m + 500"
-                    quantifiers="i"
-                    ranges="[0, 0]"
-                    types="forall"/>
+        </node>
 
     </node>
 
