@@ -1,10 +1,19 @@
 """
-Export.py — Point d'entree TAF (PONT TAF -> LE CODE)
-===============================
-TAF appelle export(root_node, path) apres chaque generation de test case.
-Ce module fait le lien entre les parametres TAF et notre pipeline.
+Export.py — Point d'entree TAF + Production images & GT
+=========================================================
+Deux fonctions independantes hebergees dans le meme fichier :
 
-Chaine : TAF root_node → TrajectoryConfig → build_trajectory → export .yaml
+  1. export(root_node, path)
+     Callback TAF appele pendant la generation z3. Ecrit .yaml + JSON
+     configs dans output/test_artifact_X (temporaire).
+
+  2. generate_images_and_GT(run_dir, xplane_dir, runway=None)
+     Orchestrateur post-TAF appele par run_pipeline.py sur chaque run_dir.
+     Enchaine rendu X-Plane -> fautes capteur -> GT LARD.
+     TAF n'invoque jamais cette fonction.
+
+Chaine TAF : root_node -> TrajectoryConfig -> build_trajectory -> .yaml
+Chaine pipeline : run_dir -> render_run -> apply_faults -> generate_gt
 """
 
 import sys
@@ -179,3 +188,113 @@ def export(root_node, path):
             weather_cfg,
             output_path=Path(path) / "weather_profile.json",
         )
+
+
+# ===========================================================================
+# Phase 2 : Production des images + GT LARD (post-TAF, par run_dir)
+# ---------------------------------------------------------------------------
+# Les fonctions ci-dessous sont appelees par run_pipeline.py apres que TAF
+# a fini sa generation et que les runs ont ete deplaces dans runs/<name>/.
+# TAF n'utilise QUE export() ci-dessus, jamais ce qui suit.
+# ===========================================================================
+
+_IMAGE_EXTS = (".jpeg", ".jpg", ".png")
+
+
+def _has_images(run_dir):
+    """Retourne True si run_dir/footage/ contient au moins une image."""
+    footage = Path(run_dir) / "footage"
+    if not footage.exists():
+        return False
+    return any(f.suffix.lower() in _IMAGE_EXTS
+               for f in footage.iterdir() if f.is_file())
+
+
+def step_render(run_dir, xplane_dir):
+    """Rendu X-Plane 12 (meteo injectee a l'interieur si profil present).
+
+    :return: True si images presentes apres rendu, False sinon
+    """
+    from xplane_bridge import render_run
+
+    run_dir = Path(run_dir)
+
+    if _has_images(run_dir):
+        # render_run gere lui-meme le skip, on log juste pour la trace
+        pass
+
+    if not render_run(run_dir, xplane_dir or ""):
+        print(f"  [Image] Echec rendu X-Plane pour {run_dir.name}")
+        return False
+
+    if not _has_images(run_dir):
+        print(f"  [Image] Pas d'images dans footage/ pour {run_dir.name}")
+        return False
+
+    return True
+
+
+def step_faults(run_dir):
+    """Applique les fautes capteur si fault_profile.json present (no-op sinon).
+
+    Les exceptions sont logees mais ne bloquent pas le pipeline : la presence
+    de fautes est optionnelle.
+    """
+    from sensor_faults import apply_faults
+
+    try:
+        apply_faults(run_dir)
+    except Exception as e:
+        print(f"  [Image] FAULTS ERREUR : {e}")
+
+
+def step_ground_truth(run_dir, runway=None):
+    """Genere le CSV GT LARD + les images annotees (annotated_lard/).
+
+    :return: True si CSV present apres l'etape (genere ou existant), False sinon
+    """
+    from lard_bridge import generate_gt, annotate_gt
+
+    run_dir = Path(run_dir)
+
+    try:
+        generate_gt(run_dir)
+    except Exception as e:
+        print(f"  [Image] GT ERREUR : {e}")
+        if not list(run_dir.glob("*_labels.csv")):
+            return False
+        print(f"  [Image] Utilisation du CSV existant")
+
+    try:
+        annotate_gt(run_dir, runway=runway)
+    except Exception as e:
+        print(f"  [Image] GT-VIS ERREUR : {e}")
+
+    return True
+
+
+def generate_images_and_GT(run_dir, xplane_dir, runway=None):
+    """Production des images + GT pour un run.
+
+    Enchaine sur run_dir (deja existant dans runs/, avec ses configs JSON) :
+      1. step_render          -> footage/*.jpeg (et meteo si profil)
+      2. step_faults          -> degraded/*.jpeg (si fault_profile.json)
+      3. step_ground_truth    -> <name>_labels.csv + annotated_lard/
+
+    :param run_dir: dossier du run dans runs/
+    :param xplane_dir: chemin vers X-Plane 12
+    :param runway: filtre piste pour annotate_gt (defaut: extrait du nom)
+    :return: True si tout est passe, False sinon
+    """
+    run_dir = Path(run_dir)
+    print(f"\n  [Image] Production images + GT pour {run_dir.name}")
+
+    if not step_render(run_dir, xplane_dir):
+        return False
+
+    step_faults(run_dir)
+
+    if not step_ground_truth(run_dir, runway=runway):
+        return False
+
+    return True

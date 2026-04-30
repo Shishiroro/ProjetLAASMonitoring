@@ -634,7 +634,7 @@ Decision : passer la meteo en per-scenario (injectee une fois avant le rendu).
   La meteo ne change pas pendant les ~30s d'une approche — plus realiste
   et plus fiable que du per-frame sur une API non prevue pour ca.
 
-Corrections plugin PI_lard_weather.py (v2) :
+Corrections plugin PI_weather.py (v2) :
 - cloud_type : nouveau enum XPLMWeather (0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cb)
 - change_mode dataref au lieu de use_real_weather_bool (deprecated)
 - isIncremental=False pour remplacer tous les records a chaque injection
@@ -657,7 +657,7 @@ Comportement :
 - Stabilisation ~6s (teste avec updateImmediately=True)
 
 Fichiers modifies :
-- [x] PI_lard_weather.py — plugin v2 (corrections API)
+- [x] PI_weather.py — plugin v2 (corrections API)
 - [x] project/export/xplane_weather.py — per-scenario, WeatherConfig 6 champs
 - [x] project/export/Export.py — lecture 6 params directs
 - [x] project/export/xplane_bridge.py — injection unique avant boucle de rendu
@@ -689,5 +689,100 @@ Fichiers modifies :
 - [x] project/export/lard_bridge.py — retrait .esp, FOV 30°, DB GES, param renderer
 - [x] project/export/Export.py — retrait LARD_RENDERER, param renderer
 - [x] CLAUDE.md — mise a jour documentation
+
+================================================================
+Phase 14 — Refacto pipeline en 3 phases distinctes (2026-04-30)
+================================================================
+Objectif :
+- Aligner le code sur le diagramme de sequence (DiagSequence.txt)
+- Centraliser la production d'images dans Export.py
+- Extraire detection + evaluation IoU dans un module dedie
+- run_pipeline.py devient un orchestrateur minimal
+
+Decoupage en 3 phases :
+  Phase 1 : Generation TAF (.yaml + JSON configs) -> step_generate
+  Phase 2 : Production images + GT LARD            -> Export.generate_images_and_GT
+  Phase 3 : Detection YOLO + Evaluation IoU        -> Detection_Evaluation.evaluate_run
+
+Architecture :
+- project/export/Export.py heberge desormais 2 fonctions independantes :
+  * export(root_node, path) : callback TAF (inchange, ecrit dans output/)
+  * generate_images_and_GT(run_dir, xplane_dir, runway) : orchestrateur post-TAF
+    Sous-etapes : step_render -> step_faults -> step_ground_truth
+- Detection_Evaluation.py (nouveau, a la racine) : module + CLI standalone
+  * step_predict + step_iou + evaluate_run (chapeau)
+  * CLI : python Detection_Evaluation.py LFPO_24 ou --all
+- run_pipeline.py : orchestrateur minimal (CLI inchangee)
+  * step_generate (Phase 1)
+  * _process_run = generate_images_and_GT + evaluate_run
+
+Compat :
+- TAF n'invoque que export() ; generate_images_and_GT est ignoree par TAF
+  (copiee dans taf/src/Export.py par Generate.py mais jamais appelee).
+- CLI run_pipeline.py strictement identique (generate / evaluate / full).
+- Comportement fonctionnel inchange (memes appels metiers, meme ordre).
+
+Ordre des sous-etapes dans generate_images_and_GT (suit le diagramme) :
+  1. step_render        : rendu X-Plane (meteo injectee si profil present)
+  2. step_faults        : fautes capteur OpenCV (no-op si pas de profil)
+  3. step_ground_truth  : CSV GT LARD + annotations visuelles
+
+Note : ordre faults -> GT (et non GT -> faults comme l'ancienne version) ;
+sans impact fonctionnel car la GT depend de la geometrie (yaml), pas des
+pixels degrades.
+
+Fichiers modifies :
+- [x] project/export/Export.py — ajout generate_images_and_GT + 3 step_*
+- [x] Detection_Evaluation.py — nouveau (module + CLI)
+- [x] run_pipeline.py — reecrit en orchestrateur minimal (CLI inchangee)
+- [x] CLAUDE.md — section Pipeline mise a jour, structure projet
+- [x] historique.txt — cette phase
+
+================================================================
+Phase 15 — run_pipeline.py reduit au CLI (2026-04-30)
+================================================================
+Objectif :
+- Sortir TOUTES les fonctions metier de run_pipeline.py
+- run_pipeline.py = CLI argparse uniquement (~135 lignes au lieu de ~280)
+- Rangement clair par responsabilite
+
+Deplacements :
+- step_generate                         -> Generate.generate_runs
+  (cleanup output/ + run() TAF + create_runs_from_taf_output)
+- _process_run                          -> runs.process_run
+  (1 run = generate_images_and_GT + evaluate_run)
+- run_evaluate                          -> runs.evaluate_runs
+  (boucle Phases 2+3 sur N runs filtres)
+- run_full                              -> runs.full_pipeline
+  (Phase 1 + boucle Phases 2+3 sur N runs crees)
+- _reset_weather (deja deplace en Phase 14b) -> xplane_weather.reset_if_active
+- main() / argparse                     -> reste dans run_pipeline.py
+
+Renommages :
+- runs_layout.py -> runs.py (perimetre elargi : layout + orchestration)
+- _process_run   -> process_run   (public)
+- run_evaluate   -> evaluate_runs (verbe + pluriel)
+- run_full       -> full_pipeline (descriptif)
+
+Architecture finale :
+- run_pipeline.py            : CLI argparse, delegue a Generate / runs
+- Detection_Evaluation.py    : module Phase 3 (sans CLI)
+- project/Generate.py        : run() (TAF) + generate_runs() (Phase 1 complete)
+- project/runs.py            : layout (find_runs, etc.) + orchestration
+                               (process_run, evaluate_runs, full_pipeline)
+- project/export/Export.py   : export() (callback TAF) + generate_images_and_GT (Phase 2)
+- project/export/xplane_weather.py : reset_weather + reset_if_active
+
+Compat : CLI strictement inchangee. Tous les imports migres en une passe.
+
+Fichiers modifies :
+- [x] project/runs.py — renomme depuis runs_layout.py + ajout orchestration
+- [x] project/Generate.py — ajout generate_runs()
+- [x] run_pipeline.py — reduit au CLI uniquement
+- [x] CLAUDE.md — structure projet + section Pipeline
+- [x] historique.txt — cette phase
+
+Fichiers supprimes :
+- [x] main.py (etait redondant avec run_pipeline.py generate)
 
 ================================================================

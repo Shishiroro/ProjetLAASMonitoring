@@ -369,9 +369,28 @@ def set_sim_speed(speed):
 
 
 def reset_weather():
-    """Remet la meteo par defaut (ciel clair)."""
+    """Remet la meteo par defaut (ciel clair).
+
+    Suppose que set_exchange_dir() a deja ete appele. Pour un appel
+    defensif depuis l'orchestrateur, voir reset_if_active().
+    """
     result = _send_weather_command("clear_weather")
     if result and result.get("ok"):
         print(f"  [WEATHER] Clear OK")
     else:
         print(f"  [WEATHER] Clear ECHEC")
+
+
+def reset_if_active(xplane_dir):
+    """Clear meteo defensif, no-op si xplane_dir vide ou plugin absent.
+
+    Wrapper haut-niveau pour l'orchestrateur : configure le exchange dir,
+    appelle reset_weather(), ignore les exceptions silencieusement.
+    """
+    if not xplane_dir:
+        return
+    try:
+        set_exchange_dir(xplane_dir)
+        reset_weather()
+    except Exception:
+        pass

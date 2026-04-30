@@ -108,6 +108,30 @@ def run(nb_test_cases=None, verbose=True):
     print("\n[Generate] Termine.")
 
 
+def generate_runs(nb_scenarios=None, quiet=False):
+    """Phase 1 complete : cleanup output/ + run() TAF + organize en runs/.
+
+    Wrapper haut-niveau de run() : nettoie le dossier temporaire output/,
+    lance la generation TAF, puis reorganise les .yaml + JSON configs vers
+    runs/<ICAO_RWY>/.
+
+    :return: list[Path] des dossiers runs/ crees
+    """
+    import shutil
+    from runs import TAF_OUTPUT_DIR, create_runs_from_taf_output
+
+    print("=" * 60)
+    print(" PHASE 1 : Generation TAF")
+    print("=" * 60)
+
+    if TAF_OUTPUT_DIR.exists():
+        shutil.rmtree(TAF_OUTPUT_DIR)
+
+    run(nb_test_cases=nb_scenarios, verbose=not quiet)
+
+    return create_runs_from_taf_output()
+
+
 if __name__ == "__main__":
     import argparse
 
