@@ -809,10 +809,14 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                     if check_plugin():
                         print(f"  [XPLANE] Plugin XPPython3 weather OK")
                         max_alt_m = max(p["alt_m"] for p in data["poses"])
+                        first_lat = data["poses"][0]["lat"]
                         first_lon = data["poses"][0]["lon"]
                         # Unpause pour que les particules meteo (pluie/neige) spawn pendant le settle
                         conn.send_dref("sim/time/paused", 0.0)
-                        weather_active = inject_weather(weather_cfg, aircraft_max_alt_m=max_alt_m, longitude=first_lon)
+                        weather_active = inject_weather(
+                            weather_cfg, aircraft_max_alt_m=max_alt_m,
+                            latitude=first_lat, longitude=first_lon,
+                        )
                         weather_status = "ok" if weather_active else "inject_failed"
                     else:
                         print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")

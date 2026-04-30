@@ -12,7 +12,7 @@ Workflow par precip_rate :
 
 Prerequis :
   - X-Plane 12 lance, avion place sur une piste
-  - Plugin PI_lard_weather.py actif (XPPython3)
+  - Plugin PI_weather.py actif (XPPython3)
   - Sim en pause ou override planepath (le script gere)
 
 Usage :
@@ -32,6 +32,7 @@ from xplane_weather import (
 )
 from xplane_bridge import XPlaneConnection, XPlaneConfig
 
+KPDX_LAT = 45.5887
 KPDX_LON = -122.6
 RESET_DELAY_S = 6
 
@@ -66,7 +67,7 @@ def main():
 
     print("Verification plugin meteo...")
     if not check_plugin():
-        print("ERREUR : plugin PI_lard_weather.py ne repond pas.")
+        print("ERREUR : plugin PI_weather.py ne repond pas.")
         sys.exit(1)
     print("Plugin OK")
 
@@ -123,7 +124,7 @@ def main():
             )
 
             max_test_alt = base_alt + max(altitudes)
-            inject_weather(config, aircraft_max_alt_m=max_test_alt, longitude=KPDX_LON)
+            inject_weather(config, aircraft_max_alt_m=max_test_alt, latitude=KPDX_LAT, longitude=KPDX_LON)
 
             for alt_agl in altitudes:
                 combo_i += 1

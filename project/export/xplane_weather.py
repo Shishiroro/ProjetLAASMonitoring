@@ -25,7 +25,16 @@ import os
 import json
 import time
 from dataclasses import dataclass, asdict, fields
+from datetime import datetime
 from pathlib import Path
+
+from timezonefinder import TimezoneFinder
+import pytz
+
+# Singleton — l'instanciation de TimezoneFinder est couteuse (chargement
+# des polygones de fuseaux horaires), on la fait une seule fois au chargement
+# du module.
+_TZ_FINDER = TimezoneFinder()
 
 
 # Temps de stabilisation nuages GPU (secondes) — fallback par defaut
@@ -84,22 +93,33 @@ def validate_weather(config):
         raise ValueError(f"settle_s={config.settle_s} hors [0, 60]")
 
 
-def local_hour_to_zulu(local_hour, longitude):
-    """Convertit une heure locale solaire en heure UTC.
+def local_hour_to_zulu(local_hour, lat, lon, date=None):
+    """Convertit heure civile locale en UTC via le fuseau politique reel.
 
-    Approximation par longitude : UTC_offset = longitude / 15.
-    Coherent avec le rendu solaire XP12 (erreur max ~1h vs fuseau politique).
+    Utilise timezonefinder pour identifier le fuseau de la position (lat, lon)
+    puis pytz pour resoudre l'offset UTC a la date donnee (gere DST).
 
-    :param local_hour: heure locale [0, 24]
-    :param longitude: longitude de l'aeroport (degres, negatif = ouest)
+    Fallback longitude/15 si timezonefinder ne trouve pas de fuseau (ocean,
+    cas exotique).
+
+    :param local_hour: heure civile locale [0, 24]
+    :param lat: latitude (degres)
+    :param lon: longitude (degres, negatif = ouest)
+    :param date: datetime pour resolution DST (defaut: datetime.now())
     :return: heure UTC [0, 24)
     """
-    utc_offset = longitude / 15.0
-    zulu = local_hour - utc_offset
-    return zulu % 24.0
+    if date is None:
+        date = datetime.now()
+    tz_name = _TZ_FINDER.timezone_at(lat=lat, lng=lon)
+    if tz_name is None:
+        # Fallback : approximation longitude (ocean, latitudes extremes)
+        return (local_hour - lon / 15.0) % 24.0
+    tz = pytz.timezone(tz_name)
+    utc_offset_h = tz.utcoffset(date).total_seconds() / 3600
+    return (local_hour - utc_offset_h) % 24.0
 
 
-def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
+def build_plugin_command(config, aircraft_max_alt_m=200.0, latitude=0.0, longitude=0.0):
     """Construit les parametres JSON pour PI_weather.py.
 
     Traduit WeatherConfig en params attendus par le plugin.
@@ -107,6 +127,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
     :param config: WeatherConfig
     :param aircraft_max_alt_m: altitude max de l'avion dans le scenario (MSL, metres).
         Les nuages sont places au-dessus avec une marge de config.cloud_margin_m.
+    :param latitude: latitude de l'aeroport (pour conversion heure locale → UTC via fuseau politique)
     :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     """
     visibility = config.visibility_m
@@ -122,8 +143,8 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, longitude=0.0):
     if config.temperature_c != 15.0:
         params["temperature_c"] = config.temperature_c
 
-    # Heure du jour — conversion locale → UTC via longitude
-    zulu_h = local_hour_to_zulu(config.time_of_day_h, longitude)
+    # Heure du jour — conversion locale → UTC via fuseau politique (timezonefinder + pytz)
+    zulu_h = local_hour_to_zulu(config.time_of_day_h, latitude, longitude)
     params["time_of_day_h"] = zulu_h
 
     # Nuages — base dynamique : au-dessus de l'avion avec marge
@@ -269,13 +290,14 @@ def check_plugin():
     return result is not None and result.get("ok", False)
 
 
-def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
+def inject_weather(config, aircraft_max_alt_m=200.0, latitude=0.0, longitude=0.0):
     """Injecte la meteo dans X-Plane et attend la stabilisation.
 
     Appeler UNE FOIS avant le rendu du scenario.
 
     :param config: WeatherConfig
     :param aircraft_max_alt_m: altitude max de l'avion (MSL, metres)
+    :param latitude: latitude de l'aeroport (pour conversion heure locale → UTC via fuseau politique)
     :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     :return: True si l'injection a reussi
     """
@@ -283,7 +305,10 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
         print(f"  [WEATHER] Pas de meteo active, skip")
         return True
 
-    params = build_plugin_command(config, aircraft_max_alt_m=aircraft_max_alt_m, longitude=longitude)
+    params = build_plugin_command(
+        config, aircraft_max_alt_m=aircraft_max_alt_m,
+        latitude=latitude, longitude=longitude,
+    )
     result = _send_weather_command("set_weather", weather=params)
 
     if not result or not result.get("ok"):
@@ -303,7 +328,7 @@ def inject_weather(config, aircraft_max_alt_m=200.0, longitude=0.0):
     if config.temperature_c < 0:
         parts.append(f"temp={config.temperature_c:.0f}C (neige)")
     if config.time_of_day_h != 12.0:
-        zulu_h = local_hour_to_zulu(config.time_of_day_h, longitude)
+        zulu_h = local_hour_to_zulu(config.time_of_day_h, latitude, longitude)
         parts.append(f"heure={config.time_of_day_h:.0f}h local -> {zulu_h:.1f}h UTC")
     parts.append(f"avion_max={aircraft_max_alt_m:.0f}m")
     if config.cloud_type >= 0:

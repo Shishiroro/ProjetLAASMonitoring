@@ -6,7 +6,7 @@ de la piste pour trouver ou les particules de pluie apparaissent.
 
 Prerequis :
   - X-Plane 12 lance, avion sur la piste
-  - Plugin PI_lard_weather.py actif
+  - Plugin PI_weather.py actif
 
 Usage :
   python tests/xplane/test_rain_position.py
@@ -26,6 +26,7 @@ from xplane_weather import (
 )
 from xplane_bridge import XPlaneConnection, XPlaneConfig
 
+KPDX_LAT = 45.5887
 KPDX_LON = -122.6
 
 
@@ -60,7 +61,7 @@ def main():
 
     print("Verification plugin meteo...")
     if not check_plugin():
-        print("ERREUR : plugin PI_lard_weather.py ne repond pas.")
+        print("ERREUR : plugin PI_weather.py ne repond pas.")
         sys.exit(1)
     print("Plugin OK")
 
@@ -102,7 +103,7 @@ def main():
         visibility_m=50000.0,
         time_of_day_h=12.0,
     )
-    inject_weather(config, aircraft_max_alt_m=fly_alt, longitude=KPDX_LON)
+    inject_weather(config, aircraft_max_alt_m=fly_alt, latitude=KPDX_LAT, longitude=KPDX_LON)
 
     # Grille de positions
     offsets_1d = list(range(-rng, rng + 1, step))

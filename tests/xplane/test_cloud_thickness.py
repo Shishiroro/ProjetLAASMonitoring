@@ -11,7 +11,7 @@ Workflow :
 
 Prerequis :
   - X-Plane 12 lance, avion place quelque part
-  - Plugin PI_lard_weather.py actif (XPPython3)
+  - Plugin PI_weather.py actif (XPPython3)
 
 Usage :
   python tests/xplane/test_cloud_thickness.py
@@ -38,7 +38,8 @@ CLOUD_TYPES = {
 
 THICKNESSES = [0, 200, 1000, 3000, 8000]
 
-# KPDX (Portland) — longitude pour conversion heure locale → UTC
+# KPDX (Portland) — coordonnees pour conversion heure locale → UTC
+KPDX_LAT = 45.5887
 KPDX_LON = -122.6
 
 
@@ -51,7 +52,7 @@ def main():
 
     print("Verification plugin...")
     if not check_plugin():
-        print("ERREUR : plugin PI_lard_weather.py ne repond pas.")
+        print("ERREUR : plugin PI_weather.py ne repond pas.")
         sys.exit(1)
     print("Plugin OK\n")
 
@@ -82,7 +83,7 @@ def main():
         print(f"    Appuie Entree pour injecter...")
         input()
 
-        inject_weather(config, longitude=KPDX_LON)
+        inject_weather(config, latitude=KPDX_LAT, longitude=KPDX_LON)
 
         print(f"    -> Injecte. Regarde le ciel.")
         print(f"    Appuie Entree pour reset + passer au suivant\n")
