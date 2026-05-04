@@ -243,14 +243,34 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None):
     if csv_name is None:
         csv_name = f"{yaml_path.stem}_labels.csv"
     csv_file = dataset_dir / csv_name
+    footage_dir = dataset_dir / "footage"
 
-    with _lard_cwd():
-        export_labels(
-            dataset_type=DatasetTypes.XPLANE,
-            yaml_scenario_path=yaml_path,
-            export_dir=dataset_dir,
-            out_labels_file=csv_file,
-        )
+    # On pointe out_images_dir vers footage/ pour eviter le doublon exported_images/
+    # cree par LARD. Comme src == dst, on neutralise shutil.copy dans le module
+    # label_export uniquement (le CSV reference alors les vraies images de footage/).
+    import src.labeling.label_export as _le
+    import shutil as _real_shutil
+
+    class _SmartShutil:
+        @staticmethod
+        def copy(src, dst, *a, **kw):
+            if Path(src).resolve() == Path(dst).resolve():
+                return dst
+            return _real_shutil.copy(src, dst, *a, **kw)
+
+    _orig_shutil = _le.shutil
+    _le.shutil = _SmartShutil
+    try:
+        with _lard_cwd():
+            export_labels(
+                dataset_type=DatasetTypes.XPLANE,
+                yaml_scenario_path=yaml_path,
+                export_dir=dataset_dir,
+                out_labels_file=csv_file,
+                out_images_dir=footage_dir,
+            )
+    finally:
+        _le.shutil = _orig_shutil
 
     print(f"  .csv GT -> {csv_file}")
     return str(csv_file)

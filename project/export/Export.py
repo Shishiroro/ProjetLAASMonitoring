@@ -259,11 +259,11 @@ def step_faults(run_dir):
 
 
 def step_ground_truth(run_dir, runway=None):
-    """Genere le CSV GT LARD + les images annotees (annotated_lard/).
+    """Genere le CSV GT LARD.
 
     :return: True si CSV present apres l'etape (genere ou existant), False sinon
     """
-    from lard_bridge import generate_gt, annotate_gt
+    from lard_bridge import generate_gt
 
     run_dir = Path(run_dir)
 
@@ -275,11 +275,6 @@ def step_ground_truth(run_dir, runway=None):
             return False
         print(f"  [Image] Utilisation du CSV existant")
 
-    try:
-        annotate_gt(run_dir, runway=runway)
-    except Exception as e:
-        print(f"  [Image] GT-VIS ERREUR : {e}")
-
     return True
 
 
@@ -289,11 +284,11 @@ def generate_images_and_GT(run_dir, xplane_dir, runway=None):
     Enchaine sur run_dir (deja existant dans runs/, avec ses configs JSON) :
       1. step_render          -> footage/*.jpeg (et meteo si profil)
       2. step_faults          -> degraded/*.jpeg (si fault_profile.json)
-      3. step_ground_truth    -> <name>_labels.csv + annotated_lard/
+      3. step_ground_truth    -> <name>_labels.csv
 
     :param run_dir: dossier du run dans runs/
     :param xplane_dir: chemin vers X-Plane 12
-    :param runway: filtre piste pour annotate_gt (defaut: extrait du nom)
+    :param runway: filtre piste (parametre conserve pour compat, non utilise ici)
     :return: True si tout est passe, False sinon
     """
     run_dir = Path(run_dir)

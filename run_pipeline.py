@@ -58,7 +58,7 @@ Structure runs/ :
   runs/
     LFPO_24/
       LFPO_24.yaml             <- genere par 'generate' (Phase 1)
-      poses_cam_export.json    <- poses camera
+      poses_cam_export.json    <- poses camera + trajectory_config TAF
       fault_profile.json       <- profil fautes capteur (si actif)
       weather_profile.json     <- profil meteo X-Plane (si actif)
       footage/                 <- images rendu X-Plane (Phase 2)
@@ -67,6 +67,9 @@ Structure runs/ :
       predictions.csv          <- predictions YOLO (Phase 3)
       predictions_txt/         <- labels YOLO (.txt, Phase 3)
     pipeline_report.json       <- rapport agrege (metriques IoU par run)
+
+  Visualisations on-demand via notebook.ipynb : yolo_box/, lard_box/,
+  xplane_config.json, params_trace.xml.
         """,
     )
     sub = parser.add_subparsers(dest="mode", required=True)

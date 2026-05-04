@@ -71,10 +71,10 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
         imgsz: Taille d'image pour l'inference.
         images_dir: Dossier des images (defaut: test_images/test/).
         output_dir: Dossier de sortie (defaut: yolo/output/expN/).
-            Si specifie, predictions.csv va dans output_dir/
-            et les images annotees dans output_dir/annotated/.
+            predictions.csv + predictions_txt/ vont dans output_dir/.
+
     Returns:
-        (predictions_csv, annotated_dir) — chemin du CSV et dossier images annotees.
+        Path du predictions.csv (ou None si pas d'images).
     """
     src = images_dir or IMAGES_DIR
     images = sorted(list(src.glob("*.jpeg")) + list(src.glob("*.jpg")) + list(src.glob("*.png")))
@@ -83,17 +83,10 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
 
     if not images:
         print(f"Aucune image trouvee dans {src}")
-        return None, None
+        return None
 
-    # Determiner les dossiers de sortie
-    if output_dir is not None:
-        out = Path(output_dir)
-        annotated_dir = out / "annotated"
-    else:
-        out = _next_exp_dir()
-        annotated_dir = out
-
-    annotated_dir.mkdir(parents=True, exist_ok=True)
+    out = Path(output_dir) if output_dir is not None else _next_exp_dir()
+    out.mkdir(parents=True, exist_ok=True)
 
     print(f"Prediction sur {len(images)} images avec {MODEL_PATH.name}")
 
@@ -104,46 +97,43 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
     all_in_dir = (start == 0 and n_images is None)
     source = str(src) if all_in_dir else [str(img) for img in images]
 
-    # YOLO ecrit les labels dans <project>/<name>/labels/
-    # et les images annotees dans <project>/<name>/
-    abs_annotated = annotated_dir.resolve()
+    # Workspace temporaire pour ultralytics (uniquement les .txt labels, pas les images annotees).
+    # Les bbox sont dessinees on-demand depuis le notebook (build_yolo_box / show_sanity).
+    yolo_tmp = (out / "_yolo_tmp").resolve()
     model.predict(
         source=source,
         imgsz=imgsz,
         conf=conf,
         save_txt=True,
         save_conf=True,
-        save=True,
-        project=str(abs_annotated.parent),
-        name=abs_annotated.name,
+        save=False,
+        project=str(yolo_tmp.parent),
+        name=yolo_tmp.name,
         exist_ok=True,
     )
 
-    # Consolider les .txt en predictions.csv et deplacer les .txt vers predictions_txt/
-    yolo_labels = abs_annotated / "labels"
+    yolo_labels = yolo_tmp / "labels"
     predictions_csv = out / "predictions.csv"
     predictions_dir = out / "predictions_txt"
 
     if yolo_labels.exists():
         n_dets = _txt_to_csv(yolo_labels, predictions_csv, txt_dst=predictions_dir)
-        try:
-            yolo_labels.rmdir()
-        except OSError:
-            pass
         print(f"Predictions : {n_dets} detections dans {predictions_csv.name} (+ {predictions_dir.name}/)")
     else:
-        _txt_to_csv(abs_annotated, predictions_csv)
+        _txt_to_csv(yolo_tmp, predictions_csv)
         print(f"Predictions : 0 detections")
 
-    print(f"Images annotees dans : {annotated_dir}")
-    return predictions_csv, annotated_dir
+    if yolo_tmp.exists():
+        shutil.rmtree(yolo_tmp)
+
+    return predictions_csv
 
 
 def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512):
     """Lance YOLO sur un run.
 
     Utilise run_dir/degraded/ si present (fautes capteur deja appliquees),
-    sinon run_dir/footage/. Sortie : run_dir/predictions.csv + run_dir/annotated/.
+    sinon run_dir/footage/. Sortie : run_dir/predictions.csv + run_dir/predictions_txt/.
 
     :return: Path du predictions.csv genere (ou None si pas d'images)
     """
@@ -163,7 +153,7 @@ def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512):
     )
     print(f"\n  [YOLO] Prediction sur {n_images} images depuis {images_dir.name}/ ({run_dir.name})...")
 
-    predictions_csv, _ = predict(
+    predictions_csv = predict(
         images_dir=images_dir,
         conf=conf,
         imgsz=imgsz,
