@@ -1,14 +1,5 @@
 <?xml version="1.0"?>
 <!--
-    trajectory_template.xml — Contraintes utilisateur pour TAF
-    ==========================================================
-    TAF (z3 solver) echantillonne des scenarios d'approche valides
-    a partir de ces parametres et contraintes.
-
-    Structure :
-      <node trajectory>     fps, distances, vent, OU, piste
-      <node weather>        meteo X-Plane (precip, nuages, visibilite, heure)
-      <node faults>         22 sub-nodes (1 par type de faute)
 
     Conventions :
       - min/max identiques = valeur fixe
@@ -18,7 +9,6 @@
     Modele de duree des fautes (T5) :
       - start_pct    : debut application en % de la trajectoire [0, 100]
       - duration_pct : duree de la faute en % de la trajectoire
-      - to_pct (interne, calcule par Export.py) = start_pct + duration_pct
       - Contrainte z3 : start_pct + duration_pct <= 100 (sinon UNSAT)
 
     airport_runway : format "ICAO_RWY" (ex: "LFPO_06").
@@ -47,14 +37,11 @@
             <parameter name="wind_speed_kts"               type="real"    min="0"    max="30"/>
             <parameter name="wind_direction_deg"           type="real"    min="0"    max="359"/>
 
-            <!-- Convergence finale : distance de stabilisation  type="real"    min="1000" max="1500"/> -->
+            <!-- Convergence finale   min="1000" max="1500"/> -->
             <parameter name="stabilization_distance_m"     type="real"    min="1000" max="1500"/>
 
             <!-- Piste cible (ICAO_RWY) -->
-            <!-- Demo X-Plane : KPDX uniquement (Portland)
-                 Remettre les autres pistes avec la licence complete :
-                 LFPO_6;LFPO_24;LFPG_27L;LFPG_27R;LFPG_09L;LFPG_09R;LFBO_32L;LFBO_32R;EGLL_27L;EGLL_27R;CYYZ_24L;EFHK_4R;EKCH_4L;EDDF_25C;EDDF_07C;EHAM_18C;EHAM_27;LEBL_24L;LIRF_16R;LPPT_2;KATL_26L;KATL_8R;KLAX_24R;KLAX_25L;KDEN_34R;KJFK_22L;KJFK_31R;KORD_28C;KSFO_28R;WMKK_33;VHHH_07R;RJTT_22;YSSY_34R
-            -->
+           
             <parameter name="airport_runway"               type="string"  values="KPDX_10L"/>
 
             <!-- Contraintes trajectoire :
@@ -81,26 +68,17 @@
                - Rien           (precip = 0, cloud_type = -1) : pas d'injection
 
              cloud_type enum : 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus, -1=auto
-
-             EXEMPLES :
-               Pluie forte   : precip=0.8, cloud_type=-1, vis=50000
-               Brouillard    : precip=0, cloud_type=-1, vis=2000
-               Couvert gris  : precip=0, cloud_type=1, coverage=1.0
-               Orage + pluie : precip=0.9, cloud_type=3, coverage=1.0
-               Neige         : precip=0.5, temperature_c=-5
-               Nuit claire   : tout defaut, time_of_day_h=22
         -->
         <node name="weather">
 
-            <!-- Precipitation : 0 = desactive. Cumulonimbus auto si cloud_type=-1.
-                 0->1 : la pluie reste discrete mais sol mouille / particules denses / eclairage. -->
+            <!-- Precipitation : 0 = desactive. Cumulonimbus auto si cloud_type=-1. -->
             <parameter name="precip_rate"             type="real" min="1"     max="1"/>
 
             <!-- cloud_type : -1=auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cb -->
             <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
             <parameter name="cloud_coverage"          type="real" min="0.8"   max="0.8"/>
 
-            <!-- Taille gouttes (visuel uniquement, dataref prive XP12)
+            <!-- Taille gouttes (visuel uniquement, dataref privé XP12(Susceptible d'être cassé dans de futures versions) 
                  1.0=defaut, 0.1=fines, 5.0=grosses. Ignore si precip=0. -->
             <parameter name="rain_scale"              type="real" min="5"     max="5"/>
 
@@ -109,22 +87,19 @@
 
             <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
                  IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
-                 genere PAS de particules de pluie/neige. Mettre > 0 pour avoir la pluie.
-                 Reperes : 300-500=stratus, 1500-3000=cumulus, 6000-10000=cumulonimbus.
-                 Pluie auto (precip>0, cloud_type=-1) force Cb → epaisseur Cb recommandee. -->
+                 genere PAS de particules de pluie/neige. Mettre > 0 pour avoir la pluie.. -->
             <parameter name="cloud_thickness_m"       type="real" min="6000"  max="6000"/>
 
-            <!-- Visibilite (m) : 50000=clair, basses=brouillard -->
+            <!-- Visibilite (m)  -->
             <parameter name="visibility_m"            type="real" min="30000" max="30000"/>
 
-            <!-- Temperature (°C) : controle pluie vs neige -->
+            <!-- Temperature (°C) :  pluie vs neige -->
             <parameter name="temperature_c"           type="real" min="15"    max="45"/>
 
-            <!-- Heure du jour (locale, conversion UTC approximative) ###################-->
+            <!-- Heure du jour (locale, conversion UTC approximative) -->
             <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
 
-            <!-- Delai stabilisation meteo/textures avant capture (s).
-                 Recommande : 5-30s. 15 = defaut conservateur. -->
+            <!-- Délai stabilisation météo/textures avant capture. --> 
             <parameter name="xplane_weather_settle_s" type="real" min="10"    max="10"/>
 
         </node>
@@ -134,19 +109,12 @@
              FAUTES CAPTEUR : 22 sub-nodes, params propres a chaque faute
              ===========================================================
              Pour activer une faute :
-               1) severity min/max > 0 (ex: 0.5 0.5 = sevpere fixee a 50%)
+               1) severity min/max > 0
                2) ajuster start_pct + duration_pct selon le moment souhaite
 
              Plusieurs fautes se cumulent si leurs plages se chevauchent.
 
-             Categories :
-               Bruits        : gaussian_noise, shot_noise, salt_pepper, dead_pixels
-               Flous         : motion_blur, defocus_blur, rolling_shutter
-               Exposition    : overexposure, underexposure
-               Optique       : vignetting, chromatic_aberration, radial_distortion, lens_flare
-               Artefacts     : banding, jpeg_artifacts, color_shift
-               Salissure     : condensation, dirt_on_lens, fog
-               Geometrie     : zoom_blur, contrast, pixelate
+           Voir différents effets dans le dossier examples.
         -->
         <node name="faults">
 

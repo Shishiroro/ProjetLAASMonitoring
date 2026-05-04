@@ -172,6 +172,16 @@ def export(root_node, path):
         flight_data, cfg.fps, scenario_name,
         output_path=Path(path) / "poses_cam_export.json",
         ltp_alt=rwy["ltp_alt"],
+        trajectory_config={
+            "along_track_distance_start": along_track_distance_start,
+            "along_track_distance_end": along_track_distance_end,
+            "ground_speed_kts": ground_speed_kts,
+            "turbulence_intensity": turbulence_intensity,
+            "wind_speed_kts": wind_speed_kts,
+            "wind_direction_deg": wind_direction_deg,
+            "stabilization_distance_m": stabilization_distance_m,
+            "airport_runway": f"{airport}_{runway}",
+        },
     )
 
     # --- Sauver le profil de fautes (si actif) ---

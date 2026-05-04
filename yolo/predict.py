@@ -4,6 +4,7 @@ Genere les predictions (CSV avec bbox) et les images annotees.
 """
 
 import csv
+import shutil
 from pathlib import Path
 from ultralytics import YOLO
 
@@ -24,8 +25,10 @@ def _next_exp_dir() -> Path:
     return exp_dir
 
 
-def _txt_to_csv(labels_dir: Path, csv_path: Path) -> int:
-    """Consolide les .txt YOLO en un seul predictions.csv et supprime les .txt.
+def _txt_to_csv(labels_dir: Path, csv_path: Path, txt_dst: Path | None = None) -> int:
+    """Consolide les .txt YOLO en un seul predictions.csv.
+
+    Si txt_dst est fourni, deplace les .txt dans ce dossier; sinon les supprime.
 
     Returns:
         Nombre de detections ecrites.
@@ -46,9 +49,13 @@ def _txt_to_csv(labels_dir: Path, csv_path: Path) -> int:
                                  parts[1], parts[2], parts[3], parts[4], parts[5]])
                 n_rows += 1
 
-    # Supprimer les .txt maintenant consolides
-    for txt in txt_files:
-        txt.unlink()
+    if txt_dst is not None:
+        txt_dst.mkdir(parents=True, exist_ok=True)
+        for txt in txt_files:
+            shutil.move(str(txt), str(txt_dst / txt.name))
+    else:
+        for txt in txt_files:
+            txt.unlink()
 
     return n_rows
 
@@ -112,20 +119,19 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
         exist_ok=True,
     )
 
-    # Consolider les .txt en predictions.csv
+    # Consolider les .txt en predictions.csv et deplacer les .txt vers predictions_txt/
     yolo_labels = abs_annotated / "labels"
     predictions_csv = out / "predictions.csv"
+    predictions_dir = out / "predictions_txt"
 
     if yolo_labels.exists():
-        n_dets = _txt_to_csv(yolo_labels, predictions_csv)
-        # Supprimer le dossier labels/ vide
+        n_dets = _txt_to_csv(yolo_labels, predictions_csv, txt_dst=predictions_dir)
         try:
             yolo_labels.rmdir()
         except OSError:
             pass
-        print(f"Predictions : {n_dets} detections dans {predictions_csv.name}")
+        print(f"Predictions : {n_dets} detections dans {predictions_csv.name} (+ {predictions_dir.name}/)")
     else:
-        # Aucune detection — CSV vide avec header
         _txt_to_csv(abs_annotated, predictions_csv)
         print(f"Predictions : 0 detections")
 

@@ -4,7 +4,6 @@ Calcule AP, F1, Precision, Recall via le module yolo/eval/.
 """
 
 from pathlib import Path
-import json
 import numpy as np
 import pandas as pd
 import torch
@@ -98,7 +97,7 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
 
 
 def evaluate(predictions_csv: Path, csv_path: Path, iou_thresh: float = 0.5, iou_method: str = "CIOU",
-             runway: str | None = None, results_dir: Path | None = None):
+             runway: str | None = None):
     """Lance l'evaluation IoU et affiche les metriques.
 
     Args:
@@ -107,7 +106,6 @@ def evaluate(predictions_csv: Path, csv_path: Path, iou_thresh: float = 0.5, iou
         iou_thresh: Seuil IoU.
         iou_method: Methode IoU (IOU/GIOU/DIOU/CIOU).
         runway: Filtrer GT sur une piste.
-        results_dir: Dossier ou sauvegarder eval_results.json (defaut: parent du CSV).
     """
 
     if not predictions_csv.exists():
@@ -149,30 +147,6 @@ def evaluate(predictions_csv: Path, csv_path: Path, iou_thresh: float = 0.5, iou
     print(f"  Confiance: {metrics['c']:.4f}")
     print(f"  TP={metrics['tp']}, FP={metrics['fp']}, FN={metrics['fn']}")
 
-    # Sauvegarder
-    save_dir = results_dir or predictions_csv.parent
-    results_file = save_dir / "eval_results.json"
-    results = {
-        "iou_thresh": iou_thresh,
-        "iou_method": iou_method,
-        "runway_filter": runway,
-        "gt_csv": csv_path.name,
-        "n_images": len(image_names),
-        "n_preds": int(preds.shape[0]),
-        "n_gts": int(gts.shape[0]),
-        "ap": round(metrics["ap"], 4),
-        "f1": round(metrics["f1"], 4),
-        "precision": round(metrics["p"], 4),
-        "recall": round(metrics["r"], 4),
-        "confidence": round(metrics["c"], 4),
-        "tp": int(metrics["tp"]),
-        "fp": int(metrics["fp"]),
-        "fn": int(metrics["fn"]),
-    }
-    with open(results_file, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"\nResultats sauvegardes dans : {results_file}")
-
     return metrics
 
 
@@ -202,7 +176,6 @@ def evaluate_run(run_dir, runway: str | None = None,
         iou_thresh=iou_thresh,
         iou_method=iou_method,
         runway=rwy,
-        results_dir=run_dir,
     )
 
 

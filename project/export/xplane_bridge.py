@@ -692,7 +692,8 @@ def _convert_pose(lon, lat, alt, yaw, pitch_src, roll):
 # Fichier poses_cam_export.json (format universel, independant du renderer)
 # ---------------------------------------------------------------------------
 
-def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
+def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None,
+                    trajectory_config=None):
     """Sauvegarde les poses dans un fichier JSON universel.
 
     :param flight_data: list de tuples (lon, lat, alt, yaw, pitch_ges, roll)
@@ -700,6 +701,10 @@ def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
     :param scenario_name: nom du scenario (ex: LFPO_24)
     :param output_path: chemin du fichier JSON de sortie
     :param ltp_alt: altitude MSL du LTP (seuil de piste) en metres, pour la meteo
+    :param trajectory_config: dict optionnel des parametres trajectoire samples
+        par TAF (along_track_distance_*, ground_speed_kts, turbulence_intensity,
+        wind_*, stabilization_distance_m). Permet de reconstruire params_trace.xml
+        a posteriori.
     :return: chemin du fichier cree
     """
     output_path = Path(output_path)
@@ -722,6 +727,8 @@ def save_poses_json(flight_data, fps, scenario_name, output_path, ltp_alt=None):
         "ltp_alt": float(ltp_alt) if ltp_alt is not None else 0.0,
         "poses": poses,
     }
+    if trajectory_config:
+        data["trajectory"] = trajectory_config
 
     with open(output_path, "w") as f:
         json.dump(data, f, indent=2)
@@ -830,22 +837,10 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
 
         # Positionnement via VEHS (double precision) — pas besoin de reference locale
 
-        # Sauver la config de rendu (FOV + resolution + pilot eye) pour le labeling GT
-        render_cfg = {
-            "width": conn.capture_region["width"] if conn.capture_region else config.window_width,
-            "height": conn.capture_region["height"] if conn.capture_region else config.window_height,
-            "fov_h": config.fov_h,
-            "fov_v": config.fov_v,
-            "pilot_eye_x": conn.pilot_eye_x,  # lateral (m, + = droite)
-            "pilot_eye_y": conn.pilot_eye_y,  # vertical (m, + = haut)
-            "pilot_eye_z": conn.pilot_eye_z,  # longitudinal (m, + = avant/nez)
-            "weather_status": weather_status,
-        }
-        render_cfg_file = output_dir.parent / "xplane_config.json"
-        with open(render_cfg_file, "w") as rf:
-            json.dump(render_cfg, rf, indent=2)
-        print(f"  [XPLANE] Render config : {render_cfg['width']}x{render_cfg['height']}"
-              f" FOV {render_cfg['fov_h']}x{render_cfg['fov_v']}°")
+        render_w = conn.capture_region["width"] if conn.capture_region else config.window_width
+        render_h = conn.capture_region["height"] if conn.capture_region else config.window_height
+        print(f"  [XPLANE] Render config : {render_w}x{render_h}"
+              f" FOV {config.fov_h}x{config.fov_v}°  weather={weather_status}")
 
         t_start = time.perf_counter()
 

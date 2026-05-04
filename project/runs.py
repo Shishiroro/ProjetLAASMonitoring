@@ -69,10 +69,10 @@ def find_runs(run_name=None, all_runs=False):
 def create_runs_from_taf_output():
     """Reorganise la sortie TAF (output/) vers runs/<ICAO_RWY>/.
 
-    Pour chaque .yaml trouve dans output/ : copie yaml + params_trace.xml +
-    poses_cam_export.json (avec scenario_name mis a jour si suffixe) +
-    fault_profile.json + weather_profile.json. Genere un suffixe _NNN si
-    une piste est generee plusieurs fois.
+    Pour chaque .yaml trouve dans output/ : copie yaml + poses_cam_export.json
+    (avec scenario_name mis a jour si suffixe) + fault_profile.json +
+    weather_profile.json. Genere un suffixe _NNN si une piste est generee
+    plusieurs fois.
 
     :return: list[Path] des runs crees
     """
@@ -95,10 +95,6 @@ def create_runs_from_taf_output():
         run_name = run_dir.name
 
         shutil.copy2(yf, run_dir / f"{run_name}.yaml")
-
-        scenario_xml = yf.parent.parent / f"{yf.parent.parent.name}.xml"
-        if scenario_xml.exists():
-            shutil.copy2(scenario_xml, run_dir / "params_trace.xml")
 
         # poses_cam_export.json : maj scenario_name si suffixe _NNN
         poses_json = yf.parent / "poses_cam_export.json"
