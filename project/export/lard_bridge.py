@@ -318,28 +318,68 @@ def generate_gt(run_dir):
     return Path(csv_file)
 
 
-def annotate_gt(run_dir, csv_path=None, runway=None, max_images=0):
-    """Dessine les bbox GT LARD sur les images dans run_dir/annotated_lard/.
+def load_gt_corners(csv_path, runway=None):
+    """Charge un *_labels.csv LARD et retourne {image_name: [[(x,y) x 4], ...]}.
+
+    Si runway fourni, filtre sur cette piste + son reciprocal (meme bande physique).
+    Sinon retourne toutes les pistes.
+
+    Coordonnees retournees en float (cast a int au besoin par l'appelant).
+    """
+    import csv as csvmod
+
+    yolo_eval_dir = PROJECT_ROOT / "yolo" / "eval"
+    if str(yolo_eval_dir) not in sys.path:
+        sys.path.insert(0, str(yolo_eval_dir))
+    from runway import reciprocal_runway
+
+    keep = None
+    if runway:
+        def _norm(r):
+            return str(r).lstrip("0") or "0"
+        keep = {_norm(runway), _norm(reciprocal_runway(runway))}
+
+    out = {}
+    with open(csv_path, "r") as f:
+        reader = csvmod.DictReader(f, delimiter=";")
+        for row in reader:
+            if keep is not None:
+                rwy = str(row.get("runway", "")).lstrip("0") or "0"
+                if rwy not in keep:
+                    continue
+            fname = Path(row["image"]).name
+            corners = [
+                (float(row["x_TR"]), float(row["y_TR"])),
+                (float(row["x_TL"]), float(row["y_TL"])),
+                (float(row["x_BL"]), float(row["y_BL"])),
+                (float(row["x_BR"]), float(row["y_BR"])),
+            ]
+            out.setdefault(fname, []).append(corners)
+    return out
+
+
+def annotate_gt(run_dir, csv_path=None, runway=None, max_images=0,
+                out_dir=None, prefix="gt_"):
+    """Dessine les bbox GT LARD sur les images dans `out_dir`.
 
     :param run_dir: dossier du run (contient footage/ + <stem>_labels.csv)
     :param csv_path: CSV GT (defaut: auto-detecte run_dir/*_labels.csv)
     :param runway: filtre une piste (defaut: extrait du nom du run).
                    Le reciprocal est aussi accepte (meme bande physique).
     :param max_images: 0 = toutes
+    :param out_dir: dossier de sortie (defaut: run_dir/annotated_lard/)
+    :param prefix: prefixe des fichiers de sortie (defaut: "gt_")
     """
-    import csv as csvmod
-    from pathlib import Path
     from PIL import Image, ImageDraw, ImageFont
 
-    # Import lazy de l'utilitaire piste (yolo/eval/runway.py)
     yolo_eval_dir = PROJECT_ROOT / "yolo" / "eval"
     if str(yolo_eval_dir) not in sys.path:
         sys.path.insert(0, str(yolo_eval_dir))
-    from runway import reciprocal_runway, runway_from_run_name
+    from runway import runway_from_run_name
 
     run_dir = Path(run_dir)
     footage_dir = run_dir / "footage"
-    out_dir = run_dir / "annotated_lard"
+    out_dir = Path(out_dir) if out_dir is not None else run_dir / "annotated_lard"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if csv_path is None:
@@ -363,26 +403,16 @@ def annotate_gt(run_dir, csv_path=None, runway=None, max_images=0):
     if font is None:
         font = ImageFont.load_default()
 
-    entries = {}
-    with open(csv_path, "r") as f:
-        reader = csvmod.DictReader(f, delimiter=";")
-        for row in reader:
-            filename = Path(row["image"]).name
-            corners = (
-                (int(float(row["x_TR"])), int(float(row["y_TR"]))),
-                (int(float(row["x_TL"])), int(float(row["y_TL"]))),
-                (int(float(row["x_BL"])), int(float(row["y_BL"]))),
-                (int(float(row["x_BR"])), int(float(row["y_BR"]))),
-            )
-            rwy_label = row.get("runway", "?")
-            # Filtrer sur la piste cible (et son reciprocal pour la meme bande)
-            if target_runway:
-                norm_target = target_runway.lstrip("0") or "0"
-                norm_runway = str(rwy_label).lstrip("0") or "0"
-                recip_target = reciprocal_runway(target_runway).lstrip("0") or "0"
-                if norm_runway != norm_target and norm_runway != recip_target:
-                    continue
-            entries.setdefault(filename, []).append({"corners": corners, "runway": rwy_label})
+    # Reutilise le parser commun, cast en int pour PIL
+    raw_entries = load_gt_corners(csv_path, runway=target_runway)
+    entries = {
+        fname: [
+            {"corners": tuple((int(x), int(y)) for x, y in corners),
+             "runway": target_runway or "?"}
+            for corners in corners_list
+        ]
+        for fname, corners_list in raw_entries.items()
+    }
 
     COLORS = ["cyan", "red", "yellow", "lime", "magenta", "orange"]
     runway_colors = {}
@@ -417,7 +447,7 @@ def annotate_gt(run_dir, csv_path=None, runway=None, max_images=0):
             draw.rectangle([bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2], fill="black")
             draw.text((cx, cy), rwy, fill=color, font=font)
 
-        img.save(out_dir / f"gt_{filename}")
+        img.save(out_dir / f"{prefix}{filename}")
         processed += 1
 
-    print(f"  [GT-VIS] {processed} images annotees dans annotated_lard/")
+    print(f"  [GT-VIS] {processed} images annotees dans {out_dir.name}/")
