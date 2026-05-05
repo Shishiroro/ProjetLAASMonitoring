@@ -76,14 +76,14 @@
 
             <!-- cloud_type : -1=auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cb -->
             <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
-            <parameter name="cloud_coverage"          type="real" min="0.8"   max="0.8"/>
+            <parameter name="cloud_coverage"          type="real" min="1"   max="1"/>
 
             <!-- Taille gouttes (visuel uniquement, dataref privé XP12(Susceptible d'être cassé dans de futures versions) 
                  1.0=defaut, 0.1=fines, 5.0=grosses. Ignore si precip=0. -->
             <parameter name="rain_scale"              type="real" min="5"     max="5"/>
 
             <!-- Marge nuages (m) au-dessus de l'avion pour la base nuages -->
-            <parameter name="cloud_margin_m"          type="real" min="3000"   max="3000"/>
+            <parameter name="cloud_margin_m"          type="real" min="1500"   max="1500"/>
 
             <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
                  IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
@@ -94,7 +94,7 @@
             <parameter name="visibility_m"            type="real" min="30000" max="30000"/>
 
             <!-- Temperature (°C) :  pluie vs neige -->
-            <parameter name="temperature_c"           type="real" min="15"    max="45"/>
+            <parameter name="temperature_c"           type="real" min="-15"    max="45"/>
 
             <!-- Heure du jour (locale, conversion UTC approximative) -->
             <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
