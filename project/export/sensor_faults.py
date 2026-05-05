@@ -156,6 +156,8 @@ def apply_faults(run_dir):
     :return: dossier d'images a utiliser pour YOLO (degraded/ si fautes appliquees,
              footage/ sinon)
     """
+    from runs import list_images
+
     run_dir = Path(run_dir)
     fault_json = run_dir / "fault_profile.json"
     footage_dir = run_dir / "footage"
@@ -164,11 +166,7 @@ def apply_faults(run_dir):
     if not fault_json.exists():
         return footage_dir
 
-    if degraded_dir.exists() and (
-        list(degraded_dir.glob("*.jpeg"))
-        + list(degraded_dir.glob("*.jpg"))
-        + list(degraded_dir.glob("*.png"))
-    ):
+    if list_images(degraded_dir):
         print(f"  [FAULTS] degraded/ existe deja, skip application")
         return degraded_dir
 

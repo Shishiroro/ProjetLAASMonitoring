@@ -29,14 +29,26 @@ REPORT_FILE = RUNS_DIR / "pipeline_report.json"
 IMAGE_EXTS = (".jpeg", ".jpg", ".png")
 
 
+def list_images(directory):
+    """Liste triee des images (jpeg/jpg/png) d'un dossier (vide si absent)."""
+    d = Path(directory)
+    if not d.exists():
+        return []
+    return sorted(p for p in d.iterdir()
+                  if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
+
+
 def has_images(run_dir):
     """Un run a-t-il des images dans footage/ ?"""
-    footage = run_dir / "footage"
-    if not footage.exists():
-        return False
-    return any(
-        f.suffix.lower() in IMAGE_EXTS for f in footage.iterdir() if f.is_file()
-    )
+    return bool(list_images(Path(run_dir) / "footage"))
+
+
+def pick_image_source(run_dir):
+    """Retourne le dossier d'images a utiliser : degraded/ si non vide, sinon footage/."""
+    run = Path(run_dir)
+    if list_images(run / "degraded"):
+        return run / "degraded"
+    return run / "footage"
 
 
 def find_runs(run_name=None, all_runs=False):

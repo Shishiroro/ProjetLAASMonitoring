@@ -20,10 +20,11 @@ import sys
 import math
 from pathlib import Path
 
-# Ajouter project/export/ au sys.path pour nos imports
+# Ajouter project/ et project/export/ au sys.path pour nos imports
 _export_dir = Path(__file__).resolve().parent
-if str(_export_dir) not in sys.path:
-    sys.path.insert(0, str(_export_dir))
+for _p in (_export_dir, _export_dir.parent):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario
@@ -208,36 +209,21 @@ def export(root_node, path):
 # TAF n'utilise QUE export() ci-dessus, jamais ce qui suit.
 # ===========================================================================
 
-_IMAGE_EXTS = (".jpeg", ".jpg", ".png")
-
-
-def _has_images(run_dir):
-    """Retourne True si run_dir/footage/ contient au moins une image."""
-    footage = Path(run_dir) / "footage"
-    if not footage.exists():
-        return False
-    return any(f.suffix.lower() in _IMAGE_EXTS
-               for f in footage.iterdir() if f.is_file())
-
-
 def step_render(run_dir, xplane_dir):
     """Rendu X-Plane 12 (meteo injectee a l'interieur si profil present).
 
     :return: True si images presentes apres rendu, False sinon
     """
+    from runs import has_images
     from xplane_bridge import render_run
 
     run_dir = Path(run_dir)
-
-    if _has_images(run_dir):
-        # render_run gere lui-meme le skip, on log juste pour la trace
-        pass
 
     if not render_run(run_dir, xplane_dir or ""):
         print(f"  [Image] Echec rendu X-Plane pour {run_dir.name}")
         return False
 
-    if not _has_images(run_dir):
+    if not has_images(run_dir):
         print(f"  [Image] Pas d'images dans footage/ pour {run_dir.name}")
         return False
 

@@ -5,6 +5,7 @@ Genere les predictions (CSV avec bbox) et les images annotees.
 
 import csv
 import shutil
+import sys
 from pathlib import Path
 from ultralytics import YOLO
 
@@ -13,6 +14,12 @@ YOLO_DIR = Path(__file__).resolve().parent
 MODEL_PATH = YOLO_DIR / "yolov8n.pt"
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
+
+# project/ pour reutiliser list_images / pick_image_source (helpers partages)
+_PROJECT_DIR = YOLO_DIR.parent / "project"
+if str(_PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_DIR))
+from runs import list_images, pick_image_source
 
 
 def _next_exp_dir() -> Path:
@@ -77,7 +84,7 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
         Path du predictions.csv (ou None si pas d'images).
     """
     src = images_dir or IMAGES_DIR
-    images = sorted(list(src.glob("*.jpeg")) + list(src.glob("*.jpg")) + list(src.glob("*.png")))
+    images = list_images(src)
     end = start + n_images if n_images is not None else None
     images = images[start:end]
 
@@ -138,19 +145,8 @@ def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512):
     :return: Path du predictions.csv genere (ou None si pas d'images)
     """
     run_dir = Path(run_dir)
-    degraded = run_dir / "degraded"
-    footage = run_dir / "footage"
-
-    has_degraded = degraded.exists() and bool(
-        list(degraded.glob("*.jpeg")) + list(degraded.glob("*.jpg")) + list(degraded.glob("*.png"))
-    )
-    images_dir = degraded if has_degraded else footage
-
-    n_images = len(
-        list(images_dir.glob("*.jpeg"))
-        + list(images_dir.glob("*.jpg"))
-        + list(images_dir.glob("*.png"))
-    )
+    images_dir = pick_image_source(run_dir)
+    n_images = len(list_images(images_dir))
     print(f"\n  [YOLO] Prediction sur {n_images} images depuis {images_dir.name}/ ({run_dir.name})...")
 
     predictions_csv = predict(

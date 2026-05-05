@@ -909,15 +909,12 @@ def render_run(run_dir, xplane_dir):
         print(f"  [XPLANE] Pas de poses_cam_export.json pour {run_dir.name}")
         return False
 
-    if footage_dir.exists():
-        imgs = (
-            list(footage_dir.glob("*.png"))
-            + list(footage_dir.glob("*.jpeg"))
-            + list(footage_dir.glob("*.jpg"))
-        )
-        if imgs:
-            print(f"  [XPLANE] footage/ existe deja ({len(imgs)} images), skip rendu")
-            return True
+    # project/ est ajoute en sys.path par run_pipeline.py et Export.py
+    from runs import list_images
+    imgs = list_images(footage_dir)
+    if imgs:
+        print(f"  [XPLANE] footage/ existe deja ({len(imgs)} images), skip rendu")
+        return True
 
     print(f"\n  [XPLANE] Rendu de {run_dir.name}...")
 

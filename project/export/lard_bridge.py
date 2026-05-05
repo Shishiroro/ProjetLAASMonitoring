@@ -24,17 +24,20 @@ from dataclasses import asdict
 # --- Chemins LARD ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # LARD-LAAS-TAF/
 LARD_ROOT = PROJECT_ROOT / "LARD"
+PROJECT_DIR = PROJECT_ROOT / "project"  # contient runway.py
 # DB LARD X-Plane (meme DB que le labeling LARD pour coherence trajectoire/GT)
 RUNWAY_DB_XPLANE = str(LARD_ROOT / "data" / "runways_db_V2_XPlane.json")
 
-# Ajouter LARD/ au sys.path pour ses imports internes
-if str(LARD_ROOT) not in sys.path:
-    sys.path.insert(0, str(LARD_ROOT))
+# Ajouter LARD/ + project/ au sys.path
+for _p in (LARD_ROOT, PROJECT_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from src.geo.geo_dataset import compute_aiming_point
 from src.geo.geo_utils import ecef2llh
 from src.labeling.label_export import export_labels
 from src.labeling.export_config import DatasetTypes
+from runway import reciprocal_runway, runway_from_run_name
 
 
 # ---------------------------------------------------------------------------
@@ -328,11 +331,6 @@ def load_gt_corners(csv_path, runway=None):
     """
     import csv as csvmod
 
-    yolo_eval_dir = PROJECT_ROOT / "yolo" / "eval"
-    if str(yolo_eval_dir) not in sys.path:
-        sys.path.insert(0, str(yolo_eval_dir))
-    from runway import reciprocal_runway
-
     keep = None
     if runway:
         def _norm(r):
@@ -371,11 +369,6 @@ def annotate_gt(run_dir, csv_path=None, runway=None, max_images=0,
     :param prefix: prefixe des fichiers de sortie (defaut: "gt_")
     """
     from PIL import Image, ImageDraw, ImageFont
-
-    yolo_eval_dir = PROJECT_ROOT / "yolo" / "eval"
-    if str(yolo_eval_dir) not in sys.path:
-        sys.path.insert(0, str(yolo_eval_dir))
-    from runway import runway_from_run_name
 
     run_dir = Path(run_dir)
     footage_dir = run_dir / "footage"

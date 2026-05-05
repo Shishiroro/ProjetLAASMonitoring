@@ -3,15 +3,21 @@ Evaluation IoU : compare les predictions YOLO (predictions.csv) aux ground truth
 Calcule AP, F1, Precision, Recall via le module yolo/eval/.
 """
 
+import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
 
+# project/ contient runway.py (deplace depuis yolo/eval/)
+_PROJECT_DIR = Path(__file__).resolve().parent.parent / "project"
+if str(_PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_DIR))
+
 from eval.box import box_extract
 from eval.metrics_utils import bbox_convert
 from eval.metrics import compute_metrics
-from eval.runway import reciprocal_runway, runway_from_run_name
+from runway import reciprocal_runway, runway_from_run_name
 
 
 # --- Colonnes GT LARD (NEW_CORNERS_NAMES = TR, TL, BL, BR) ---
