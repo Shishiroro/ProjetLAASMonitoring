@@ -59,21 +59,26 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
     """
     Recupere la geometrie d'une piste (DB X-Plane).
 
+    LARD convention :
+      - LTP = (C+D)/2 = seuil de toucher (cote approche)
+      - FPAP = (A+B)/2 = bout de piste (cote eloigne)
+      - rwy_psi[0] = forward azimuth (LTP->FPAP) = vrai cap de la piste
+      - rwy_psi[1] = back azimuth   (FPAP->LTP) = direction de l'approche
+
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
     _, _, rwy_psi, ltp, fpap = compute_aiming_point(
         RUNWAY_DB_XPLANE, airport, runway, dist_ap_m
     )
-    # FPAP = vrai seuil d'approche dans la convention LARD
-    fpap_lat, fpap_lon, fpap_alt = ecef2llh(fpap[0], fpap[1], fpap[2])
+    ltp_lat, ltp_lon, ltp_alt = ecef2llh(ltp[0], ltp[1], ltp[2])
 
     return {
-        "ltp_lat": fpap_lat,
-        "ltp_lon": fpap_lon,
-        "ltp_alt": fpap_alt,
-        "runway_heading_deg": rwy_psi[1],
-        "runway_back_azimuth_deg": rwy_psi[0],
+        "ltp_lat": ltp_lat,
+        "ltp_lon": ltp_lon,
+        "ltp_alt": ltp_alt,
+        "runway_heading_deg": rwy_psi[0],       # forward = vrai cap
+        "runway_back_azimuth_deg": rwy_psi[1],  # back = direction approche
     }
 
 
@@ -287,8 +292,7 @@ def generate_gt(run_dir):
     """Genere le CSV ground truth LARD pour un run.
 
     Lit run_dir/<stem>.yaml et les images dans run_dir/footage/, ecrit
-    run_dir/<stem>_labels.csv. Applique le fix yaw +180 (cap de vol -> sens
-    de regard) le temps de l'export.
+    run_dir/<stem>_labels.csv.
 
     :return: Path du CSV genere
     """
@@ -301,23 +305,10 @@ def generate_gt(run_dir):
 
     print(f"\n  [GT] Generation CSV pour {run_dir.name}...")
 
-    # Fix convention yaw : +180 pour passer du cap de vol au sens de regard
-    # (fix envisage par LARD, ligne 132 commentee dans label_export.py)
-    import src.labeling.label_export as _le
-    _original_facing = _le.runway_is_facing_us
-
-    def _fixed_facing(heading, runway):
-        return _original_facing((heading + 180) % 360, runway)
-
-    _le.runway_is_facing_us = _fixed_facing
-    try:
-        csv_file = generate_labels_csv(
-            yaml_path=str(yaml_path),
-            dataset_dir=str(run_dir),
-        )
-    finally:
-        _le.runway_is_facing_us = _original_facing
-
+    csv_file = generate_labels_csv(
+        yaml_path=str(yaml_path),
+        dataset_dir=str(run_dir),
+    )
     return Path(csv_file)
 
 
