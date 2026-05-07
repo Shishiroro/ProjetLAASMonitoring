@@ -82,6 +82,15 @@ def run(nb_test_cases=None, verbose=True):
 
     import Taf
 
+    # Stub `./Export.py` requis par TAF (Export_Generator.create_export
+    # fait getsize sans tester l'existence). Normalement cree au 1er
+    # `import Taf` via create_minimal_export(), mais l'import est cache
+    # par le kernel Jupyter et le stub est supprime en fin de run() →
+    # on le recree defensivement a chaque appel.
+    stub = project_dir / "Export.py"
+    if not stub.exists():
+        stub.write_text("def export(root_node, path):\n\tpass")
+
     taf = Taf.CLI()
     taf.verbose = verbose
     taf.auto = True

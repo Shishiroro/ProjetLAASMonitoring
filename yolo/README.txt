@@ -1,7 +1,9 @@
 == YOLOv8 — Detection de pistes ==
 
-Modele: yolo/yolov8n.pt (entraine sur LARD pour detection de pistes,
+Modele: yolo/yolov8nTest.pt (entraine sur LARD pour detection de pistes,
 embarque avion). Inference offline via ultralytics.
+Note: renomme depuis yolov8n.pt pour eviter qu'ultralytics auto-telecharge
+le modele COCO de base (80 classes) si le fichier est introuvable.
 
 Pipeline standard (recommande): voir run_pipeline.py a la racine.
 La phase 3 (Detection_Evaluation.py) appelle predict_run + evaluate_run

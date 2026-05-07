@@ -3,13 +3,15 @@ run_pipeline.py — CLI orchestrateur LARD-LAAS-TAF
 ==================================================
 Entry point CLI minimal. Toute la logique vit dans :
   - Phase 1            : project/Generate.generate_runs
-  - Phase 2            : project/export/Export.generate_images_and_GT
+  - Phase 2            : project/export/Export.render_run
   - Phase 3            : Detection_Evaluation.evaluate_run
-  - Modes batch        : project/runs.evaluate_runs / full_pipeline
+  - Modes batch        : project/runs.render_runs / evaluate_runs / full_pipeline
                          (boucles + agregation + cleanup meteo)
 
 Modes :
     python run_pipeline.py generate -n 5
+    python run_pipeline.py render LFPO_24 --xplane-dir "C:/X-Plane 12"
+    python run_pipeline.py render --all --xplane-dir "C:/X-Plane 12"
     python run_pipeline.py evaluate LFPO_24
     python run_pipeline.py evaluate --all
     python run_pipeline.py full -n 100 --xplane-dir "C:/X-Plane 12"
@@ -27,7 +29,7 @@ for _p in (ROOT, ROOT / "project", ROOT / "project" / "export"):
         sys.path.insert(0, str(_p))
 
 from Generate import generate_runs
-from runs import evaluate_runs, full_pipeline
+from runs import render_runs, evaluate_runs, full_pipeline
 
 
 def _add_generate_args(parser):
@@ -79,12 +81,19 @@ Structure runs/ :
     xplane_args.add_argument("--xplane-dir", type=str, default=_default_xp,
                              help=f"Repertoire X-Plane 12 (defaut: {_default_xp})")
 
-    p_gen = sub.add_parser("generate", parents=[xplane_args],
+    p_gen = sub.add_parser("generate",
                            help="Phase 1 : genere les scenarios TAF (.yaml) dans runs/")
     _add_generate_args(p_gen)
 
-    p_eval = sub.add_parser("evaluate", parents=[xplane_args],
-                            help="Phases 2+3 : Images + GT + Detection + IoU")
+    p_render = sub.add_parser("render", parents=[xplane_args],
+                              help="Phase 2 : rendu X-Plane + fautes capteur")
+    p_render.add_argument("run", nargs="?", default=None,
+                          help="Nom du run (ex: LFPO_24)")
+    p_render.add_argument("--all", action="store_true", dest="all_runs",
+                          help="Rendre tous les runs dans runs/")
+
+    p_eval = sub.add_parser("evaluate",
+                            help="Phase 3 : GT LARD + Detection YOLO + IoU")
     p_eval.add_argument("run", nargs="?", default=None,
                         help="Nom du run (ex: LFPO_24)")
     p_eval.add_argument("--all", action="store_true", dest="all_runs",
@@ -102,7 +111,16 @@ Structure runs/ :
 
     if args.mode == "generate":
         generate_runs(nb_scenarios=args.nb_scenarios, quiet=args.quiet)
-        print(f"  Prochaine etape : lancer le rendu X-Plane (run_pipeline.py full)")
+        print(f"  Prochaine etape : run_pipeline.py render --all")
+
+    elif args.mode == "render":
+        if not args.run and not args.all_runs:
+            print("Specifier un run ou --all. Ex: python run_pipeline.py render LFPO_24")
+            return
+        render_runs(
+            run_name=args.run, all_runs=args.all_runs,
+            xplane_dir=args.xplane_dir,
+        )
 
     elif args.mode == "evaluate":
         if not args.run and not args.all_runs:
@@ -112,7 +130,6 @@ Structure runs/ :
             run_name=args.run, all_runs=args.all_runs, runway=args.runway,
             conf=args.conf, imgsz=args.imgsz,
             iou_thresh=args.iou_thresh, iou_method=args.iou_method,
-            xplane_dir=args.xplane_dir,
         )
 
     elif args.mode == "full":

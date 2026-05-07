@@ -93,7 +93,7 @@ class XPlaneConfig:
     host: str = "127.0.0.1"
     port: int = 49000               # Port UDP X-Plane (reception)
     xplane_dir: str = ""            # Repertoire d'installation X-Plane
-    settle_time: float = 0.1        # Attente apres changement de pose (sec)
+    settle_time: float = 0.07       # Attente apres changement de pose (sec)
     window_width: int = 1024        # Largeur zone client X-Plane (carre)
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 60.0             # FOV horizontal (reglages X-Plane, 60° comme LARD)

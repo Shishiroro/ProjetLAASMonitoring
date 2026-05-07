@@ -1,19 +1,20 @@
 """
-Export.py — Point d'entree TAF + Production images & GT
-=========================================================
+Export.py — Point d'entree TAF + Phase 2 (rendu X-Plane + fautes)
+==================================================================
 Deux fonctions independantes hebergees dans le meme fichier :
 
   1. export(root_node, path)
      Callback TAF appele pendant la generation z3. Ecrit .yaml + JSON
      configs dans output/test_artifact_X (temporaire).
 
-  2. generate_images_and_GT(run_dir, xplane_dir, runway=None)
-     Orchestrateur post-TAF appele par run_pipeline.py sur chaque run_dir.
-     Enchaine rendu X-Plane -> fautes capteur -> GT LARD.
+  2. render_run(run_dir, xplane_dir)
+     Orchestrateur Phase 2 appele par run_pipeline.py sur chaque run_dir.
+     Enchaine rendu X-Plane -> fautes capteur. Le GT LARD est genere en
+     Phase 3 (Detection_Evaluation), pas ici.
      TAF n'invoque jamais cette fonction.
 
 Chaine TAF : root_node -> TrajectoryConfig -> build_trajectory -> .yaml
-Chaine pipeline : run_dir -> render_run -> apply_faults -> generate_gt
+Chaine pipeline : run_dir -> step_render -> step_faults
 """
 
 import sys
@@ -35,6 +36,8 @@ from sensor_faults import (
 from xplane_weather import (
     WeatherConfig, validate_weather, has_weather, save_weather_profile,
 )
+from dataclasses import replace
+from weather_profiles import lookup as lookup_weather_preset, profile_name
 
  
 def _read_param(node, name):
@@ -91,6 +94,11 @@ def export(root_node, path):
         print(f"[Export] Fautes capteur : {fault_str}")
 
     # --- Meteo X-Plane (per-scenario) ---
+    # Construction en 2 temps :
+    #   1) lecture des params XML de base (toujours)
+    #   2) si profile != 0 ET intensity != 0 : preset ecrase les champs lies
+    #      au profil (precip, cloud_*, visibility, temperature, rain_scale).
+    # Les orthogonaux (cloud_margin_m, time_of_day_h, settle_s) restent toujours XML.
     weather_cfg = WeatherConfig(
         precip_rate=float(_read_param(weather_node, "precip_rate")),
         cloud_type=float(_read_param(weather_node, "cloud_type")),
@@ -104,20 +112,39 @@ def export(root_node, path):
         settle_s=float(_read_param(weather_node, "xplane_weather_settle_s")),
     )
 
+    profile_id = int(_read_param(weather_node, "profile"))
+    intensity = int(_read_param(weather_node, "intensity"))
+    preset = lookup_weather_preset(profile_id, intensity)
+    if preset is not None:
+        weather_cfg = replace(
+            weather_cfg,
+            precip_rate=preset.precip_rate,
+            cloud_type=preset.cloud_type,
+            cloud_coverage=preset.cloud_coverage,
+            cloud_thickness_m=preset.cloud_thickness_m,
+            cloud_margin_m=preset.cloud_margin_m,
+            visibility_m=preset.visibility_m,
+            temperature_c=preset.temperature_c,
+            rain_scale=preset.rain_scale,
+        )
+
     if has_weather(weather_cfg):
         validate_weather(weather_cfg)
-        parts = []
-        if weather_cfg.precip_rate > 0:
-            parts.append(f"precip={weather_cfg.precip_rate:.2f}")
-        if weather_cfg.cloud_type >= 0:
-            parts.append(f"cloud_type={weather_cfg.cloud_type:.0f} cov={weather_cfg.cloud_coverage:.1f}")
-        if weather_cfg.visibility_m < 50000:
-            parts.append(f"vis={weather_cfg.visibility_m:.0f}m")
-        if weather_cfg.temperature_c < 0:
-            parts.append(f"temp={weather_cfg.temperature_c:.0f}C")
-        if weather_cfg.time_of_day_h != 12.0:
-            parts.append(f"heure={weather_cfg.time_of_day_h:.1f}h")
-        print(f"[Export] Meteo X-Plane : {', '.join(parts)}")
+        if preset is not None:
+            print(f"[Export] Meteo : profile={profile_name(profile_id)} intensity={intensity} (override)")
+        else:
+            parts = []
+            if weather_cfg.precip_rate > 0:
+                parts.append(f"precip={weather_cfg.precip_rate:.2f}")
+            if weather_cfg.cloud_type >= 0:
+                parts.append(f"cloud_type={weather_cfg.cloud_type:.0f} cov={weather_cfg.cloud_coverage:.1f}")
+            if weather_cfg.visibility_m < 50000:
+                parts.append(f"vis={weather_cfg.visibility_m:.0f}m")
+            if weather_cfg.temperature_c < 0:
+                parts.append(f"temp={weather_cfg.temperature_c:.0f}C")
+            if weather_cfg.time_of_day_h != 12.0:
+                parts.append(f"heure={weather_cfg.time_of_day_h:.1f}h")
+            print(f"[Export] Meteo (base XML) : {', '.join(parts)}")
 
     # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), , donc tau ≈ h / V
@@ -202,11 +229,12 @@ def export(root_node, path):
 
 
 # ===========================================================================
-# Phase 2 : Production des images + GT LARD (post-TAF, par run_dir)
+# Phase 2 : Rendu X-Plane + fautes capteur (post-TAF, par run_dir)
 # ---------------------------------------------------------------------------
-# Les fonctions ci-dessous sont appelees par run_pipeline.py apres que TAF
-# a fini sa generation et que les runs ont ete deplaces dans runs/<name>/.
+# Les fonctions ci-dessous sont appelees apres que TAF a fini sa generation
+# et que les runs ont ete deplaces dans runs/<name>/.
 # TAF n'utilise QUE export() ci-dessus, jamais ce qui suit.
+# Le GT LARD est genere en Phase 3 (Detection_Evaluation), pas ici.
 # ===========================================================================
 
 def step_render(run_dir, xplane_dir):
@@ -244,48 +272,26 @@ def step_faults(run_dir):
         print(f"  [Image] FAULTS ERREUR : {e}")
 
 
-def step_ground_truth(run_dir, runway=None):
-    """Genere le CSV GT LARD.
-
-    :return: True si CSV present apres l'etape (genere ou existant), False sinon
-    """
-    from lard_bridge import generate_gt
-
-    run_dir = Path(run_dir)
-
-    try:
-        generate_gt(run_dir)
-    except Exception as e:
-        print(f"  [Image] GT ERREUR : {e}")
-        if not list(run_dir.glob("*_labels.csv")):
-            return False
-        print(f"  [Image] Utilisation du CSV existant")
-
-    return True
-
-
-def generate_images_and_GT(run_dir, xplane_dir, runway=None):
-    """Production des images + GT pour un run.
+def render_run(run_dir, xplane_dir):
+    """Phase 2 : rendu X-Plane + fautes capteur pour un run.
 
     Enchaine sur run_dir (deja existant dans runs/, avec ses configs JSON) :
       1. step_render          -> footage/*.jpeg (et meteo si profil)
       2. step_faults          -> degraded/*.jpeg (si fault_profile.json)
-      3. step_ground_truth    -> <name>_labels.csv
+
+    Le GT LARD n'est PAS genere ici : il l'est en Phase 3 (Detection_Evaluation),
+    juste avant le calcul d'IoU.
 
     :param run_dir: dossier du run dans runs/
     :param xplane_dir: chemin vers X-Plane 12
-    :param runway: filtre piste (parametre conserve pour compat, non utilise ici)
-    :return: True si tout est passe, False sinon
+    :return: True si rendu reussi, False sinon
     """
     run_dir = Path(run_dir)
-    print(f"\n  [Image] Production images + GT pour {run_dir.name}")
+    print(f"\n  [Image] Rendu + fautes pour {run_dir.name}")
 
     if not step_render(run_dir, xplane_dir):
         return False
 
     step_faults(run_dir)
-
-    if not step_ground_truth(run_dir, runway=runway):
-        return False
 
     return True

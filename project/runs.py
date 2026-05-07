@@ -10,10 +10,10 @@ Layout :
   - comment enumerer les runs evaluables
   - comment agreger un rapport multi-run
 
-Orchestration :
-  - process_run        : Phase 2 + Phase 3 sur un seul run
-  - evaluate_runs      : mode "evaluate" (Phases 2+3 sur N runs filtres)
-  - full_pipeline      : mode "full"     (Phase 1 + Phases 2+3 sur N runs)
+Orchestration (3 phases independantes) :
+  - render_runs        : mode "render"   (Phase 2 : X-Plane + fautes)
+  - evaluate_runs      : mode "evaluate" (Phase 3 : GT + YOLO + IoU)
+  - full_pipeline      : mode "full"     (Phase 1 + 2 + 3 enchainees)
 """
 
 import json
@@ -153,52 +153,67 @@ def aggregate_report(results):
 
 
 # ===========================================================================
-# Orchestration : Phases 2 + 3 par run, et modes batch
+# Orchestration : 3 phases independantes
 # ---------------------------------------------------------------------------
-# process_run    : 1 run = generate_images_and_GT + evaluate_run
-# evaluate_runs  : N runs filtres (mode "evaluate" du CLI)
-# full_pipeline  : Phase 1 (generate_runs) puis N runs (mode "full" du CLI)
+# render_runs    : Phase 2 (X-Plane + fautes) sur N runs filtres
+# evaluate_runs  : Phase 3 (GT + YOLO + IoU)  sur N runs filtres
+# full_pipeline  : Phase 1 + 2 + 3 enchainees (mode "full" du CLI)
 # ===========================================================================
 
-def process_run(run_dir, runway=None, conf=0.25, imgsz=512,
-                iou_thresh=0.5, iou_method="CIOU", xplane_dir=None):
-    """Phase 2 + Phase 3 sur un seul run.
-
-    Enchaine Export.generate_images_and_GT (rendu X-Plane + fautes + GT LARD)
-    puis Detection_Evaluation.evaluate_run (YOLO + IoU).
-
-    :return: dict de metriques pour le rapport, ou None si echec
-    """
+def _ensure_export_path():
+    """Insere project/export/ dans sys.path pour les imports de Phase 2/3."""
     import sys
     _root = Path(__file__).resolve().parent.parent
     for _p in (_root, _root / "project" / "export"):
         if str(_p) not in sys.path:
             sys.path.insert(0, str(_p))
 
-    from Export import generate_images_and_GT
-    from Detection_Evaluation import evaluate_run
 
-    print(f"\n{'-' * 50}")
-    print(f" Run : {run_dir.name}")
-    print(f"{'-' * 50}")
+def render_runs(run_name=None, all_runs=False, xplane_dir=None):
+    """Mode "render" : Phase 2 (X-Plane + fautes) sur les runs filtres.
 
-    if not generate_images_and_GT(run_dir, xplane_dir, runway=runway):
-        return None
+    :return: list[Path] des runs rendus avec succes
+    """
+    _ensure_export_path()
+    from Export import render_run
+    from xplane_weather import reset_if_active
 
-    return evaluate_run(
-        run_dir, runway=runway, conf=conf, imgsz=imgsz,
-        iou_thresh=iou_thresh, iou_method=iou_method,
-    )
+    print("=" * 60)
+    print(" PHASE 2 : Rendu X-Plane + fautes capteur")
+    print("=" * 60)
+
+    runs = find_runs(run_name, all_runs)
+    if not runs:
+        print("[Pipeline] Aucun run valide trouve.")
+        return []
+
+    print(f"\n[Pipeline] {len(runs)} run(s) a rendre")
+
+    rendered = []
+    for run_dir in runs:
+        print(f"\n{'-' * 50}")
+        print(f" Run : {run_dir.name}")
+        print(f"{'-' * 50}")
+        if render_run(run_dir, xplane_dir):
+            rendered.append(run_dir)
+
+    reset_if_active(xplane_dir)
+    return rendered
 
 
 def evaluate_runs(run_name=None, all_runs=False, runway=None,
                   conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
                   xplane_dir=None):
-    """Mode "evaluate" : Phases 2+3 sur les runs filtres."""
-    from xplane_weather import reset_if_active
+    """Mode "evaluate" : Phase 3 (GT + YOLO + IoU) sur les runs filtres.
+
+    `xplane_dir` est conserve pour compat de signature mais inutilise
+    (Phase 3 ne touche pas a X-Plane).
+    """
+    _ensure_export_path()
+    from Detection_Evaluation import evaluate_run
 
     print("=" * 60)
-    print(" PHASES 2+3 : Images + GT (Export) -> Detection + IoU")
+    print(" PHASE 3 : GT LARD + Detection YOLO + IoU")
     print("=" * 60)
 
     runs = find_runs(run_name, all_runs)
@@ -212,21 +227,25 @@ def evaluate_runs(run_name=None, all_runs=False, runway=None,
 
     all_results = []
     for run_dir in runs:
-        result = process_run(run_dir, runway=runway, conf=conf, imgsz=imgsz,
-                             iou_thresh=iou_thresh, iou_method=iou_method,
-                             xplane_dir=xplane_dir)
+        print(f"\n{'-' * 50}")
+        print(f" Run : {run_dir.name}")
+        print(f"{'-' * 50}")
+        result = evaluate_run(run_dir, runway=runway, conf=conf, imgsz=imgsz,
+                              iou_thresh=iou_thresh, iou_method=iou_method)
         if result:
             all_results.append(result)
 
-    reset_if_active(xplane_dir)
     aggregate_report(all_results)
     return all_results
 
 
 def full_pipeline(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
                   iou_thresh=0.5, iou_method="CIOU", xplane_dir=None):
-    """Mode "full" : Phase 1 (generate_runs) puis Phases 2+3 par scenario."""
+    """Mode "full" : Phase 1 + Phase 2 + Phase 3 enchainees sur les runs crees."""
+    _ensure_export_path()
     from Generate import generate_runs
+    from Export import render_run
+    from Detection_Evaluation import evaluate_run
     from xplane_weather import reset_if_active
 
     created_runs = generate_runs(nb_scenarios=nb_scenarios, quiet=quiet)
@@ -235,17 +254,33 @@ def full_pipeline(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
         return []
 
     print(f"\n{'=' * 60}")
-    print(" PHASES 2+3 : Images + GT (Export) -> Detection + IoU")
+    print(" PHASE 2 : Rendu X-Plane + fautes capteur")
     print(f"{'=' * 60}")
-
-    all_results = []
+    rendered = []
     for run_dir in created_runs:
-        result = process_run(run_dir, conf=conf, imgsz=imgsz,
-                             iou_thresh=iou_thresh, iou_method=iou_method,
-                             xplane_dir=xplane_dir)
+        print(f"\n{'-' * 50}")
+        print(f" Run : {run_dir.name}")
+        print(f"{'-' * 50}")
+        if render_run(run_dir, xplane_dir):
+            rendered.append(run_dir)
+    reset_if_active(xplane_dir)
+
+    if not rendered:
+        print("[Pipeline] Aucun rendu reussi, arret avant Phase 3.")
+        return []
+
+    print(f"\n{'=' * 60}")
+    print(" PHASE 3 : GT LARD + Detection YOLO + IoU")
+    print(f"{'=' * 60}")
+    all_results = []
+    for run_dir in rendered:
+        print(f"\n{'-' * 50}")
+        print(f" Run : {run_dir.name}")
+        print(f"{'-' * 50}")
+        result = evaluate_run(run_dir, conf=conf, imgsz=imgsz,
+                              iou_thresh=iou_thresh, iou_method=iou_method)
         if result:
             all_results.append(result)
 
-    reset_if_active(xplane_dir)
     aggregate_report(all_results)
     return all_results

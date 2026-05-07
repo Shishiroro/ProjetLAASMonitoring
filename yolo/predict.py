@@ -11,7 +11,7 @@ from ultralytics import YOLO
 
 # --- Chemins ---
 YOLO_DIR = Path(__file__).resolve().parent
-MODEL_PATH = YOLO_DIR / "yolov8n.pt"
+MODEL_PATH = YOLO_DIR / "yolov8nTest.pt"
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
 
