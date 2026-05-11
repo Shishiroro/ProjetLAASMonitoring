@@ -1,6 +1,6 @@
 """
-Export.py — Point d'entree TAF + Phase 2 (rendu X-Plane + fautes)
-==================================================================
+Export.py — Point d'entree TAF + Phase 2 (generation d'images + GT)
+====================================================================
 Deux fonctions independantes hebergees dans le meme fichier :
 
   1. export(root_node, path)
@@ -9,12 +9,12 @@ Deux fonctions independantes hebergees dans le meme fichier :
 
   2. render_run(run_dir, xplane_dir)
      Orchestrateur Phase 2 appele par run_pipeline.py sur chaque run_dir.
-     Enchaine rendu X-Plane -> fautes capteur. Le GT LARD est genere en
-     Phase 3 (Detection_Evaluation), pas ici.
+     Seul point d'entree pour produire la donnee brute :
+       step_render -> step_faults -> step_ground_truth
      TAF n'invoque jamais cette fonction.
 
 Chaine TAF : root_node -> TrajectoryConfig -> build_trajectory -> .yaml
-Chaine pipeline : run_dir -> step_render -> step_faults
+Chaine pipeline : run_dir -> step_render -> step_faults -> step_ground_truth
 """
 
 import sys
@@ -164,7 +164,7 @@ def export(root_node, path):
         wind_direction_deg=wind_direction_deg,
         stabilization_distance_m=stabilization_distance_m,
     )
-    ou = OUParams()
+    ou = OUParams(alpha_h_offset_deg=0, alpha_v_offset_deg=0)
 
     # --- Geometrie piste ---
     rwy = get_runway_geometry(airport, runway, dist_ap_m=ou.dist_ap_m)
@@ -229,12 +229,13 @@ def export(root_node, path):
 
 
 # ===========================================================================
-# Phase 2 : Rendu X-Plane + fautes capteur (post-TAF, par run_dir)
+# Phase 2 : Generation d'images + GT (post-TAF, par run_dir)
 # ---------------------------------------------------------------------------
 # Les fonctions ci-dessous sont appelees apres que TAF a fini sa generation
 # et que les runs ont ete deplaces dans runs/<name>/.
 # TAF n'utilise QUE export() ci-dessus, jamais ce qui suit.
-# Le GT LARD est genere en Phase 3 (Detection_Evaluation), pas ici.
+# Export.render_run est le SEUL point d'entree pour produire la donnee brute :
+#   images (footage/, degraded/) + ground truth LARD (*_labels.csv).
 # ===========================================================================
 
 def step_render(run_dir, xplane_dir):
@@ -272,26 +273,52 @@ def step_faults(run_dir):
         print(f"  [Image] FAULTS ERREUR : {e}")
 
 
+def step_ground_truth(run_dir):
+    """Genere le CSV GT LARD (projection 3D->2D des coins piste).
+
+    Pure geometrie (offline, pas besoin de X-Plane), mais necessite que
+    footage/ existe car LARD parcourt les images pour produire le CSV.
+    Skip si <name>_labels.csv existe deja (idempotent comme step_render).
+
+    :return: True si CSV present apres l'etape (genere ou existant), False sinon
+    """
+    from lard_bridge import generate_gt
+
+    run_dir = Path(run_dir)
+    if list(run_dir.glob("*_labels.csv")):
+        print(f"  [Image] GT deja present, skip")
+        return True
+
+    try:
+        generate_gt(run_dir)
+    except Exception as e:
+        print(f"  [Image] GT ERREUR : {e}")
+        return bool(list(run_dir.glob("*_labels.csv")))
+
+    return True
+
+
 def render_run(run_dir, xplane_dir):
-    """Phase 2 : rendu X-Plane + fautes capteur pour un run.
+    """Phase 2 : seule fonction qui produit la donnee brute d'un run.
 
     Enchaine sur run_dir (deja existant dans runs/, avec ses configs JSON) :
-      1. step_render          -> footage/*.jpeg (et meteo si profil)
-      2. step_faults          -> degraded/*.jpeg (si fault_profile.json)
+      1. step_render          -> footage/*.jpg          (X-Plane + meteo)
+      2. step_faults          -> degraded/*.jpg         (si fault_profile.json)
+      3. step_ground_truth    -> <name>_labels.csv      (GT LARD)
 
-    Le GT LARD n'est PAS genere ici : il l'est en Phase 3 (Detection_Evaluation),
-    juste avant le calcul d'IoU.
+    Phase 3 (Detection_Evaluation) consomme ces sorties et ne genere plus de GT.
 
     :param run_dir: dossier du run dans runs/
     :param xplane_dir: chemin vers X-Plane 12
     :return: True si rendu reussi, False sinon
     """
     run_dir = Path(run_dir)
-    print(f"\n  [Image] Rendu + fautes pour {run_dir.name}")
+    print(f"\n  [Image] Rendu + fautes + GT pour {run_dir.name}")
 
     if not step_render(run_dir, xplane_dir):
         return False
 
     step_faults(run_dir)
+    step_ground_truth(run_dir)
 
     return True

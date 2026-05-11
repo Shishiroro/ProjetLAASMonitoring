@@ -95,14 +95,13 @@ CLEAR_VALUES = WeatherValues(
 PRESETS = {
     PROFILE_FOG: {
         # Brouillard : visibilite seule, pas de nuages ni precip
-        1: WeatherValues(visibility_m=15000),    # brume legere
-        2: WeatherValues(visibility_m=7000),    # brouillard modere
-        3: WeatherValues(visibility_m=2000),     # brouillard dense (limite basse XPLMWeather)
+        1: WeatherValues(visibility_m=15000),    
+        2: WeatherValues(visibility_m=7000),    
+        3: WeatherValues(visibility_m=2000),     
     },
 
     #0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus 
     PROFILE_CLOUDS: {
-        # Nuages assombrissants 
         # Cirrus 
         1: WeatherValues(cloud_type=0.0, cloud_coverage=0.3, cloud_thickness_m=1000,cloud_margin_m=2000.0),
         2: WeatherValues(cloud_type=0.0, cloud_coverage=0.7, cloud_thickness_m=2000,cloud_margin_m=2000.0),
@@ -136,7 +135,7 @@ PRESETS = {
         3: WeatherValues(precip_rate=1.0, temperature_c=-15.0, rain_scale=5.0, cloud_coverage=1.0, cloud_margin_m=2000.0),
     },
     PROFILE_CLEAR: {
-        # Clear : meme valeurs pour toutes les intensites (clear est binaire)
+
         1: CLEAR_VALUES
     },
     ##add les 2 derniers du pw

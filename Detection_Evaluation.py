@@ -1,12 +1,15 @@
 """
-Detection_Evaluation.py — Module Phase 3 : GT LARD + Detection YOLO + IoU
-==========================================================================
-Centralise les fonctions de generation de GT, detection et evaluation IoU
-appelees par l'orchestrateur run_pipeline.py. Pas de CLI standalone : ce
-module est purement une bibliotheque.
+Detection_Evaluation.py — Module Phase 3 : Detection YOLO + IoU
+================================================================
+Centralise les fonctions de detection et d'evaluation IoU appelees par
+l'orchestrateur run_pipeline.py. Pas de CLI standalone : ce module est
+purement une bibliotheque.
+
+Phase 3 consomme les sorties de Phase 2 (Export.render_run) :
+  - footage/ ou degraded/  : images
+  - <name>_labels.csv      : GT LARD (genere par step_ground_truth en Phase 2)
 
 API publique :
-    step_ground_truth(run_dir)                -> bool (CSV present)
     step_predict(run_dir, conf, imgsz)        -> Path predictions.csv | None
     step_iou(run_dir, runway, ...)            -> dict metriques | None
     evaluate_run(run_dir, runway, conf, ...)  -> dict resume run | None
@@ -25,28 +28,8 @@ for _p in (ROOT / "project", ROOT / "project" / "export",
 
 
 # ---------------------------------------------------------------------------
-# Sous-etapes : GT LARD, prediction YOLO et calcul IoU
+# Sous-etapes : prediction YOLO et calcul IoU
 # ---------------------------------------------------------------------------
-
-def step_ground_truth(run_dir):
-    """Genere le CSV GT LARD (projection 3D->2D des coins piste).
-
-    :return: True si CSV present apres l'etape (genere ou existant), False sinon
-    """
-    from lard_bridge import generate_gt
-
-    run_dir = Path(run_dir)
-
-    try:
-        generate_gt(run_dir)
-    except Exception as e:
-        print(f"  [Eval] GT ERREUR : {e}")
-        if not list(run_dir.glob("*_labels.csv")):
-            return False
-        print(f"  [Eval] Utilisation du CSV existant")
-
-    return True
-
 
 def step_predict(run_dir, conf=0.25, imgsz=512):
     """Lance YOLO sur les images du run.
@@ -85,10 +68,10 @@ def step_iou(run_dir, runway=None, iou_thresh=0.5, iou_method="CIOU"):
 
 def evaluate_run(run_dir, runway=None, conf=0.25, imgsz=512,
                  iou_thresh=0.5, iou_method="CIOU"):
-    """Phase 3 : GT LARD + Detection YOLO + evaluation IoU sur un run.
+    """Phase 3 : Detection YOLO + evaluation IoU sur un run.
 
-    Suppose que les images (footage/ ou degraded/) existent deja
-    (responsabilite de Phase 2 : Export.render_run). Le CSV GT est genere ici.
+    Suppose que la donnee brute (images + GT LARD) existe deja, produite par
+    Phase 2 (Export.render_run). Aucune generation ici.
 
     :return: dict de metriques arrondies (run, runway, ap, f1, p, r, c, tp, fp, fn)
              ou None si echec
@@ -96,10 +79,10 @@ def evaluate_run(run_dir, runway=None, conf=0.25, imgsz=512,
     from runway import runway_from_run_name
 
     run_dir = Path(run_dir)
-    print(f"\n  [Eval] GT + Detection + IoU pour {run_dir.name}")
+    print(f"\n  [Eval] Detection + IoU pour {run_dir.name}")
 
-    if not step_ground_truth(run_dir):
-        print(f"  [Eval] Pas de GT pour {run_dir.name}")
+    if not list(run_dir.glob("*_labels.csv")):
+        print(f"  [Eval] Pas de GT pour {run_dir.name}. Lancer 'render' d'abord.")
         return None
 
     predictions_csv = step_predict(run_dir, conf=conf, imgsz=imgsz)

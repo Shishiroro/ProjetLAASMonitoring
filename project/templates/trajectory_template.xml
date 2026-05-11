@@ -100,7 +100,7 @@
                  Si profile=0 OU intensity=0 : aucun override (params de base utilises)
                  Sinon : le bloc 2 ci-dessous est ecrase par le preset
             -->
-            <parameter name="profile"                 type="integer" min="3"    max="3"/>
+            <parameter name="profile"                 type="integer" min="0"    max="0"/>
             <parameter name="intensity"               type="integer" min="3"    max="3"/>
 
 

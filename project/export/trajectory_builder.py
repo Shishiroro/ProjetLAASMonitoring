@@ -58,7 +58,10 @@ class OUParams:
     std_roll_deg: float = 2.5       # ecart-type roll (+ couplage lateral en sus)
 
     dist_ap_m: float = 300.0        # distance aiming point depuis LTP (où l'avion vise)
-
+ 
+    # Offset initial (degrade avec la convergence finale)
+    alpha_h_offset_deg: float = 0.0   # ex: 2.0 = 2° lateral au start
+    alpha_v_offset_deg: float = 0.0   # ex: 0.5 = 0.5° au-dessus du glide
 
 # ---------------------------------------------------------------------------
 # Timeline spatiale
@@ -270,6 +273,10 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     yaw_dev     = _ou(ou.std_yaw_deg, tau_attitude)
     pitch_dev   = _ou(ou.std_pitch_deg, tau_attitude)
     roll_dev    = _ou(ou.std_roll_deg, tau_attitude)
+
+    # Offset initial qui s'estompe avec conv (1.0 au start, ~0.08 a la piste)
+    alpha_h_dev += ou.alpha_h_offset_deg * conv
+    alpha_v_dev += ou.alpha_v_offset_deg * conv
 
     # --- Rate limiting sur les canaux angulaires ---
     # Empeche les sauts brusques frame-a-frame (l'avion ne peut pas
