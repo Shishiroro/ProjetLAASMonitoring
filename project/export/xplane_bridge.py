@@ -11,8 +11,8 @@ Protocole UDP X-Plane :
 
 Positionnement valide :
   - Pause sim + override planepath
-  - Coordonnees locales OpenGL (local_x/y/z) pour la precision
-  - Point de reference lu au setup pour conversion lat/lon → local
+  - Paquet VEHS (lat/lon en double precision float64, angles en float32)
+  - Les poses du JSON sont en lon/lat/alt geodesique (renderer-agnostique)
 
 Capture :
   - mss (screen grab) cible sur la fenetre X-Plane
@@ -93,7 +93,7 @@ class XPlaneConfig:
     host: str = "127.0.0.1"
     port: int = 49000               # Port UDP X-Plane (reception)
     xplane_dir: str = ""            # Repertoire d'installation X-Plane
-    settle_time: float = 0.07       # Attente apres changement de pose (sec)
+    settle_time: float = 0.07       # Attente apres changement de pose (sec) — surcharge via XML param xplane_pose_settle_s
     window_width: int = 1024        # Largeur zone client X-Plane (carre)
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 60.0             # FOV horizontal (reglages X-Plane, 60° comme LARD)
@@ -918,7 +918,15 @@ def render_run(run_dir, xplane_dir):
 
     print(f"\n  [XPLANE] Rendu de {run_dir.name}...")
 
+    # Charge le poses JSON pour recuperer xplane_pose_settle_s (delai apres
+    # teleport camera). Si absent (anciens runs), conserve le defaut XPlaneConfig.
+    with open(poses_file) as f:
+        poses_data = json.load(f)
+    pose_settle = (poses_data.get("trajectory") or {}).get("xplane_pose_settle_s")
+
     config = XPlaneConfig(xplane_dir=xplane_dir)
+    if pose_settle is not None:
+        config.settle_time = float(pose_settle)
     weather_file = run_dir / "weather_profile.json"
     weather_path = str(weather_file) if weather_file.exists() else None
 

@@ -268,8 +268,11 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None):
 
     _orig_shutil = _le.shutil
     _le.shutil = _SmartShutil
+    # Mute les print() verbeux de LARD (Labelling Pose / ORIENTATION / not labelled).
+    # Stdout redirige vers un buffer jete a la fin du with — aucun fichier cree.
+    import contextlib, io
     try:
-        with _lard_cwd():
+        with _lard_cwd(), contextlib.redirect_stdout(io.StringIO()):
             export_labels(
                 dataset_type=DatasetTypes.XPLANE,
                 yaml_scenario_path=yaml_path,

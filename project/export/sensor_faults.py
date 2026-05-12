@@ -12,29 +12,36 @@ Chaque faute a :
 """
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Any, Optional
 
 
-# 22 types de fautes capteur hardware
+# 25 types de fautes capteur hardware
 KNOWN_FAULT_TYPES = {
     "gaussian_noise", "shot_noise", "salt_pepper", "dead_pixels",
-    "motion_blur", "defocus_blur", "rolling_shutter",
+    "motion_blur", "defocus_blur", "glass_blur", "rolling_shutter",
     "overexposure", "underexposure",
     "vignetting", "chromatic_aberration", "radial_distortion", "lens_flare",
-    "banding", "jpeg_artifacts", "color_shift",
+    "banding", "jpeg_artifacts", "color_shift", "channel_swap",
     "condensation", "dirt_on_lens",
-    "fog", "zoom_blur", "contrast", "pixelate",
+    "fog", "snow", "zoom_blur", "contrast", "pixelate",
 }
 
 
 @dataclass
 class FaultConfig:
-    """Configuration d'une faute capteur (generee par TAF)."""
+    """Configuration d'une faute capteur (generee par TAF).
+
+    `extra` : kwargs additionnels passes a la fonction OpenCV (ex: channel_swap
+    recoit `order=[c0, c1, c2]`). Vide pour les fautes "standards" qui ne
+    necessitent que severity.
+    """
     fault_type: str
     severity: float
     from_pct: float
     to_pct: float
+    extra: Optional[dict[str, Any]] = field(default_factory=dict)
 
 
 def validate_faults(faults):
@@ -68,7 +75,8 @@ def compute_frame_faults(faults, n_frames):
     per_frame = []
     for i in range(n_frames):
         pct = (i / max(n_frames - 1, 1)) * 100.0
-        active = [(f.fault_type, f.severity) for f in faults if f.from_pct <= pct <= f.to_pct]
+        active = [(f.fault_type, f.severity, f.extra or {})
+                  for f in faults if f.from_pct <= pct <= f.to_pct]
         per_frame.append(active)
     return per_frame
 
@@ -81,7 +89,8 @@ def save_fault_profile(faults, n_frames, output_path):
     for i, active in enumerate(per_frame):
         if active:
             per_frame_summary[str(i)] = [
-                {"type": ft, "severity": sev} for ft, sev in active
+                {"type": ft, "severity": sev, **({"extra": ex} if ex else {})}
+                for ft, sev, ex in active
             ]
     profile = {
         "faults": [asdict(f) for f in faults],
@@ -136,9 +145,10 @@ def apply_faults_to_directory(input_dir, output_dir, faults, n_frames):
             continue
         active = per_frame[i] if i < len(per_frame) else []
         if active:
-            error_names = [ft for ft, _ in active]
-            severities = {ft: sev for ft, sev in active}
-            img = apply_errors(img, error_names, severities=severities)
+            error_names = [ft for ft, _, _ in active]
+            severities = {ft: sev for ft, sev, _ in active}
+            extras = {ft: ex for ft, _, ex in active if ex}
+            img = apply_errors(img, error_names, severities=severities, extras=extras)
             count_affected += 1
         cv2.imwrite(str(output_dir / img_path.name), img)
         count += 1

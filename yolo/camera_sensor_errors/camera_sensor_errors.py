@@ -106,6 +106,35 @@ def defocus_blur(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     return cv2.GaussianBlur(img, (ksize, ksize), 0)
 
 
+def glass_blur(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Flou type verre depoli : delegue a albumentations.GlassBlur (mode 'fast').
+
+    Algorithme : permutations locales de pixels + flou gaussien (Hendrycks).
+    Simule un objectif sale/gele/condense ou une vitre depolie.
+    Mapping severity -> params albumentations (subtle -> medium -> strong) :
+      sigma       : 0.4 -> 1.0   (defaut alb : 0.7)
+      max_delta   : 2   -> 6     (defaut alb : 4, deplacement max en pixels)
+      iterations  : 1   -> 3     (defaut alb : 2)
+    """
+    import logging
+    logging.getLogger("albumentations").setLevel(logging.WARNING)
+    import albumentations as A
+    sigma = 0.4 + severity * 0.6
+    max_delta = int(2 + severity * 4)
+    iterations = int(1 + severity * 2)
+    # albumentations attend RGB ; notre pipeline est BGR (cv2)
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    transform = A.GlassBlur(
+        sigma=sigma,
+        max_delta=max_delta,
+        iterations=iterations,
+        mode="fast",
+        p=1.0,
+    )
+    blurred_rgb = transform(image=rgb)["image"]
+    return cv2.cvtColor(blurred_rgb, cv2.COLOR_RGB2BGR)
+
+
 def overexposure(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     """Surexposition (soleil face, auto-exposure lag)."""
     factor = 1.3 + severity * 1.7  # 1.3 - 3.0
@@ -280,6 +309,32 @@ def dirt_on_lens(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     return out
 
 
+def snow(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Neige : delegue a albumentations.RandomSnow (methode bleach).
+
+    Algorithme HLS threshold + brighten, code de reference upstream.
+    severity : 0 = leger (seuil eleve, peu de pixels touches)
+               1 = lourd (seuil bas, blanchiment massif)
+    Mapping severity -> params albumentations :
+      snow_point        : 0.30 -> 0.05  (defaut alb : range (0.1, 0.3))
+      brightness_coeff  : 1.5  -> 3.0   (defaut alb : 2.5)
+    """
+    import logging
+    logging.getLogger("albumentations").setLevel(logging.WARNING)
+    import albumentations as A
+    snow_point = 0.30 - severity * 0.25
+    brightness_coeff = 1.5 + severity * 1.5
+    # albumentations attend RGB ; notre pipeline est BGR (cv2)
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    transform = A.RandomSnow(
+        snow_point_range=(snow_point, snow_point),
+        brightness_coeff=brightness_coeff,
+        p=1.0,
+    )
+    snowy_rgb = transform(image=rgb)["image"]
+    return cv2.cvtColor(snowy_rgb, cv2.COLOR_RGB2BGR)
+
+
 def fog(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     """Brouillard (Hendrycks). Voile blanc progressif, perte de contraste."""
     h, w = img.shape[:2]
@@ -332,6 +387,25 @@ def pixelate(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
+def channel_swap(img: np.ndarray, severity: float = 0.5,
+                 order: Optional[list] = None) -> np.ndarray:
+    """Permutation des canaux couleur (bug demosaicing / cable RGB inverse).
+
+    severity < 0.5 : permutation dans l'espace BGR natif.
+    severity >= 0.5 : permutation dans l'espace HSV (decalage de teinte plus violent).
+    `order` : permutation explicite [c0, c1, c2] (ex: [0, 2, 1]). Si None, tiree au
+    hasard parmi les 5 non-identites.
+    """
+    if order is None:
+        perms = [(0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)]
+        order = list(perms[np.random.randint(len(perms))])
+    if severity < 0.5:
+        return img[:, :, list(order)].copy()
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    swapped_hsv = hsv[:, :, list(order)]
+    return cv2.cvtColor(swapped_hsv, cv2.COLOR_HSV2BGR)
+
+
 # ---------------------------------------------------------------------------
 # Registre des erreurs
 # ---------------------------------------------------------------------------
@@ -345,6 +419,7 @@ ERROR_REGISTRY: dict[str, Callable] = {
     # Flou
     "motion_blur": motion_blur,
     "defocus_blur": defocus_blur,
+    "glass_blur": glass_blur,
     "rolling_shutter": rolling_shutter,
     # Exposition
     "overexposure": overexposure,
@@ -360,11 +435,13 @@ ERROR_REGISTRY: dict[str, Callable] = {
     "jpeg_artifacts": jpeg_artifacts,
     # Couleur
     "color_shift": color_shift,
+    "channel_swap": channel_swap,
     # Environnement
     "condensation": condensation,
     "dirt_on_lens": dirt_on_lens,
     # Atmospherique / transmission
     "fog": fog,
+    "snow": snow,
     "zoom_blur": zoom_blur,
     "contrast": contrast,
     "pixelate": pixelate,
@@ -464,6 +541,7 @@ def apply_errors(
     errors: list[str],
     severity: float = 0.5,
     severities: Optional[dict[str, float]] = None,
+    extras: Optional[dict[str, dict]] = None,
 ) -> np.ndarray:
     """Applique une liste d'erreurs a une image.
 
@@ -472,10 +550,14 @@ def apply_errors(
         errors: Liste de noms d'erreurs (cles de ERROR_REGISTRY).
         severity: Severite globale par defaut (0-1).
         severities: Dict optionnel {nom_erreur: severite} pour override par erreur.
+        extras: Dict optionnel {nom_erreur: {kwarg: value}} pour params custom
+                (ex: {"channel_swap": {"order": [0, 2, 1]}}). Les kwargs non
+                supportes par la fonction cible sont silencieusement ignores.
 
     Returns:
         Image degradee BGR uint8.
     """
+    import inspect
     result = img.copy()
     for name in errors:
         if name not in ERROR_REGISTRY:
@@ -484,7 +566,12 @@ def apply_errors(
         s = severity
         if severities and name in severities:
             s = severities[name]
-        result = ERROR_REGISTRY[name](result, s)
+        fn = ERROR_REGISTRY[name]
+        kwargs = {}
+        if extras and name in extras:
+            sig_params = inspect.signature(fn).parameters
+            kwargs = {k: v for k, v in extras[name].items() if k in sig_params}
+        result = fn(result, s, **kwargs)
     return result
 
 

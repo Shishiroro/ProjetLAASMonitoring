@@ -85,7 +85,10 @@ def export(root_node, path):
             duration_pct = float(_read_param(fault_node, "duration_pct"))
             from_pct = start_pct
             to_pct = min(start_pct + duration_pct, 100.0)
-            faults.append(FaultConfig(fault_type, severity, from_pct, to_pct))
+            extra = {}
+            if fault_type == "channel_swap":
+                extra["order"] = [int(_read_param(fault_node, f"c{i}")) for i in range(3)]
+            faults.append(FaultConfig(fault_type, severity, from_pct, to_pct, extra))
 
     if faults:
         validate_faults(faults)
@@ -111,6 +114,11 @@ def export(root_node, path):
         rain_scale=float(_read_param(weather_node, "rain_scale")),
         settle_s=float(_read_param(weather_node, "xplane_weather_settle_s")),
     )
+
+    # Delai de settle apres chaque teleport camera (per-machine / per-scenario).
+    # Independant de la meteo mais loge dans le node weather pour rester groupe
+    # avec xplane_weather_settle_s. Plombe via poses_cam_export.json.
+    xplane_pose_settle_s = float(_read_param(weather_node, "xplane_pose_settle_s"))
 
     profile_id = int(_read_param(weather_node, "profile"))
     intensity = int(_read_param(weather_node, "intensity"))
@@ -209,6 +217,7 @@ def export(root_node, path):
             "wind_direction_deg": wind_direction_deg,
             "stabilization_distance_m": stabilization_distance_m,
             "airport_runway": f"{airport}_{runway}",
+            "xplane_pose_settle_s": xplane_pose_settle_s,
         },
     )
 

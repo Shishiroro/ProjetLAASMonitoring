@@ -100,8 +100,8 @@
                  Si profile=0 OU intensity=0 : aucun override (params de base utilises)
                  Sinon : le bloc 2 ci-dessous est ecrase par le preset
             -->
-            <parameter name="profile"                 type="integer" min="0"    max="0"/>
-            <parameter name="intensity"               type="integer" min="3"    max="3"/>
+            <parameter name="profile"                 type="integer" min="5"    max="5"/>
+            <parameter name="intensity"               type="integer" min="1"    max="1"/>
 
 
             <!-- ====== 2. PARAMS ECRASES PAR LE PRESET (si actif) ======
@@ -148,6 +148,13 @@
 
             <!-- Délai stabilisation météo/textures avant capture -->
             <parameter name="xplane_weather_settle_s" type="real" min="10"    max="10"/>
+
+            <!-- Délai stabilisation pose APRES chaque téléportation caméra (s).
+                Pas trop bas car sinon décalage image avec les poses (vérifiable avec bbox lard)
+                   - sans pluie/neige : mettre un settle_s bref
+                   - avec pluie/neige : >= 0.07 (laisse spawn les particules)-->
+               
+            <parameter name="xplane_pose_settle_s"    type="real" min="0.07"  max="0.07"/>
 
         </node>
 
@@ -199,6 +206,15 @@
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
             </node>
             <node name="defocus_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <!-- Flou type verre depoli (albumentations.GlassBlur mode 'fast') :
+                 permutations locales de pixels + flou gaussien. Simule
+                 lentille sale/gelee/condensee. severity 0=leger, 1=fort. -->
+            <node name="glass_blur">
                 <parameter name="severity"     type="real" min="0"   max="0"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
@@ -270,6 +286,21 @@
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
             </node>
+            <!-- Permutation explicite : (c0, c1, c2) = ordre des canaux, c.f. albumentations ChannelShuffle.
+                 severity < 0.5 : applique sur BGR natif ; >= 0.5 : applique sur HSV.
+                 Contraintes DIF -> c0/c1/c2 forment une vraie permutation (pas de duplication). -->
+            <node name="channel_swap">
+                <parameter name="severity"     type="real"    min="0"   max="0"/>
+                <parameter name="start_pct"    type="real"    min="10"   max="10"/>
+                <parameter name="duration_pct" type="real"    min="50" max="50"/>
+                <parameter name="c0"           type="integer" min="2"   max="2"/>
+                <parameter name="c1"           type="integer" min="1"   max="1"/>
+                <parameter name="c2"           type="integer" min="0"   max="0"/>
+                <constraint name="bounded"  expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+                <constraint name="perm_01"  expressions=".\c0 DIF .\c1"/>
+                <constraint name="perm_02"  expressions=".\c0 DIF .\c2"/>
+                <constraint name="perm_12"  expressions=".\c1 DIF .\c2"/>
+            </node>
 
             <!-- ===== Salissure / environnement ===== -->
             <node name="condensation">
@@ -285,6 +316,14 @@
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
             </node>
             <node name="fog">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <!-- Neige (albumentations.RandomSnow methode bleach) : blanchiment HLS
+                 des pixels au-dessus d'un seuil. severity 0=leger, 1=lourd. -->
+            <node name="snow">
                 <parameter name="severity"     type="real" min="0"   max="0"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
