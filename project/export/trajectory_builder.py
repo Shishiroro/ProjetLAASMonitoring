@@ -128,38 +128,48 @@ def generate_ou_process(n_steps, dt_array, correlation_time, std, mean=0.0,
 
     tau = max(correlation_time, 1e-6)
 
-    # --- Temps cumule des frames de sortie ---
-    frame_times = np.zeros(n_steps)
-    for i in range(n_steps - 1):
-        frame_times[i + 1] = frame_times[i] + dt_array[min(i, len(dt_array) - 1)]
+    # Temps cumule des frames de sortie. dt_array est suppose dimensionne
+    # (n_steps - 1,) — on tronque/pad defensivement pour rester robuste.
+    dt_for_frames = dt_array[: n_steps - 1] if n_steps > 1 else np.empty(0)
+    frame_times = np.empty(n_steps)
+    frame_times[0] = 0.0
+    if n_steps > 1:
+        np.cumsum(dt_for_frames, out=frame_times[1:])
     total_duration = frame_times[-1]
 
-    # --- Grille interne a frequence fixe ---
+    # Grille interne a frequence fixe (linspace -> dt_j constant)
     n_micro = max(int(round(total_duration * sim_rate_hz)), 1) + 1
     micro_times = np.linspace(0.0, total_duration, n_micro)
 
-    # Interpoler conv_factors sur la grille interne (via les temps)
+    # Interpoler conv_factors sur la grille interne
     if conv_factors is not None:
         conv_micro = np.interp(micro_times, frame_times, conv_factors)
     else:
         conv_micro = None
 
-    # Simuler le processus OU sur la grille interne
-    x_micro = np.zeros(n_micro)
-    std_0 = std * (conv_micro[0] if conv_micro is not None else 1.0)
-    x_micro[0] = mean + std_0 * np.random.randn()
+    # dt_j est constant sur le linspace -> on hoiste decay / sigma_d_base
+    dt_j = (total_duration / (n_micro - 1)) if n_micro > 1 else 0.0
+    decay = np.exp(-dt_j / tau)
+    sigma_d_base = np.sqrt(max(1.0 - np.exp(-2.0 * dt_j / tau), 0.0))
 
-    for j in range(1, n_micro):
-        dt_j = micro_times[j] - micro_times[j - 1]
-        decay = np.exp(-dt_j / tau)
-        std_j = std * (conv_micro[j] if conv_micro is not None else 1.0)
-        sigma_d = std_j * np.sqrt(max(1.0 - np.exp(-2.0 * dt_j / tau), 0.0))
-        x_micro[j] = mean + (x_micro[j - 1] - mean) * decay + sigma_d * np.random.randn()
+    # Pre-tirage de toutes les normales (1 par pas, ordre preserve = meme seed -> meme trajectoire)
+    noise = np.random.randn(n_micro)
+
+    # OU discret : recurrence Markov, boucle Python necessaire mais legere
+    x_micro = np.empty(n_micro)
+    std_0 = std * (conv_micro[0] if conv_micro is not None else 1.0)
+    x_micro[0] = mean + std_0 * noise[0]
+    if conv_micro is not None:
+        for j in range(1, n_micro):
+            std_j = std * conv_micro[j]
+            x_micro[j] = mean + (x_micro[j - 1] - mean) * decay + std_j * sigma_d_base * noise[j]
+    else:
+        sigma_d = std * sigma_d_base
+        for j in range(1, n_micro):
+            x_micro[j] = mean + (x_micro[j - 1] - mean) * decay + sigma_d * noise[j]
 
     # Interpoler aux temps des frames de sortie
-    x = np.interp(frame_times, micro_times, x_micro)
-
-    return x
+    return np.interp(frame_times, micro_times, x_micro)
 
 
 # ---------------------------------------------------------------------------
@@ -322,28 +332,19 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     # --- Crab angle avec de-crab en finale ---
     # Le pilote maintient le crab pendant l'approche puis l'enleve
     # (coup de palonnier) dans les derniers 300m du segment.
-    # Le de-crab commence a segment_end + 300m et converge vers 0 a segment_end.
+    # Plein crab a decrab_start, 0 a along_track_distance_end (convergence lineaire).
     crab_angle = compute_crab_angle(
         cfg.wind_speed_kts, cfg.wind_direction_deg,
         runway_heading_deg, cfg.ground_speed_kts
     )
-    decrab_start_m = cfg.along_track_distance_end + 300.0  # debut du de-crab
-    crab_angles = np.full(n_frames, crab_angle)
-    for i in range(n_frames):
-        if distances_m[i] < decrab_start_m:
-            # Convergence lineaire : plein crab a decrab_start, 0 a segment_end
-            ratio = (distances_m[i] - cfg.along_track_distance_end) / 300.0
-            ratio = np.clip(ratio, 0.0, 1.0)
-            crab_angles[i] = crab_angle * ratio
+    decrab_start_m = cfg.along_track_distance_end + 300.0
+    ratio_decrab = np.clip((distances_m - cfg.along_track_distance_end) / 300.0, 0.0, 1.0)
+    crab_angles = np.where(distances_m < decrab_start_m, crab_angle * ratio_decrab, crab_angle)
 
-    # --- Calcul altitudes brutes puis lissage monotone ---
-    raw_alts = np.zeros(n_frames)
-    for i in range(n_frames):
-        alpha_v = ou.alpha_v_deg + alpha_v_dev[i]
-        alpha_v = np.clip(alpha_v, -6.0, -0.5)  # toujours en descente, range realiste
-        raw_alts[i] = ltp_alt + (-np.tan(np.deg2rad(alpha_v))
-                                  * (distances_m[i] + ou.dist_ap_m))
-        raw_alts[i] = max(raw_alts[i], ltp_alt + 1.0)
+    # --- Calcul altitudes brutes (vectorise) ---
+    alpha_v = np.clip(ou.alpha_v_deg + alpha_v_dev, -6.0, -0.5)  # toujours en descente
+    raw_alts = ltp_alt + (-np.tan(np.deg2rad(alpha_v)) * (distances_m + ou.dist_ap_m))
+    raw_alts = np.maximum(raw_alts, ltp_alt + 1.0)
 
     # Enforce quasi-monotone descent : on autorise de petites remontees
     # mais on plafonne le taux de montee a une valeur physique realiste.
@@ -359,29 +360,22 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
         elif raw_alts[i] < raw_alts[i - 1] - max_descent_per_frame:
             raw_alts[i] = raw_alts[i - 1] - max_descent_per_frame
 
-    # --- Assemblage des poses ---
+    # --- Assemblage des poses (vectorise) ---
+    # Position horizontale : projeter depuis LTP le long du back azimuth
+    # (derriere le seuil, loin de la piste — convention LARD : LTP = C/D).
+    # pyproj.Geod.fwd accepte des arrays -> 1 seul appel pour toutes les frames.
     g = pyproj.Geod(ellps='WGS84')
-    flight_data = []
+    azimuths = runway_back_azimuth_deg + ou.alpha_h_deg + alpha_h_dev
+    ltp_lons = np.full(n_frames, ltp_lon)
+    ltp_lats = np.full(n_frames, ltp_lat)
+    lons, lats, _ = g.fwd(ltp_lons, ltp_lats, azimuths, distances_m, radians=False)
 
-    for i in range(n_frames):
-        dist = distances_m[i]
-        alt = raw_alts[i]
+    # Camera regarde vers FPAP (runway_heading = LTP -> FPAP)
+    yaws    = runway_heading_deg + crab_angles + yaw_dev
+    pitches = 90.0 + ou.pitch_deg + pitch_dev
+    rolls   = ou.roll_deg + roll_dev
 
-        # Position horizontale : projeter depuis LTP le long du back azimuth
-        # = derriere le seuil, loin de la piste (convention LARD : LTP = C/D)
-        alpha_h = ou.alpha_h_deg + alpha_h_dev[i]
-        lon, lat, _ = g.fwd(
-            ltp_lon, ltp_lat,
-            runway_back_azimuth_deg + alpha_h,
-            dist, radians=False
-        )
-
-        # Camera regarde vers FPAP (runway_heading = LTP→FPAP)
-        yaw   = runway_heading_deg + crab_angles[i] + yaw_dev[i]
-        pitch = 90 + ou.pitch_deg + pitch_dev[i]
-
-        roll  = ou.roll_deg + roll_dev[i]
-
-        flight_data.append((lon, lat, alt, yaw, pitch, roll))
+    flight_data = list(zip(lons.tolist(), lats.tolist(), raw_alts.tolist(),
+                           yaws.tolist(), pitches.tolist(), rolls.tolist()))
 
     return flight_data, distances_m, ltp_alt

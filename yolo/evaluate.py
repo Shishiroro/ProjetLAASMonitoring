@@ -9,10 +9,11 @@ import numpy as np
 import pandas as pd
 import torch
 
-# project/ contient runway.py (deplace depuis yolo/eval/)
+# Bootstrap sys.path via project/_paths.py
 _PROJECT_DIR = Path(__file__).resolve().parent.parent / "project"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
+import _paths  # noqa: F401
 
 from eval.box import box_extract
 from eval.metrics_utils import bbox_convert

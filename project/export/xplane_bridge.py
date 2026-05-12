@@ -98,7 +98,6 @@ class XPlaneConfig:
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 60.0             # FOV horizontal (reglages X-Plane, 60° comme LARD)
     fov_v: float = 60.0             # FOV vertical (= horizontal car fenetre carrée)
-    exchange_dir: str = ""          # Dossier echange XPPython3 (auto si vide) 
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +285,9 @@ def resize_xplane_window(width=1280, height=1024):
             print(f"  [XPLANE] Resize xlib failed: {e}")
 
     time.sleep(0.5)
-    info['rect'] = find_xplane_window()['rect'] if find_xplane_window() else info['rect']
+    updated = find_xplane_window()
+    if updated:
+        info['rect'] = updated['rect']
     return info
 
 
@@ -329,17 +330,6 @@ class XPlaneConnection:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(5.0)
         self.addr = (self.config.host, self.config.port)
-        # Point de reference pour conversion lat/lon → local
-        self.ref_lat = None
-        self.ref_lon = None
-        self.ref_elev = None
-        self.ref_lx = None
-        self.ref_ly = None
-        self.ref_lz = None
-        # Offset yeux pilote (cockpit → reference avion)
-        self.pilot_eye_x = 0.0   # lateral (m)
-        self.pilot_eye_y = 0.0   # vertical (m)
-        self.pilot_eye_z = 0.0   # longitudinal (m)
         # Capture ecran
         self.sct = None
         self.capture_region = None
@@ -388,23 +378,6 @@ class XPlaneConnection:
         except socket.timeout:
             return False
 
-    def _read_reference_point(self):
-        """Lit la position actuelle comme point de reference.
-
-        Necessaire pour convertir lat/lon/alt en coordonnees locales OpenGL
-        avec une precision metrique (les DREF lat/lon sont float32, insuffisant).
-        """
-        self.ref_lat = self.read_dref("sim/flightmodel/position/latitude", 1)
-        self.ref_lon = self.read_dref("sim/flightmodel/position/longitude", 2)
-        self.ref_elev = self.read_dref("sim/flightmodel/position/elevation", 3)
-        self.ref_lx = self.read_dref("sim/flightmodel/position/local_x", 4)
-        self.ref_ly = self.read_dref("sim/flightmodel/position/local_y", 5)
-        self.ref_lz = self.read_dref("sim/flightmodel/position/local_z", 6)
-        print(f"  [XPLANE] Reference : lat={self.ref_lat:.4f}, lon={self.ref_lon:.4f}, "
-              f"elev={self.ref_elev:.1f}m")
-        print(f"  [XPLANE]   local: x={self.ref_lx:.0f}, y={self.ref_ly:.0f}, "
-              f"z={self.ref_lz:.0f}")
-
     def setup_view(self):
         """Configure X-Plane pour le rendu automatise.
 
@@ -412,7 +385,6 @@ class XPlaneConnection:
         - Override du chemin de vol
         - Zero velocites et accelerations
         - Vue forward with nothing (pas de cockpit)
-        - Lit le point de reference pour la conversion locale
         - Resize et cible la fenetre X-Plane pour capture mss
         """
         # Pause le sim
@@ -450,38 +422,18 @@ class XPlaneConnection:
             resize_xplane_window(self.config.window_width, self.config.window_height)
             print(f"  [XPLANE] Fenetre resizee -> {self.config.window_width}x{self.config.window_height}")
 
-        # Fermer tous les panneaux/popups d'instruments (GPS, radio, etc.)
-        popup_close_commands = [
-            # Garmin G1000
+        # Fermer les panneaux/popups d'instruments susceptibles d'occulter le rendu
+        # (vue forward_with_nothing les masque deja sur la plupart des airliners,
+        #  ces commandes sont defensives pour les addons GA / cockpit personnalises)
+        for cmd in (
             "sim/GPS/g1000n1_popup_close",
-            "sim/GPS/g1000n3_popup_close",
-            # Garmin 430/530
-            "sim/instruments/G430n1_popup_close",
-            "sim/instruments/G430n2_popup_close",
-            "sim/instruments/G530n1_popup_close",
-            "sim/instruments/G530n2_popup_close",
-            # Map / FMS
             "sim/instruments/map_close",
-            # Radios / transponder
-            "sim/instruments/com1_standy_flip_close",
-            "sim/instruments/com2_standy_flip_close",
-            # Generic instrument popups
             "sim/instruments/popup_1_close",
             "sim/instruments/popup_2_close",
             "sim/instruments/popup_3_close",
-            "sim/instruments/popup_4_close",
-            "sim/instruments/popup_5_close",
-            "sim/instruments/popup_6_close",
-            "sim/instruments/popup_7_close",
-            "sim/instruments/popup_8_close",
-            "sim/instruments/popup_9_close",
-            "sim/instruments/popup_10_close",
-            "sim/instruments/popup_11_close",
-            "sim/instruments/popup_12_close",
-        ]
-        for cmd in popup_close_commands:
+        ):
             self.send_command(cmd)
-        time.sleep(0.3)
+        time.sleep(0.2)
 
         # Masquer tous les panneaux via le dataref show_popup
         for i in range(20):
@@ -492,21 +444,6 @@ class XPlaneConnection:
         self.send_dref("sim/operation/override/override_joystick", 1.0)
         self.send_dref("sim/joystick/mouse_is_yoke", 0.0)
         time.sleep(0.1)
-
-        # Cacher le curseur dans la fenetre X-Plane sans deplacer la souris
-        # On desactive juste le mouse yoke (ci-dessus) — pas de SetCursorPos
-        # pour ne pas perturber l'utilisateur.
-
-        # Lire l'offset yeux pilote du modele avion charge
-        # acf_peX = lateral, acf_peY = vertical, acf_peZ = longitudinal (metres)
-        self.pilot_eye_x = self.read_dref("sim/aircraft/view/acf_peX", 11) or 0.0
-        self.pilot_eye_y = self.read_dref("sim/aircraft/view/acf_peY", 12) or 0.0
-        self.pilot_eye_z = self.read_dref("sim/aircraft/view/acf_peZ", 13) or 0.0
-        print(f"  [XPLANE] Pilot eye offset: x={self.pilot_eye_x:.2f} "
-              f"y={self.pilot_eye_y:.2f} z={self.pilot_eye_z:.2f} m")
-
-        # Point de reference
-        self._read_reference_point()
 
         # Capture region (pas de resize — on garde la fenetre telle quelle)
         if HAS_WINDOW_MGMT:
@@ -640,13 +577,6 @@ class XPlaneConnection:
 
         pil_img.save(str(output_path), quality=90)
         return True
-
-    def release(self):
-        """Rend le controle de l'avion a X-Plane."""
-        self.send_dref("sim/time/paused", 0.0)
-        self.send_dref("sim/operation/override/override_planepath[0]", 0.0)
-        self.send_dref("sim/operation/override/override_flight_control", 0.0)
-        self.send_dref("sim/operation/override/override_throttles", 0.0)
 
     def close(self):
         """Ferme les sockets sans relacher les overrides (l'avion reste fige)."""

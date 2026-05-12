@@ -18,13 +18,11 @@ API publique :
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-YOLO_DIR = ROOT / "yolo"
-
-for _p in (ROOT / "project", ROOT / "project" / "export",
-           YOLO_DIR, YOLO_DIR / "eval"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+# Centralise les sys.path via project/_paths.py (sibling de ce fichier).
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+import _paths  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

@@ -58,11 +58,11 @@ def run(nb_test_cases=None, verbose=True):
     taf_export = root_dir / "taf" / "src" / "Export.py"
     shutil.copy2(src_export, taf_export)
 
-    # sys.path : TAF + nos modules
-    export_dir = str(project_dir / "export")
-    taf_src = str(root_dir / "taf" / "src")
-    if export_dir not in sys.path:
-        sys.path.insert(0, export_dir)
+    # sys.path : centralise via _paths + taf/src/ (specifique TAF)
+    if str(project_dir) not in sys.path:
+        sys.path.insert(0, str(project_dir))
+    import _paths  # noqa: F401  # ajoute ROOT, project, export, yolo, eval, LARD
+    taf_src = str(_paths.TAF_SRC)
     if taf_src not in sys.path:
         sys.path.insert(1, taf_src)
 

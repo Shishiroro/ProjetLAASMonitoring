@@ -160,21 +160,11 @@ def aggregate_report(results):
 # full_pipeline  : Phase 1 + 2 + 3 enchainees (mode "full" du CLI)
 # ===========================================================================
 
-def _ensure_export_path():
-    """Insere project/export/ dans sys.path pour les imports de Phase 2/3."""
-    import sys
-    _root = Path(__file__).resolve().parent.parent
-    for _p in (_root, _root / "project" / "export"):
-        if str(_p) not in sys.path:
-            sys.path.insert(0, str(_p))
-
-
 def render_runs(run_name=None, all_runs=False, xplane_dir=None):
     """Mode "render" : Phase 2 (X-Plane + fautes) sur les runs filtres.
 
     :return: list[Path] des runs rendus avec succes
     """
-    _ensure_export_path()
     from Export import render_run
     from xplane_weather import reset_if_active
 
@@ -209,7 +199,6 @@ def evaluate_runs(run_name=None, all_runs=False, runway=None,
     `xplane_dir` est conserve pour compat de signature mais inutilise
     (Phase 3 ne touche pas a X-Plane).
     """
-    _ensure_export_path()
     from Detection_Evaluation import evaluate_run
 
     print("=" * 60)
@@ -242,7 +231,6 @@ def evaluate_runs(run_name=None, all_runs=False, runway=None,
 def full_pipeline(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
                   iou_thresh=0.5, iou_method="CIOU", xplane_dir=None):
     """Mode "full" : Phase 1 + Phase 2 + Phase 3 enchainees sur les runs crees."""
-    _ensure_export_path()
     from Generate import generate_runs
     from Export import render_run
     from Detection_Evaluation import evaluate_run

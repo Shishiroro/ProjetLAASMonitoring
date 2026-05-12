@@ -21,11 +21,11 @@ import sys
 import math
 from pathlib import Path
 
-# Ajouter project/ et project/export/ au sys.path pour nos imports
-_export_dir = Path(__file__).resolve().parent
-for _p in (_export_dir, _export_dir.parent):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+# Bootstrap sys.path via project/_paths.py (parent dossier de project/export/)
+_PROJECT_DIR = Path(__file__).resolve().parent.parent
+if str(_PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_DIR))
+import _paths  # noqa: F401
 
 from trajectory_builder import TrajectoryConfig, OUParams, build_trajectory
 from lard_bridge import get_runway_geometry, export_scenario

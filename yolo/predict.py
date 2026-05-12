@@ -15,10 +15,11 @@ MODEL_PATH = YOLO_DIR / "yolov8nTest.pt"
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
 
-# project/ pour reutiliser list_images / pick_image_source (helpers partages)
+# Bootstrap sys.path via project/_paths.py
 _PROJECT_DIR = YOLO_DIR.parent / "project"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
+import _paths  # noqa: F401
 from runs import list_images, pick_image_source
 
 

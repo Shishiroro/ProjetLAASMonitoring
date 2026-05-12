@@ -21,17 +21,16 @@ from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import asdict
 
-# --- Chemins LARD ---
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # LARD-LAAS-TAF/
-LARD_ROOT = PROJECT_ROOT / "LARD"
-PROJECT_DIR = PROJECT_ROOT / "project"  # contient runway.py
+# Bootstrap sys.path via project/_paths.py (parent de project/export/)
+_PROJECT_DIR = Path(__file__).resolve().parent.parent
+if str(_PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_DIR))
+import _paths  # noqa: F401
+
+LARD_ROOT = _paths.LARD_ROOT
+PROJECT_ROOT = _paths.ROOT
 # DB LARD X-Plane (meme DB que le labeling LARD pour coherence trajectoire/GT)
 RUNWAY_DB_XPLANE = str(LARD_ROOT / "data" / "runways_db_V2_XPlane.json")
-
-# Ajouter LARD/ + project/ au sys.path
-for _p in (LARD_ROOT, PROJECT_DIR):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
 
 from src.geo.geo_dataset import compute_aiming_point
 from src.geo.geo_utils import ecef2llh

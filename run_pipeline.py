@@ -4,7 +4,7 @@ run_pipeline.py — CLI orchestrateur LARD-LAAS-TAF
 Entry point CLI minimal. Toute la logique vit dans :
   - Phase 1            : project/Generate.generate_runs
   - Phase 2            : project/export/Export.render_run
-  - Phase 3            : Detection_Evaluation.evaluate_run
+  - Phase 3            : project/Detection_Evaluation.evaluate_run
   - Modes batch        : project/runs.render_runs / evaluate_runs / full_pipeline
                          (boucles + agregation + cleanup meteo)
 
@@ -22,11 +22,10 @@ import sys
 import argparse
 from pathlib import Path
 
+# Bootstrap sys.path via project/_paths.py
 ROOT = Path(__file__).resolve().parent
-
-for _p in (ROOT, ROOT / "project", ROOT / "project" / "export"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+sys.path.insert(0, str(ROOT / "project"))
+import _paths  # noqa: F401
 
 from Generate import generate_runs
 from runs import render_runs, evaluate_runs, full_pipeline
