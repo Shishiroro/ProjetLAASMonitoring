@@ -81,8 +81,8 @@
              sont generees dans templates/<profil>/ par :
                  py project/templates/build_weather_templates.py
              Le generateur remplace UNIQUEMENT les 8 parametres situes entre
-             @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@. Les 3 params
-             orthogonaux qui suivent (time/settle) sont communs a tous.
+             @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@. Le reste
+             (weather_effect_duration, node settings) est commun a tous.
         -->
         <node name="weather">
 
@@ -90,12 +90,12 @@
 
             <!-- Precipitation : 0 = pas de pluie/neige.
                  Si > 0 ET cloud_type=-1 : Cumulonimbus force auto (sinon pas de source) -->
-            <parameter name="precip_rate"             type="real" min="0.3"   max="0.3"/>
+            <parameter name="precip_rate"             type="real" min="0.4"   max="1"/>
 
             <!-- cloud_type :
                   -1 = pas de nuages manuels (avec precip=0 -> ciel degage)
                    0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus -->
-            <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
+            <parameter name="cloud_type"              type="real" min="3"    max="3"/>
             <parameter name="cloud_coverage"          type="real" min="1"     max="1"/>
 
             <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
@@ -120,28 +120,32 @@
             <!-- @@WEATHER_BLOCK_END@@ -->
 
 
-            <!-- ====== Params orthogonaux : communs a TOUS les profils ======
-                 Jamais remplaces par build_weather_templates.py.
-            -->
+            <!-- Param meteo commun a TOUS les profils : jamais remplace par
+                 build_weather_templates.py.
+                 Délai accumulation effets sol : flaques de pluie / couche de
+                 neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
+                 SANS accumulation. -->
+            <parameter name="weather_effect_duration" type="real" min="5"     max="5"/>
+
+        </node>
+
+
+        <!-- ===========================================================
+             SETTINGS : reglages de rendu / sim, communs a tous les profils
+             ===========================================================
+             Parametres independants de la meteo et des fautes capteur.
+             Jamais remplaces par build_weather_templates.py.
+        -->
+        <node name="settings">
 
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
-            <parameter name="time_of_day_h"           type="real" min="15"    max="15"/>
+            <parameter name="time_of_day_h"           type="real" min="12"    max="15"/>
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="10"    max="10"/>
+            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
 
-            <!-- Délai accumulation effets sol : flaques de pluie / couche de neige.
-                 Sim accélérée 8x → durée_réelle x8 de météo simulée.
-                 Ignoré si precip_rate=0. Mettre 0 pour de la pluie SANS
-                 accumulation (la pluie tombe mais la piste reste sèche). -->
-            <parameter name="weather_effect_duration" type="real" min="8"     max="8"/>
-
-            <!-- Délai stabilisation pose APRES chaque téléportation caméra (s).
-                Pas trop bas car sinon décalage image avec les poses (vérifiable avec bbox lard)
-                   - sans pluie/neige : valeur brève
-                   - avec pluie/neige : >= 0.07 (laisse spawn les particules)-->
-               
+            <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>
 
         </node>

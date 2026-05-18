@@ -53,6 +53,7 @@ def export(root_node, path):
     scenario_node = root_node.get_child_n("scenario")
     trajectory_node = scenario_node.get_child_n("trajectory")
     weather_node = scenario_node.get_child_n("weather")
+    settings_node = scenario_node.get_child_n("settings")
     faults_node = scenario_node.get_child_n("faults")
 
     # --- Trajectoire ---
@@ -106,16 +107,16 @@ def export(root_node, path):
         cloud_thickness_m=float(_read_param(weather_node, "cloud_thickness_m")),
         fog_visibility=float(_read_param(weather_node, "fog_visibility")),
         temperature_c=float(_read_param(weather_node, "temperature_c")),
-        time_of_day_h=float(_read_param(weather_node, "time_of_day_h")),
+        time_of_day_h=float(_read_param(settings_node, "time_of_day_h")),
         rain_scale=float(_read_param(weather_node, "rain_scale")),
-        load_texture_duration=float(_read_param(weather_node, "load_texture_duration")),
+        load_texture_duration=float(_read_param(settings_node, "load_texture_duration")),
         weather_effect_duration=float(_read_param(weather_node, "weather_effect_duration")),
     )
 
     # Delai de settle apres chaque teleport camera (per-machine / per-scenario).
-    # Independant de la meteo mais loge dans le node weather pour rester groupe
-    # avec load_texture_duration / weather_effect_duration. Plombe via poses_cam_export.json.
-    screenshot_duration = float(_read_param(weather_node, "screenshot_duration"))
+    # Reglage de rendu (node settings), independant de la meteo.
+    # Plombe via poses_cam_export.json.
+    screenshot_duration = float(_read_param(settings_node, "screenshot_duration"))
 
     if has_weather(weather_cfg):
         validate_weather(weather_cfg)
