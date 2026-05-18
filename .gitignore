@@ -42,4 +42,6 @@ project/sweep/
 
 # Claude Code
 .claude/
-tests/xplane/speed_test/
+
+# Tests (locaux, non versionnes)
+tests/
