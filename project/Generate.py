@@ -40,6 +40,27 @@ def _precreate_output_dirs(project_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 
+def _sync_taf_settings():
+    """Resynchronise Taf.SETTINGS depuis settings.xml.
+
+    Taf.SETTINGS est un singleton cree au module-level (`SETTINGS = Settings()`),
+    donc lu UNE SEULE FOIS au premier `import Taf`. Dans un kernel Jupyter
+    l'import est ensuite mis en cache : au 2e appel de run(), SETTINGS garde
+    les valeurs du 1er import meme si settings.xml a change entre-temps.
+    _precreate_output_dirs lit pourtant settings.xml a jour -> les dossiers
+    pre-crees et ceux generes par TAF se desynchronisent (FileNotFoundError
+    sur scenario_N/scenario_N.xml).
+
+    On reapplique donc le contenu de settings.xml dans le dict vivant de
+    SETTINGS (CWD = project/, deja en place via os.chdir).
+    """
+    import Taf
+    params = Taf.SETTINGS.get_setting_parameters()
+    for p in ET.parse("settings.xml").getroot():
+        value = p.attrib["value"]
+        params[p.attrib["name"]] = int(value) if p.attrib["type"] == "integer" else value
+
+
 def run(nb_test_cases=None, verbose=True):
     """
     Point d'entree pour lancer la generation TAF.
@@ -81,6 +102,10 @@ def run(nb_test_cases=None, verbose=True):
     _precreate_output_dirs(project_dir)
 
     import Taf
+
+    # Resync SETTINGS : `import Taf` est cache par le kernel Jupyter, donc
+    # le singleton SETTINGS garde le nb_test_cases du 1er appel sans ca.
+    _sync_taf_settings()
 
     # Stub `./Export.py` requis par TAF (Export_Generator.create_export
     # fait getsize sans tester l'existence). Normalement cree au 1er
