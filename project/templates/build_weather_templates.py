@@ -1,0 +1,172 @@
+"""
+build_weather_templates.py — Generateur des XML de profils meteo
+=================================================================
+Lit base_template.xml et genere les 22 variantes de profil meteo dans
+templates/<profil>/. Chaque variante = base_template.xml dont le bloc des
+8 parametres meteo (entre @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@)
+est remplace par les valeurs du preset.
+
+C'est du tooling BUILD-TIME : rien ici ne tourne pendant la generation TAF.
+Au runtime, TAF lit simplement le XML pointe par project/settings.xml
+(parametre template_file_name, ex: value="rain/rain_heavy.xml").
+
+Usage :
+    py project/templates/build_weather_templates.py
+
+Pour modifier un profil : editer la table PRESETS ci-dessous (ou
+base_template.xml pour la trajectoire / les fautes), puis relancer ce script.
+NE PAS editer les XML generes a la main : ils seront ecrases.
+"""
+
+from pathlib import Path
+
+TEMPLATES_DIR = Path(__file__).resolve().parent
+BASE_FILE = TEMPLATES_DIR / "base_template.xml"
+
+START_MARKER = "<!-- @@WEATHER_BLOCK_START@@ -->"
+END_MARKER = "<!-- @@WEATHER_BLOCK_END@@ -->"
+
+# Les 8 params meteo remplaces, dans l'ordre d'emission.
+PARAM_ORDER = [
+    "precip_rate", "cloud_type", "cloud_coverage", "cloud_thickness_m",
+    "visibility_m", "temperature_c", "rain_scale", "cloud_margin_m",
+]
+
+PARAM_COMMENT = {
+    "precip_rate":       "Precipitation (0 = aucune ; >0 + cloud_type=-1 => Cb auto)",
+    "cloud_type":        "-1=Cb auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus",
+    "cloud_coverage":    "Couverture nuageuse [0-1]",
+    "cloud_thickness_m": "Epaisseur nuage (m) ; 0 => pas de particules",
+    "visibility_m":      "Visibilite (m)",
+    "temperature_c":     "Temperature (C) ; < 0 => precip basculee en neige",
+    "rain_scale":        "Taille gouttes (visuel) ; ignore si precip=0",
+    "cloud_margin_m":    "Marge base nuages au-dessus de l'avion (m)",
+}
+
+# Valeurs meteo neutres par defaut (ciel degage). Chaque preset surcharge
+# uniquement les params pertinents ; le reste reste a ces valeurs.
+DEFAULTS = {
+    "precip_rate":       (0, 0),
+    "cloud_type":        (-1, -1),
+    "cloud_coverage":    (0, 0),
+    "cloud_thickness_m": (0, 0),
+    "visibility_m":      (50000, 50000),
+    "temperature_c":     (15, 15),
+    "rain_scale":        (1, 1),
+    "cloud_margin_m":    (2000, 2000),
+}
+
+# Marge nuages commune a tous les profils de nuages (plage echantillonnee par TAF).
+CLOUD_MARGIN = (1500, 3000)
+
+# PRESETS : (sous_dossier, nom_fichier) -> surcharges {param: (min, max)}
+# Tout param absent garde sa valeur DEFAULTS.
+PRESETS = {
+    # --- Brouillard : visibilite seule (cloud_type=-1, precip=0) ---
+    ("fog", "fog_light"):    {"visibility_m": (10000, 15000)},
+    ("fog", "fog_moderate"): {"visibility_m": (4000, 10000)},
+    ("fog", "fog_heavy"):    {"visibility_m": (1000, 4000)},
+
+    # --- Nuages : precip=0, cloud_type fixe, coverage/thickness par intensite ---
+    # Cirrus (cloud_type=0)
+    ("clouds", "cirrus_light"):    {"cloud_type": (0, 0), "cloud_coverage": (0.3, 0.5), "cloud_thickness_m": (600, 600),   "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cirrus_moderate"): {"cloud_type": (0, 0), "cloud_coverage": (0.5, 0.7), "cloud_thickness_m": (1000, 1000), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cirrus_heavy"):    {"cloud_type": (0, 0), "cloud_coverage": (0.7, 1.0), "cloud_thickness_m": (1500, 1500), "cloud_margin_m": CLOUD_MARGIN},
+    # Stratus (cloud_type=1)
+    ("clouds", "stratus_light"):    {"cloud_type": (1, 1), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (300, 300), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "stratus_moderate"): {"cloud_type": (1, 1), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (500, 500), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "stratus_heavy"):    {"cloud_type": (1, 1), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (800, 800), "cloud_margin_m": CLOUD_MARGIN},
+    # Cumulus (cloud_type=2)
+    ("clouds", "cumulus_light"):    {"cloud_type": (2, 2), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (1000, 1000), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cumulus_moderate"): {"cloud_type": (2, 2), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (2000, 2000), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cumulus_heavy"):    {"cloud_type": (2, 2), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (3000, 3000), "cloud_margin_m": CLOUD_MARGIN},
+    # Cumulonimbus (cloud_type=3)
+    ("clouds", "cumulonimbus_light"):    {"cloud_type": (3, 3), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (6000, 6000),   "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cumulonimbus_moderate"): {"cloud_type": (3, 3), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (8000, 8000),   "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cumulonimbus_heavy"):    {"cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "cloud_margin_m": CLOUD_MARGIN},
+
+    # --- Pluie : precip + Cumulonimbus auto (cloud_type=-1) ---
+    ("rain", "rain_light"):    {"precip_rate": (0.3, 0.3), "rain_scale": (1, 1),     "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 2000)},
+    ("rain", "rain_moderate"): {"precip_rate": (0.6, 0.6), "rain_scale": (2.0, 2.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+    ("rain", "rain_heavy"):    {"precip_rate": (1.0, 1.0), "rain_scale": (5.0, 5.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+
+    # --- Neige : precip + T < 0 (XP12 bascule les particules en neige) ---
+    # NB : temperature plafonnee a -2 C (et non 0) pour garantir la neige.
+    ("snow", "snow_light"):    {"precip_rate": (0.3, 0.3), "temperature_c": (-15, -2),  "rain_scale": (1, 1),     "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 2000)},
+    ("snow", "snow_moderate"): {"precip_rate": (0.6, 0.6), "temperature_c": (-15, -2),  "rain_scale": (2.0, 2.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+    ("snow", "snow_heavy"):    {"precip_rate": (1.0, 1.0), "temperature_c": (-15, -15), "rain_scale": (5.0, 5.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+
+    # --- Ciel degage : aucune meteo. cloud_type=0 + coverage=0 force une
+    #     injection effective qui clear toutes les couches de nuages. ---
+    ("clear", "clear"): {"cloud_type": (0, 0), "cloud_thickness_m": (10, 10)},
+}
+
+
+def _fmt(v):
+    """Formate un nombre pour XML : entier sans decimale, sinon flottant court."""
+    return f"{v:g}"
+
+
+def build_weather_block(overrides):
+    """Construit le bloc XML indente des 8 params meteo pour un preset."""
+    vals = dict(DEFAULTS)
+    vals.update(overrides)
+    lines = []
+    for name in PARAM_ORDER:
+        lo, hi = vals[name]
+        lines.append(f"            <!-- {PARAM_COMMENT[name]} -->")
+        prefix = f'            <parameter name="{name}"'
+        lines.append(
+            f'{prefix.ljust(50)}type="real" '
+            f'min="{_fmt(lo)}" max="{_fmt(hi)}"/>'
+        )
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def _banner(profile):
+    """Bandeau d'avertissement insere en tete des fichiers generes."""
+    return (
+        "<!-- ============================================================\n"
+        "     FICHIER GENERE par project/templates/build_weather_templates.py\n"
+        f"     Profil : {profile}   |   NE PAS EDITER A LA MAIN\n"
+        "     Source : base_template.xml + table PRESETS du generateur.\n"
+        "     Regenerer : py project/templates/build_weather_templates.py\n"
+        "     ============================================================ -->\n"
+    )
+
+
+def main():
+    if not BASE_FILE.exists():
+        raise SystemExit(f"base_template.xml introuvable : {BASE_FILE}")
+
+    base = BASE_FILE.read_text(encoding="utf-8")
+    if START_MARKER not in base or END_MARKER not in base:
+        raise SystemExit(
+            "Marqueurs @@WEATHER_BLOCK_START@@ / @@WEATHER_BLOCK_END@@ "
+            "absents de base_template.xml"
+        )
+
+    before, _, rest = base.partition(START_MARKER)
+    _, _, after = rest.partition(END_MARKER)
+    first_nl = before.index("\n") + 1  # apres la ligne <?xml ... ?>
+
+    count = 0
+    for (subdir, fname), overrides in PRESETS.items():
+        block = build_weather_block(overrides)
+        head = before[:first_nl] + _banner(f"{subdir}/{fname}") + before[first_nl:]
+        content = (
+            head + START_MARKER + "\n\n" + block
+            + "\n\n            " + END_MARKER + after
+        )
+        out_dir = TEMPLATES_DIR / subdir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{fname}.xml").write_text(content, encoding="utf-8")
+        count += 1
+        print(f"  genere  {subdir}/{fname}.xml")
+
+    print(f"\n{count} templates meteo generes dans {TEMPLATES_DIR}")
+
+
+if __name__ == "__main__":
+    main()

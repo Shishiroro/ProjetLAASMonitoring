@@ -1,0 +1,339 @@
+<?xml version="1.0"?>
+<!-- ============================================================
+     FICHIER GENERE par project/templates/build_weather_templates.py
+     Profil : clear/clear   |   NE PAS EDITER A LA MAIN
+     Source : base_template.xml + table PRESETS du generateur.
+     Regenerer : py project/templates/build_weather_templates.py
+     ============================================================ -->
+<!--
+    base_template.xml — Template de base : trajectoire + meteo + 22 fautes.
+
+    Les variantes meteo (brouillard, nuages, pluie, neige, ciel clair) sont
+    des XML autonomes generes dans templates/<profil>/ par :
+        py project/templates/build_weather_templates.py
+    Choisir le XML actif dans project/settings.xml (parametre template_file_name,
+    ex: value="rain/rain_heavy.xml").
+
+    Conventions :
+      - min/max identiques = valeur fixe
+      - min/max differents = TAF sample dans la plage (z3)
+      - severity > 0 active une faute, severity = 0 la desactive
+
+    Modele de duree des fautes (T5) :
+      - start_pct    : debut application en % de la trajectoire [0, 100]
+      - duration_pct : duree de la faute en % de la trajectoire
+      - Contrainte z3 : start_pct + duration_pct <= 100 (sinon UNSAT)
+
+    airport_runway : format "ICAO_RWY" (ex: "LFPO_06").
+    Voir LARD/data/filtered_runways_database_Final.json pour la liste.
+-->
+<root name="test_case">
+
+    <node name="scenario" nb_instances="1">
+
+        <!-- ===========================================================
+             TRAJECTOIRE : timing, distances, vent, OU, piste
+             ===========================================================
+        -->
+        <node name="trajectory">
+
+            <parameter name="fps"                          type="integer" min="10"   max="10"/>
+
+            <parameter name="along_track_distance_start"   type="real"    min="2000" max="2000"/>
+            <parameter name="along_track_distance_end"     type="real"    min="280"  max="280"/>
+            <parameter name="ground_speed_kts"             type="real"    min="145"  max="145"/>
+
+            <!-- Processus Ornstein-Uhlenbeck (turbulence) -->
+            <parameter name="turbulence_intensity"         type="real"    min="0"    max="1"/>
+
+            <!-- Vent -->
+            <parameter name="wind_speed_kts"               type="real"    min="0"    max="30"/>
+            <parameter name="wind_direction_deg"           type="real"    min="0"    max="359"/>
+
+            <!-- Convergence finale   min="1000" max="1500"/> -->
+            <parameter name="stabilization_distance_m"     type="real"    min="1000" max="1500"/>
+
+            <!-- Piste cible (ICAO_RWY) -->
+           
+            <parameter name="airport_runway"               type="string"  values="KPDX_10L"/>
+
+            <!-- Contraintes trajectoire :
+                 1) start > end (sens d'approche)
+                 2) stab >= end + 500   (zone de convergence assez large)
+                 3) start >= stab + 500 (trajectoire libre OU avant convergence) -->
+            <constraint name="dist_order"
+                        expressions=".\along_track_distance_start SUP .\along_track_distance_end"/>
+            <constraint name="stab_above_end"
+                        expressions=".\stabilization_distance_m SUPEQ .\along_track_distance_end + 500"/>
+            <constraint name="start_above_stab"
+                        expressions=".\along_track_distance_start SUPEQ .\stabilization_distance_m + 500"/>
+
+        </node>
+
+
+        <!-- ===========================================================
+             METEO X-Plane 12 (per-scenario, injectee 1x avant rendu)
+             ===========================================================
+             COMPORTEMENT :
+               - Pluie seule    (precip > 0, cloud_type = -1) : Cumulonimbus auto
+               - Nuages seuls   (cloud_type >= 0, precip = 0) : nuages manuels
+               - Pluie + nuages (precip > 0, cloud_type >= 0) : nuages manuels
+               - Rien           (precip = 0, cloud_type = -1) : pas d'injection
+
+             cloud_type enum : 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus, -1=auto
+
+             Ce fichier (base_template.xml) garde des valeurs meteo de base.
+             Les variantes de profil (brouillard, nuages, pluie, neige, clair)
+             sont generees dans templates/<profil>/ par :
+                 py project/templates/build_weather_templates.py
+             Le generateur remplace UNIQUEMENT les 8 parametres situes entre
+             @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@. Les 3 params
+             orthogonaux qui suivent (time/settle) sont communs a tous.
+        -->
+        <node name="weather">
+
+            <!-- @@WEATHER_BLOCK_START@@ -->
+
+            <!-- Precipitation (0 = aucune ; >0 + cloud_type=-1 => Cb auto) -->
+            <parameter name="precip_rate"         type="real" min="0" max="0"/>
+
+            <!-- -1=Cb auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus -->
+            <parameter name="cloud_type"          type="real" min="0" max="0"/>
+
+            <!-- Couverture nuageuse [0-1] -->
+            <parameter name="cloud_coverage"      type="real" min="0" max="0"/>
+
+            <!-- Epaisseur nuage (m) ; 0 => pas de particules -->
+            <parameter name="cloud_thickness_m"   type="real" min="10" max="10"/>
+
+            <!-- Visibilite (m) -->
+            <parameter name="visibility_m"        type="real" min="50000" max="50000"/>
+
+            <!-- Temperature (C) ; < 0 => precip basculee en neige -->
+            <parameter name="temperature_c"       type="real" min="15" max="15"/>
+
+            <!-- Taille gouttes (visuel) ; ignore si precip=0 -->
+            <parameter name="rain_scale"          type="real" min="1" max="1"/>
+
+            <!-- Marge base nuages au-dessus de l'avion (m) -->
+            <parameter name="cloud_margin_m"      type="real" min="2000" max="2000"/>
+
+            <!-- @@WEATHER_BLOCK_END@@ -->
+
+
+            <!-- ====== Params orthogonaux : communs a TOUS les profils ======
+                 Jamais remplaces par build_weather_templates.py.
+            -->
+
+            <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
+            <parameter name="time_of_day_h"           type="real" min="15"    max="15"/>
+
+            <!-- Délai stabilisation météo/textures avant capture -->
+            <parameter name="xplane_weather_settle_s" type="real" min="10"    max="10"/>
+
+            <!-- Délai stabilisation pose APRES chaque téléportation caméra (s).
+                Pas trop bas car sinon décalage image avec les poses (vérifiable avec bbox lard)
+                   - sans pluie/neige : mettre un settle_s bref
+                   - avec pluie/neige : >= 0.07 (laisse spawn les particules)-->
+               
+            <parameter name="xplane_pose_settle_s"    type="real" min="0.07"  max="0.07"/>
+
+        </node>
+
+
+        <!-- ===========================================================
+             FAUTES CAPTEUR : 22 sub-nodes, params propres a chaque faute
+             ===========================================================
+             Pour activer une faute :
+               1) severity min/max > 0
+               2) ajuster start_pct + duration_pct selon le moment souhaite
+
+             Plusieurs fautes se cumulent si leurs plages se chevauchent.
+
+           Voir différents effets dans le dossier examples.
+        -->
+        <node name="faults">
+
+            <!-- ===== Bruits ===== -->
+            <node name="gaussian_noise">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="shot_noise">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="salt_pepper">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="dead_pixels">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+
+            <!-- ===== Flous ===== -->
+            <node name="motion_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="defocus_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <!-- Flou type verre depoli (albumentations.GlassBlur mode 'fast') :
+                 permutations locales de pixels + flou gaussien. Simule
+                 lentille sale/gelee/condensee. severity 0=leger, 1=fort. -->
+            <node name="glass_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="rolling_shutter">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+
+            <!-- ===== Exposition ===== -->
+            <node name="overexposure">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="underexposure">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+
+            <!-- ===== Optique ===== -->
+            <node name="vignetting">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="chromatic_aberration">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="radial_distortion">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="lens_flare">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+
+            <!-- ===== Artefacts ===== -->
+            <node name="banding">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="jpeg_artifacts">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="color_shift">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <!-- Permutation explicite : (c0, c1, c2) = ordre des canaux, c.f. albumentations ChannelShuffle.
+                 severity < 0.5 : applique sur BGR natif ; >= 0.5 : applique sur HSV.
+                 Contraintes DIF -> c0/c1/c2 forment une vraie permutation (pas de duplication). -->
+            <node name="channel_swap">
+                <parameter name="severity"     type="real"    min="0"   max="0"/>
+                <parameter name="start_pct"    type="real"    min="10"   max="10"/>
+                <parameter name="duration_pct" type="real"    min="50" max="50"/>
+                <parameter name="c0"           type="integer" min="2"   max="2"/>
+                <parameter name="c1"           type="integer" min="1"   max="1"/>
+                <parameter name="c2"           type="integer" min="0"   max="0"/>
+                <constraint name="bounded"  expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+                <constraint name="perm_01"  expressions=".\c0 DIF .\c1"/>
+                <constraint name="perm_02"  expressions=".\c0 DIF .\c2"/>
+                <constraint name="perm_12"  expressions=".\c1 DIF .\c2"/>
+            </node>
+
+            <!-- ===== Salissure / environnement ===== -->
+            <node name="condensation">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="dirt_on_lens">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="fog">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <!-- Neige (albumentations.RandomSnow methode bleach) : blanchiment HLS
+                 des pixels au-dessus d'un seuil. severity 0=leger, 1=lourd. -->
+            <node name="snow">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+
+            <!-- ===== Transformations geometriques ===== -->
+            <node name="zoom_blur">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="contrast">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <node name="pixelate">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+
+        </node>
+
+    </node>
+
+</root>

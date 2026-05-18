@@ -1,14 +1,15 @@
 <settings>
     
     <parameter name="template_path" type="path" value="templates/" />
-    <parameter name="template_file_name" type="file" value="trajectory_template.xml" />
+    
+    <parameter name="template_file_name" type="file" value="base_template.xml" />
 
     
     <parameter name="experiment_path" type="path" value="../" />
     <parameter name="experiment_folder_name" type="folder" value="output" />
 
     
-    <parameter name="nb_test_cases" type="integer" value="2" />
+    <parameter name="nb_test_cases" type="integer" value="1" />
 
     
     <parameter name="test_case_folder_name" type="folder" value="scenario" />

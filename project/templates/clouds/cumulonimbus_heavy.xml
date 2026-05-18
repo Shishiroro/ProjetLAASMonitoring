@@ -1,5 +1,18 @@
 <?xml version="1.0"?>
+<!-- ============================================================
+     FICHIER GENERE par project/templates/build_weather_templates.py
+     Profil : clouds/cumulonimbus_heavy   |   NE PAS EDITER A LA MAIN
+     Source : base_template.xml + table PRESETS du generateur.
+     Regenerer : py project/templates/build_weather_templates.py
+     ============================================================ -->
 <!--
+    base_template.xml — Template de base : trajectoire + meteo + 22 fautes.
+
+    Les variantes meteo (brouillard, nuages, pluie, neige, ciel clair) sont
+    des XML autonomes generes dans templates/<profil>/ par :
+        py project/templates/build_weather_templates.py
+    Choisir le XML actif dans project/settings.xml (parametre template_file_name,
+    ex: value="rain/rain_heavy.xml").
 
     Conventions :
       - min/max identiques = valeur fixe
@@ -69,82 +82,51 @@
 
              cloud_type enum : 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus, -1=auto
 
-             ==========================================================
-             PROFILS PRESETS (override des valeurs ci-dessous) :
-             ==========================================================
-             profile :
-               0 = none          (passthrough, garde les valeurs XML)
-               1 = fog           (override visibility)
-               2 = clouds        (override cloud_type/coverage/thickness)
-               3 = rain          (override precip + Cb auto + rain_scale)
-               4 = snow_falling  (override precip + temperature_c < 0)
-               5 = clear         (force ciel degage : precip=0, pas de nuages, vis=50km)
-
-             intensity :
-               0 = off (pas d'override quel que soit profile)
-               1 = light, 2 = moderate, 3 = heavy
-               Note : pour profile=5 (clear), intensity n'a pas d'effet (binaire).
-                      Il suffit d'avoir intensity != 0 pour activer l'override.
-
-             Si profile=0 OU intensity=0 : les params XML ci-dessous sont
-             utilises tels quels. Sinon, le preset
-             (project/export/weather_profiles.py) ecrase les params lies au
-             profil ; les orthogonaux (time_of_day_h, xplane_weather_settle_s)
-             restent toujours lus du XML.
+             Ce fichier (base_template.xml) garde des valeurs meteo de base.
+             Les variantes de profil (brouillard, nuages, pluie, neige, clair)
+             sont generees dans templates/<profil>/ par :
+                 py project/templates/build_weather_templates.py
+             Le generateur remplace UNIQUEMENT les 8 parametres situes entre
+             @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@. Les 3 params
+             orthogonaux qui suivent (time/settle) sont communs a tous.
         -->
         <node name="weather">
 
-            <!-- ====== 1. SELECTEURS PRESET ======
-                 profile : 0=none (passthrough), 1=fog, 2=clouds, 3=rain,
-                           4=snow_falling, 5=clear (force ciel degage)
-                 Si profile=0 OU intensity=0 : aucun override (params de base utilises)
-                 Sinon : le bloc 2 ci-dessous est ecrase par le preset
-            -->
-            <parameter name="profile"                 type="integer" min="5"    max="5"/>
-            <parameter name="intensity"               type="integer" min="1"    max="1"/>
+            <!-- @@WEATHER_BLOCK_START@@ -->
 
+            <!-- Precipitation (0 = aucune ; >0 + cloud_type=-1 => Cb auto) -->
+            <parameter name="precip_rate"         type="real" min="0" max="0"/>
 
-            <!-- ====== 2. PARAMS ECRASES PAR LE PRESET (si actif) ======
-                 Ces 7 params sont ecrases par weather_profiles.PRESETS quand un
-                 profile/intensity est actif. Sinon utilises tels quels.
-            -->
+            <!-- -1=Cb auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus -->
+            <parameter name="cloud_type"          type="real" min="3" max="3"/>
 
-            <!-- Precipitation : 0 = pas de pluie/neige.
-                 Si > 0 ET cloud_type=-1 : Cumulonimbus force auto (sinon pas de source) -->
-            <parameter name="precip_rate"             type="real" min="0.6"     max="1"/>
+            <!-- Couverture nuageuse [0-1] -->
+            <parameter name="cloud_coverage"      type="real" min="1" max="1"/>
 
-            <!-- cloud_type :
-                  -1 = pas de nuages manuels (avec precip=0 -> ciel degage)
-                   0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus -->
-            <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
-            <parameter name="cloud_coverage"          type="real" min="1"     max="1"/>
-
-            <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
-                 IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
-                 genere PAS de particules de pluie/neige. Mettre > 0 pour avoir la pluie. -->
-            <parameter name="cloud_thickness_m"       type="real" min="500"  max="6000"/>
+            <!-- Epaisseur nuage (m) ; 0 => pas de particules -->
+            <parameter name="cloud_thickness_m"   type="real" min="10000" max="10000"/>
 
             <!-- Visibilite (m) -->
-            <parameter name="visibility_m"            type="real" min="10000" max="30000"/>
+            <parameter name="visibility_m"        type="real" min="50000" max="50000"/>
 
-            <!-- Temperature (°C) : pluie vs neige -->
-            <parameter name="temperature_c"           type="real" min="-15"    max="45"/>
+            <!-- Temperature (C) ; < 0 => precip basculee en neige -->
+            <parameter name="temperature_c"       type="real" min="15" max="15"/>
 
-            <!-- Taille gouttes (visuel uniquement, dataref privé XP12, susceptible
-                 d'être cassé dans de futures versions).
-                 1.0=defaut, 0.1=fines, 5.0=grosses. Ignore si precip=0. -->
-            <parameter name="rain_scale"              type="real" min="1"     max="5"/>
+            <!-- Taille gouttes (visuel) ; ignore si precip=0 -->
+            <parameter name="rain_scale"          type="real" min="1" max="1"/>
 
-            <!-- Marge nuages (m) au-dessus de l'avion pour la base nuages -->
-            <parameter name="cloud_margin_m"          type="real" min="1000"  max="2000"/>
+            <!-- Marge base nuages au-dessus de l'avion (m) -->
+            <parameter name="cloud_margin_m"      type="real" min="1500" max="3000"/>
+
+            <!-- @@WEATHER_BLOCK_END@@ -->
 
 
-            <!-- ====== 3. PARAMS jamais ecrases par le preset ======
-                 Toujours lus du XML, quel que soit profile/intensity.
+            <!-- ====== Params orthogonaux : communs a TOUS les profils ======
+                 Jamais remplaces par build_weather_templates.py.
             -->
 
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
-            <parameter name="time_of_day_h"           type="real" min="20"    max="20"/>
+            <parameter name="time_of_day_h"           type="real" min="15"    max="15"/>
 
             <!-- Délai stabilisation météo/textures avant capture -->
             <parameter name="xplane_weather_settle_s" type="real" min="10"    max="10"/>

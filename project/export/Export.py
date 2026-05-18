@@ -36,8 +36,6 @@ from sensor_faults import (
 from xplane_weather import (
     WeatherConfig, validate_weather, has_weather, save_weather_profile,
 )
-from dataclasses import replace
-from weather_profiles import lookup as lookup_weather_preset, profile_name
 
  
 def _read_param(node, name):
@@ -97,11 +95,9 @@ def export(root_node, path):
         print(f"[Export] Fautes capteur : {fault_str}")
 
     # --- Meteo X-Plane (per-scenario) ---
-    # Construction en 2 temps :
-    #   1) lecture des params XML de base (toujours)
-    #   2) si profile != 0 ET intensity != 0 : preset ecrase les champs lies
-    #      au profil (precip, cloud_*, visibility, temperature, rain_scale).
-    # Les orthogonaux (cloud_margin_m, time_of_day_h, settle_s) restent toujours XML.
+    # Les params meteo sont lus tels quels depuis le XML actif (base_template.xml
+    # ou une variante de profil generee dans templates/<profil>/). Le choix du
+    # profil se fait en pointant settings.xml sur le bon XML, pas dans le code.
     weather_cfg = WeatherConfig(
         precip_rate=float(_read_param(weather_node, "precip_rate")),
         cloud_type=float(_read_param(weather_node, "cloud_type")),
@@ -120,39 +116,20 @@ def export(root_node, path):
     # avec xplane_weather_settle_s. Plombe via poses_cam_export.json.
     xplane_pose_settle_s = float(_read_param(weather_node, "xplane_pose_settle_s"))
 
-    profile_id = int(_read_param(weather_node, "profile"))
-    intensity = int(_read_param(weather_node, "intensity"))
-    preset = lookup_weather_preset(profile_id, intensity)
-    if preset is not None:
-        weather_cfg = replace(
-            weather_cfg,
-            precip_rate=preset.precip_rate,
-            cloud_type=preset.cloud_type,
-            cloud_coverage=preset.cloud_coverage,
-            cloud_thickness_m=preset.cloud_thickness_m,
-            cloud_margin_m=preset.cloud_margin_m,
-            visibility_m=preset.visibility_m,
-            temperature_c=preset.temperature_c,
-            rain_scale=preset.rain_scale,
-        )
-
     if has_weather(weather_cfg):
         validate_weather(weather_cfg)
-        if preset is not None:
-            print(f"[Export] Meteo : profile={profile_name(profile_id)} intensity={intensity} (override)")
-        else:
-            parts = []
-            if weather_cfg.precip_rate > 0:
-                parts.append(f"precip={weather_cfg.precip_rate:.2f}")
-            if weather_cfg.cloud_type >= 0:
-                parts.append(f"cloud_type={weather_cfg.cloud_type:.0f} cov={weather_cfg.cloud_coverage:.1f}")
-            if weather_cfg.visibility_m < 50000:
-                parts.append(f"vis={weather_cfg.visibility_m:.0f}m")
-            if weather_cfg.temperature_c < 0:
-                parts.append(f"temp={weather_cfg.temperature_c:.0f}C")
-            if weather_cfg.time_of_day_h != 12.0:
-                parts.append(f"heure={weather_cfg.time_of_day_h:.1f}h")
-            print(f"[Export] Meteo (base XML) : {', '.join(parts)}")
+        parts = []
+        if weather_cfg.precip_rate > 0:
+            parts.append(f"precip={weather_cfg.precip_rate:.2f}")
+        if weather_cfg.cloud_type >= 0:
+            parts.append(f"cloud_type={weather_cfg.cloud_type:.0f} cov={weather_cfg.cloud_coverage:.1f}")
+        if weather_cfg.visibility_m < 50000:
+            parts.append(f"vis={weather_cfg.visibility_m:.0f}m")
+        if weather_cfg.temperature_c < 0:
+            parts.append(f"temp={weather_cfg.temperature_c:.0f}C")
+        if weather_cfg.time_of_day_h != 12.0:
+            parts.append(f"heure={weather_cfg.time_of_day_h:.1f}h")
+        print(f"[Export] Meteo : {', '.join(parts)}")
 
     # --- Calcul auto de tau  ---
     # A nos altitudes (~300m max), , donc tau ≈ h / V
