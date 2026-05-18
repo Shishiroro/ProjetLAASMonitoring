@@ -104,17 +104,18 @@ def export(root_node, path):
         cloud_coverage=float(_read_param(weather_node, "cloud_coverage")),
         cloud_margin_m=float(_read_param(weather_node, "cloud_margin_m")),
         cloud_thickness_m=float(_read_param(weather_node, "cloud_thickness_m")),
-        visibility_m=float(_read_param(weather_node, "visibility_m")),
+        fog_visibility=float(_read_param(weather_node, "fog_visibility")),
         temperature_c=float(_read_param(weather_node, "temperature_c")),
         time_of_day_h=float(_read_param(weather_node, "time_of_day_h")),
         rain_scale=float(_read_param(weather_node, "rain_scale")),
-        settle_s=float(_read_param(weather_node, "xplane_weather_settle_s")),
+        load_texture_duration=float(_read_param(weather_node, "load_texture_duration")),
+        weather_effect_duration=float(_read_param(weather_node, "weather_effect_duration")),
     )
 
     # Delai de settle apres chaque teleport camera (per-machine / per-scenario).
     # Independant de la meteo mais loge dans le node weather pour rester groupe
-    # avec xplane_weather_settle_s. Plombe via poses_cam_export.json.
-    xplane_pose_settle_s = float(_read_param(weather_node, "xplane_pose_settle_s"))
+    # avec load_texture_duration / weather_effect_duration. Plombe via poses_cam_export.json.
+    screenshot_duration = float(_read_param(weather_node, "screenshot_duration"))
 
     if has_weather(weather_cfg):
         validate_weather(weather_cfg)
@@ -123,8 +124,8 @@ def export(root_node, path):
             parts.append(f"precip={weather_cfg.precip_rate:.2f}")
         if weather_cfg.cloud_type >= 0:
             parts.append(f"cloud_type={weather_cfg.cloud_type:.0f} cov={weather_cfg.cloud_coverage:.1f}")
-        if weather_cfg.visibility_m < 50000:
-            parts.append(f"vis={weather_cfg.visibility_m:.0f}m")
+        if weather_cfg.fog_visibility < 50000:
+            parts.append(f"vis={weather_cfg.fog_visibility:.0f}m")
         if weather_cfg.temperature_c < 0:
             parts.append(f"temp={weather_cfg.temperature_c:.0f}C")
         if weather_cfg.time_of_day_h != 12.0:
@@ -194,7 +195,7 @@ def export(root_node, path):
             "wind_direction_deg": wind_direction_deg,
             "stabilization_distance_m": stabilization_distance_m,
             "airport_runway": f"{airport}_{runway}",
-            "xplane_pose_settle_s": xplane_pose_settle_s,
+            "screenshot_duration": screenshot_duration,
         },
     )
 

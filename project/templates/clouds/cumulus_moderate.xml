@@ -107,7 +107,7 @@
             <parameter name="cloud_thickness_m"   type="real" min="2000" max="2000"/>
 
             <!-- Visibilite (m) -->
-            <parameter name="visibility_m"        type="real" min="50000" max="50000"/>
+            <parameter name="fog_visibility"      type="real" min="50000" max="50000"/>
 
             <!-- Temperature (C) ; < 0 => precip basculee en neige -->
             <parameter name="temperature_c"       type="real" min="15" max="15"/>
@@ -128,15 +128,22 @@
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
             <parameter name="time_of_day_h"           type="real" min="15"    max="15"/>
 
-            <!-- Délai stabilisation météo/textures avant capture -->
-            <parameter name="xplane_weather_settle_s" type="real" min="10"    max="10"/>
+            <!-- Délai chargement textures de la zone + stabilisation nuages GPU
+                 (vitesse sim normale). Appliqué à TOUS les scénarios. -->
+            <parameter name="load_texture_duration"   type="real" min="10"    max="10"/>
+
+            <!-- Délai accumulation effets sol : flaques de pluie / couche de neige.
+                 Sim accélérée 8x → durée_réelle x8 de météo simulée.
+                 Ignoré si precip_rate=0. Mettre 0 pour de la pluie SANS
+                 accumulation (la pluie tombe mais la piste reste sèche). -->
+            <parameter name="weather_effect_duration" type="real" min="8"     max="8"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s).
                 Pas trop bas car sinon décalage image avec les poses (vérifiable avec bbox lard)
-                   - sans pluie/neige : mettre un settle_s bref
+                   - sans pluie/neige : valeur brève
                    - avec pluie/neige : >= 0.07 (laisse spawn les particules)-->
                
-            <parameter name="xplane_pose_settle_s"    type="real" min="0.07"  max="0.07"/>
+            <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>
 
         </node>
 

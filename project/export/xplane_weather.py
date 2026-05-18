@@ -5,15 +5,19 @@ Gere la configuration et injection des effets meteo dans X-Plane 12
 via le plugin PI_weather.py (XPPython3 / XPLMWeather API).
 
 La meteo est injectee UNE FOIS avant le rendu d'un scenario (pas per-frame).
-Le pipeline attend WeatherConfig.settle_s secondes (configurable via XML
-parametre xplane_weather_settle_s, defaut 15s) pour la stabilisation GPU
-des nuages et le chargement des textures de la zone teleportee.
+Deux delais distincts sont appliques avant la capture, configurables via XML :
+  - load_texture_duration   : chargement des textures de la zone teleportee
+    + stabilisation GPU des nuages. Vitesse sim normale, applique a TOUS
+    les scenarios.
+  - weather_effect_duration : accumulation des effets sol (flaques de pluie,
+    couche de neige) en sim acceleree 8x. Applique uniquement si
+    precip_rate > 0 ; mettre 0 pour de la pluie sans accumulation.
 
 Parametres directs XP12 (plus de severity/from_pct/to_pct) :
   - precip_rate     : taux precipitation [0, 1]
   - cloud_type      : enum XPLMWeather (0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus, -1=off)
   - cloud_coverage  : couverture nuageuse [0, 1]
-  - visibility_m    : visibilite en metres [500, 50000]
+  - fog_visibility  : visibilite en metres [500, 50000]
   - temperature_c   : temperature Celsius [-30, 45] — < 0 = neige
   - time_of_day_h   : heure locale [0, 24]
 
@@ -37,16 +41,15 @@ import pytz
 _TZ_FINDER = TimezoneFinder()
 
 
-# Temps de stabilisation nuages GPU (secondes) — fallback par defaut
-# Teste a ~5-10s avec updateImmediately=True sur XP12
-# La valeur effective est lue depuis WeatherConfig.settle_s (parametre XML)
-DEFAULT_SETTLE_S = 15.0
+# Delais par defaut (fallback) — les valeurs effectives sont lues depuis
+# WeatherConfig (parametres XML load_texture_duration / weather_effect_duration).
+DEFAULT_LOAD_TEXTURE_DURATION = 10.0    # chargement textures + stabilisation nuages GPU
+DEFAULT_WEATHER_EFFECT_DURATION = 8.0   # accumulation flaques/neige (sim acceleree)
 
-# Acceleration sim pour accumulation effets sol (flaques, neige)
-# On accelere la sim a SIM_SPEED_BOOST pendant ACCUMULATION_REAL_S secondes
-# puis on revient a 1x. Ex: 8x pendant 5s reel = 40s de meteo simulee.
+# Acceleration sim pendant la phase d'accumulation des effets sol (flaques,
+# neige). La sim tourne a SIM_SPEED_BOOST puis revient a 1x.
+# Ex: 8x pendant 8s reel = ~64s de meteo simulee.
 SIM_SPEED_BOOST = 8
-ACCUMULATION_REAL_S = 5
 
 
 @dataclass
@@ -57,18 +60,19 @@ class WeatherConfig:
     cloud_coverage: float = 0.0
     cloud_margin_m: float = 200.0    # marge au-dessus de l'avion pour base nuages
     cloud_thickness_m: float = 2000.0  # epaisseur du nuage (alt_top = alt_base + thickness)
-    visibility_m: float = 50000.0
+    fog_visibility: float = 50000.0  # visibilite en metres (brouillard si < 50000)
     temperature_c: float = 15.0
     time_of_day_h: float = 12.0
     rain_scale: float = 1.0          # taille visuelle des gouttes (sim/private/controls/rain/scale)
-    settle_s: float = DEFAULT_SETTLE_S  # delai stabilisation meteo/textures avant capture (s)
+    load_texture_duration: float = DEFAULT_LOAD_TEXTURE_DURATION      # delai chargement textures + stabilisation nuages (s, vitesse normale)
+    weather_effect_duration: float = DEFAULT_WEATHER_EFFECT_DURATION  # delai accumulation flaques/neige (s, sim 8x ; ignore si precip=0)
 
 
 def has_weather(config):
     """Retourne True si la config modifie la meteo par rapport au defaut."""
     return (config.precip_rate > 0
             or config.cloud_type >= 0
-            or config.visibility_m < 50000
+            or config.fog_visibility < 50000
             or config.temperature_c < 0
             or config.time_of_day_h != 12.0)
 
@@ -81,16 +85,18 @@ def validate_weather(config):
         raise ValueError(f"cloud_type={config.cloud_type} hors [-1, 3]")
     if not 0.0 <= config.cloud_coverage <= 1.0:
         raise ValueError(f"cloud_coverage={config.cloud_coverage} hors [0, 1]")
-    if not 500 <= config.visibility_m <= 50000:
-        raise ValueError(f"visibility_m={config.visibility_m} hors [500, 50000]")
+    if not 500 <= config.fog_visibility <= 50000:
+        raise ValueError(f"fog_visibility={config.fog_visibility} hors [500, 50000]")
     if not -30 <= config.temperature_c <= 45:
         raise ValueError(f"temperature_c={config.temperature_c} hors [-30, 45]")
     if not 0 <= config.time_of_day_h <= 24:
         raise ValueError(f"time_of_day_h={config.time_of_day_h} hors [0, 24]")
     if not 0.1 <= config.rain_scale <= 5.0:
         raise ValueError(f"rain_scale={config.rain_scale} hors [0.1, 5.0]")
-    if not 0.0 <= config.settle_s <= 60.0:
-        raise ValueError(f"settle_s={config.settle_s} hors [0, 60]")
+    if not 0.0 <= config.load_texture_duration <= 60.0:
+        raise ValueError(f"load_texture_duration={config.load_texture_duration} hors [0, 60]")
+    if not 0.0 <= config.weather_effect_duration <= 60.0:
+        raise ValueError(f"weather_effect_duration={config.weather_effect_duration} hors [0, 60]")
 
 
 def local_hour_to_zulu(local_hour, lat, lon, date=None):
@@ -130,8 +136,10 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, latitude=0.0, longitu
     :param latitude: latitude de l'aeroport (pour conversion heure locale → UTC via fuseau politique)
     :param longitude: longitude de l'aeroport (pour conversion heure locale → UTC)
     """
-    visibility = config.visibility_m
+    visibility = config.fog_visibility
 
+    # NB : la cle "visibility_m" est le nom attendu par le plugin XPPython3
+    # (protocole JSON), distinct du champ XML/WeatherConfig "fog_visibility".
     params = {
         "precip_rate": config.precip_rate,
         "visibility_m": visibility,
@@ -323,8 +331,8 @@ def inject_weather(config, aircraft_max_alt_m=200.0, latitude=0.0, longitude=0.0
         cloud_names = {0: "Cirrus", 1: "Stratus", 2: "Cumulus", 3: "Cumulonimbus"}
         parts.append(f"clouds={cloud_names.get(int(config.cloud_type), '?')}"
                      f"({config.cloud_coverage:.0%})")
-    if config.visibility_m < 50000:
-        parts.append(f"vis={config.visibility_m:.0f}m")
+    if config.fog_visibility < 50000:
+        parts.append(f"vis={config.fog_visibility:.0f}m")
     if config.temperature_c < 0:
         parts.append(f"temp={config.temperature_c:.0f}C (neige)")
     if config.time_of_day_h != 12.0:
@@ -337,24 +345,25 @@ def inject_weather(config, aircraft_max_alt_m=200.0, latitude=0.0, longitude=0.0
 
     print(f"  [WEATHER] Injecte : {', '.join(parts)}")
 
-    # Attente stabilisation nuages GPU + textures (configurable via XML)
-    settle_s = float(config.settle_s)
-    needs_cloud_wait = (config.cloud_type >= 0 and config.cloud_coverage > 0) or config.precip_rate > 0
-    if needs_cloud_wait:
-        # Si precip active, accelerer pendant la stabilisation nuages
-        # pour accumuler les effets sol (flaques, neige) sans temps supplementaire
-        if config.precip_rate > 0:
-            print(f"  [WEATHER] Stabilisation {settle_s:.1f}s en {SIM_SPEED_BOOST}x "
-                  f"(accumulation flaques/neige)...")
-            set_sim_speed(SIM_SPEED_BOOST)
-            time.sleep(settle_s)
-            set_sim_speed(1)
-        else:
-            print(f"  [WEATHER] Attente {settle_s:.1f}s stabilisation nuages...")
-            time.sleep(settle_s)
-    else:
-        # Visibilite/brouillard seul = quasi-instantane (cap a 3s, ne depasse pas settle_s)
-        time.sleep(min(3.0, settle_s))
+    # Phase 1 — chargement des textures de la zone teleportee + stabilisation
+    # GPU des nuages. Wall-clock : la vitesse sim n'accelere pas le streaming
+    # des textures. Toujours applique, meme sans precipitation.
+    load_texture_duration = float(config.load_texture_duration)
+    if load_texture_duration > 0:
+        print(f"  [WEATHER] Chargement textures + stabilisation nuages "
+              f"{load_texture_duration:.1f}s...")
+        time.sleep(load_texture_duration)
+
+    # Phase 2 — accumulation des effets sol (flaques de pluie, couche de neige).
+    # Sim acceleree pour simuler plusieurs minutes de meteo en quelques secondes
+    # reelles. Applique uniquement si precip active ET duree > 0 (0 = pas
+    # d'accumulation : la pluie tombe mais la piste reste seche).
+    weather_effect_duration = float(config.weather_effect_duration)
+    if config.precip_rate > 0 and weather_effect_duration > 0:
+        print(f"  [WEATHER] Accumulation flaques/neige {weather_effect_duration:.1f}s")
+        set_sim_speed(SIM_SPEED_BOOST)
+        time.sleep(weather_effect_duration)
+        set_sim_speed(1)
 
     print(f"  [WEATHER] Stabilisation terminee")
     return True

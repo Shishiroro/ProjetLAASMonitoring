@@ -29,7 +29,7 @@ END_MARKER = "<!-- @@WEATHER_BLOCK_END@@ -->"
 # Les 8 params meteo remplaces, dans l'ordre d'emission.
 PARAM_ORDER = [
     "precip_rate", "cloud_type", "cloud_coverage", "cloud_thickness_m",
-    "visibility_m", "temperature_c", "rain_scale", "cloud_margin_m",
+    "fog_visibility", "temperature_c", "rain_scale", "cloud_margin_m",
 ]
 
 PARAM_COMMENT = {
@@ -37,7 +37,7 @@ PARAM_COMMENT = {
     "cloud_type":        "-1=Cb auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus",
     "cloud_coverage":    "Couverture nuageuse [0-1]",
     "cloud_thickness_m": "Epaisseur nuage (m) ; 0 => pas de particules",
-    "visibility_m":      "Visibilite (m)",
+    "fog_visibility":    "Visibilite (m)",
     "temperature_c":     "Temperature (C) ; < 0 => precip basculee en neige",
     "rain_scale":        "Taille gouttes (visuel) ; ignore si precip=0",
     "cloud_margin_m":    "Marge base nuages au-dessus de l'avion (m)",
@@ -50,7 +50,7 @@ DEFAULTS = {
     "cloud_type":        (-1, -1),
     "cloud_coverage":    (0, 0),
     "cloud_thickness_m": (0, 0),
-    "visibility_m":      (50000, 50000),
+    "fog_visibility":    (50000, 50000),
     "temperature_c":     (15, 15),
     "rain_scale":        (1, 1),
     "cloud_margin_m":    (2000, 2000),
@@ -63,9 +63,9 @@ CLOUD_MARGIN = (1500, 3000)
 # Tout param absent garde sa valeur DEFAULTS.
 PRESETS = {
     # --- Brouillard : visibilite seule (cloud_type=-1, precip=0) ---
-    ("fog", "fog_light"):    {"visibility_m": (10000, 15000)},
-    ("fog", "fog_moderate"): {"visibility_m": (4000, 10000)},
-    ("fog", "fog_heavy"):    {"visibility_m": (1000, 4000)},
+    ("fog", "fog_light"):    {"fog_visibility": (10000, 15000)},
+    ("fog", "fog_moderate"): {"fog_visibility": (4000, 10000)},
+    ("fog", "fog_heavy"):    {"fog_visibility": (1000, 4000)},
 
     # --- Nuages : precip=0, cloud_type fixe, coverage/thickness par intensite ---
     # Cirrus (cloud_type=0)

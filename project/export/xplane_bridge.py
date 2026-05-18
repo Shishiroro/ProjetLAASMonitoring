@@ -93,7 +93,7 @@ class XPlaneConfig:
     host: str = "127.0.0.1"
     port: int = 49000               # Port UDP X-Plane (reception)
     xplane_dir: str = ""            # Repertoire d'installation X-Plane
-    settle_time: float = 0.07       # Attente apres changement de pose (sec) — surcharge via XML param xplane_pose_settle_s
+    settle_time: float = 0.07       # Attente apres changement de pose (sec) — surcharge via XML param screenshot_duration
     window_width: int = 1024        # Largeur zone client X-Plane (carre)
     window_height: int = 1024       # Hauteur zone client X-Plane (carre)
     fov_h: float = 60.0             # FOV horizontal (reglages X-Plane, 60° comme LARD)
@@ -728,7 +728,7 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
         )
 
         # Injecter la meteo (per-scenario, une seule fois) APRES teleportation
-        # La stabilisation (WeatherConfig.settle_s, configurable via XML)
+        # La stabilisation (load_texture_duration / weather_effect_duration, via XML)
         # laisse le temps a X-Plane de charger les textures
         # IMPORTANT : on unpause la sim avant injection pour que les particules
         # de pluie/neige soient generees (avec sim pausee, X-Plane ne spawn rien).
@@ -848,11 +848,11 @@ def render_run(run_dir, xplane_dir):
 
     print(f"\n  [XPLANE] Rendu de {run_dir.name}...")
 
-    # Charge le poses JSON pour recuperer xplane_pose_settle_s (delai apres
+    # Charge le poses JSON pour recuperer screenshot_duration (delai apres
     # teleport camera). Si absent (anciens runs), conserve le defaut XPlaneConfig.
     with open(poses_file) as f:
         poses_data = json.load(f)
-    pose_settle = (poses_data.get("trajectory") or {}).get("xplane_pose_settle_s")
+    pose_settle = (poses_data.get("trajectory") or {}).get("screenshot_duration")
 
     config = XPlaneConfig(xplane_dir=xplane_dir)
     if pose_settle is not None:
