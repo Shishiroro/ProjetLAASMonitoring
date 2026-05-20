@@ -107,7 +107,7 @@
             <parameter name="fog_visibility"          type="real" min="50000" max="50000"/>
 
             <!-- Temperature (°C) : pluie vs neige -->
-            <parameter name="temperature_c"           type="real" min="-15"   max="45"/>
+            <parameter name="temperature_c"           type="real" min="-15"   max="0"/>
 
             <!-- Taille gouttes (visuel uniquement, dataref privé XP12, susceptible
                  d'être cassé dans de futures versions).

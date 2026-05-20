@@ -341,14 +341,14 @@ def snow(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     severity : 0 = leger (seuil eleve, peu de pixels touches)
                1 = lourd (seuil bas, blanchiment massif)
     Mapping severity -> params albumentations :
-      snow_point        : 0.30 -> 0.05  (defaut alb : range (0.1, 0.3))
-      brightness_coeff  : 1.5  -> 3.0   (defaut alb : 2.5)
+      snow_point        : 0.30 -> 0.05  (plage [0.05, 0.30])
+      brightness_coeff  : 2.0  -> 3.0   (plage [2, 3])
     """
     import logging
     logging.getLogger("albumentations").setLevel(logging.WARNING)
     import albumentations as A
     snow_point = 0.30 - severity * 0.25
-    brightness_coeff = 1.5 + severity * 1.5
+    brightness_coeff = 2.0 + severity * 1.0
     # albumentations attend RGB ; notre pipeline est BGR (cv2)
     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     transform = A.RandomSnow(
