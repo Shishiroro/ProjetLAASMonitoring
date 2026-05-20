@@ -64,6 +64,7 @@ class WeatherConfig:
     temperature_c: float = 15.0
     time_of_day_h: float = 12.0
     rain_scale: float = 1.0          # taille visuelle des gouttes (sim/private/controls/rain/scale)
+    weather_zone_radius_nm: float = 50.0  # rayon de la zone meteo XPLMWeather (nm ; 1 nm = 1.852 km)
     load_texture_duration: float = DEFAULT_LOAD_TEXTURE_DURATION      # delai chargement textures + stabilisation nuages (s, vitesse normale)
     weather_effect_duration: float = DEFAULT_WEATHER_EFFECT_DURATION  # delai accumulation flaques/neige (s, sim 8x ; ignore si precip=0)
 
@@ -93,6 +94,8 @@ def validate_weather(config):
         raise ValueError(f"time_of_day_h={config.time_of_day_h} hors [0, 24]")
     if not 0.1 <= config.rain_scale <= 5.0:
         raise ValueError(f"rain_scale={config.rain_scale} hors [0.1, 5.0]")
+    if not 1.0 <= config.weather_zone_radius_nm <= 10000.0:
+        raise ValueError(f"weather_zone_radius_nm={config.weather_zone_radius_nm} hors [1, 10000]")
     if not 0.0 <= config.load_texture_duration <= 60.0:
         raise ValueError(f"load_texture_duration={config.load_texture_duration} hors [0, 60]")
     if not 0.0 <= config.weather_effect_duration <= 60.0:
@@ -143,7 +146,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, latitude=0.0, longitu
     params = {
         "precip_rate": config.precip_rate,
         "visibility_m": visibility,
-        "radius_nm": 50.0,
+        "radius_nm": config.weather_zone_radius_nm,
         "max_alt_ft": 30000.0,
     }
 

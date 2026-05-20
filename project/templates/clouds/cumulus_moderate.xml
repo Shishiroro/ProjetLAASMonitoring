@@ -144,10 +144,15 @@
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
+            <parameter name="load_texture_duration"   type="real" min="3"     max="3"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>
+
+            <!-- Rayon de la zone meteo injectee dans XPLMWeather (nm ; 1 nm = 1.852 km).
+                 Plus le rayon est petit, plus la meteo est concentree localement.
+                 Plus il est grand, plus on voit les nuages au loin. -->
+            <parameter name="weather_zone_radius_nm"  type="real" min="50"    max="50"/>
 
         </node>
 
@@ -310,8 +315,7 @@
             </node>
             <!-- Gouttelettes / eclaboussures sur la lentille
                  (albumentations.Spatter mode 'rain') : seul gauss_sigma depend
-                 de severity (2 -> 5), tous les autres parametres sont fixes
-                 aux defauts du site albumentations. -->
+                 de severity (2 -> 5), bcp de gouttelettes -> peu de gouttes-->
             <node name="droplets">
                 <parameter name="severity"     type="real" min="0"   max="0"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
@@ -327,7 +331,7 @@
             <!-- Neige (albumentations.RandomSnow methode bleach) : blanchiment HLS
                  des pixels au-dessus d'un seuil. severity 0=leger, 1=lourd. -->
             <node name="snow">
-                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="severity"     type="real" min="0.6"   max="0.6"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>

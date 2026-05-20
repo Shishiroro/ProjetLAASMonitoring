@@ -95,8 +95,8 @@
             <!-- cloud_type :
                   -1 = pas de nuages manuels (avec precip=0 -> ciel degage)
                    0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus -->
-            <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
-            <parameter name="cloud_coverage"          type="real" min="0"     max="0"/>
+            <parameter name="cloud_type"              type="real" min="3"    max="3"/>
+            <parameter name="cloud_coverage"          type="real" min="1"     max="1"/>
 
             <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
                  IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
@@ -107,7 +107,7 @@
             <parameter name="fog_visibility"          type="real" min="50000" max="50000"/>
 
             <!-- Temperature (°C) : pluie vs neige -->
-            <parameter name="temperature_c"           type="real" min="-15"   max="0"/>
+            <parameter name="temperature_c"           type="real" min="0"   max="45"/>
 
             <!-- Taille gouttes (visuel uniquement, dataref privé XP12, susceptible
                  d'être cassé dans de futures versions).
@@ -125,7 +125,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="10"     max="10"/>
+            <parameter name="weather_effect_duration" type="real" min="0"     max="0"/>
 
         </node>
 
@@ -143,10 +143,16 @@
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
+            <parameter name="load_texture_duration"   type="real" min="3"     max="3"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>
+
+            <!-- Rayon de la zone meteo injectee dans XPLMWeather (nm ; 1 nm = 1.852 km).
+                 Plus le rayon est petit, plus la meteo est concentree localement.
+                 Plus il est grand, plus on voit les nuages au loin.
+                 Recommendation =50 pour utilisation générale (effets météos constants), ou plusieurs centaines pour effets plus jolis -->
+            <parameter name="weather_zone_radius_nm"  type="real" min="50"    max="50"/>
 
         </node>
 
@@ -311,13 +317,13 @@
                  (albumentations.Spatter mode 'rain') : seul gauss_sigma depend
                  de severity (2 -> 5), bcp de gouttelettes -> peu de gouttes-->
             <node name="droplets">
-                <parameter name="severity"     type="real" min="1"   max="1"/>
+                <parameter name="severity"     type="real" min="0"   max="0"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
             </node>
             <node name="fog">
-                <parameter name="severity"     type="real" min="0.3"   max="0.3"/>
+                <parameter name="severity"     type="real" min="0"   max="0"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
@@ -325,7 +331,7 @@
             <!-- Neige (albumentations.RandomSnow methode bleach) : blanchiment HLS
                  des pixels au-dessus d'un seuil. severity 0=leger, 1=lourd. -->
             <node name="snow">
-                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="severity"     type="real" min="0.6"   max="0.6"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>

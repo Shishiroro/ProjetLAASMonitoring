@@ -109,6 +109,7 @@ def export(root_node, path):
         temperature_c=float(_read_param(weather_node, "temperature_c")),
         time_of_day_h=float(_read_param(settings_node, "time_of_day_h")),
         rain_scale=float(_read_param(weather_node, "rain_scale")),
+        weather_zone_radius_nm=float(_read_param(settings_node, "weather_zone_radius_nm")),
         load_texture_duration=float(_read_param(settings_node, "load_texture_duration")),
         weather_effect_duration=float(_read_param(weather_node, "weather_effect_duration")),
     )
