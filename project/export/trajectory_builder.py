@@ -318,7 +318,10 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     # que causait la derivee brute (echec v3).
     # Gain ~2.0 : 1 deg/s de deviation laterale → 2 deg de roll.
     roll_lateral_gain = 2.0
-    ema_alpha = 0.15  # coeff EMA (0=pas de filtre, 1=tout lisse). 0.15 ≈ cutoff ~1Hz a 10fps
+    # Filtre passe-bas du 1er ordre : ema_alpha = 1 - exp(-dt/tau_filter).
+    # tau_filter=0.615s reproduit l'ancien comportement fixe ema_alpha=0.15 a fps=10.
+    tau_filter_s = 0.615
+    ema_alpha = 1.0 - np.exp(-dt_frame / tau_filter_s)
     d_alpha_h = np.diff(alpha_h_dev, prepend=alpha_h_dev[0]) / dt_frame  # derivee deg/s
     # Filtre EMA passe-bas sur la derivee
     d_alpha_h_filtered = np.zeros_like(d_alpha_h)

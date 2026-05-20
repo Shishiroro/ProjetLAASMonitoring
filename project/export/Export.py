@@ -134,8 +134,8 @@ def export(root_node, path):
             parts.append(f"heure={weather_cfg.time_of_day_h:.1f}h")
         print(f"[Export] Meteo : {', '.join(parts)}")
 
-    # --- Calcul auto de tau  ---
-    # A nos altitudes (~300m max), , donc tau ≈ h / V
+    # --- Calcul auto de tau (Dryden simplifie) ---
+    # tau ≈ h / V, ou h = altitude geometrique au debut du segment (3° de glide).
     h_m = along_track_distance_start * math.tan(math.radians(3.0))
     speed_ms = ground_speed_kts * 0.514444
     correlation_time_s = h_m / speed_ms
@@ -155,7 +155,7 @@ def export(root_node, path):
     ou = OUParams(alpha_h_offset_deg=0, alpha_v_offset_deg=0)
 
     # --- Geometrie piste ---
-    rwy = get_runway_geometry(airport, runway, dist_ap_m=ou.dist_ap_m)
+    rwy = get_runway_geometry(airport, runway)
 
     # --- Generer la trajectoire ---
     print(f"[Export] {airport}/{runway} | fps={fps} | "

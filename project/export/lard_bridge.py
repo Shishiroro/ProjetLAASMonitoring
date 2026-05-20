@@ -54,7 +54,7 @@ def _lard_cwd():
         os.chdir(prev)
 
 
-def get_runway_geometry(airport, runway, dist_ap_m=300.0):
+def get_runway_geometry(airport, runway):
     """
     Recupere la geometrie d'une piste (DB X-Plane).
 
@@ -67,8 +67,11 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
+    # compute_aiming_point exige dist_m mais on jette l'aiming point retourne.
+    # La distance reelle d'aiming est appliquee dans trajectory_builder.build_trajectory
+    # via OUParams.dist_ap_m (altitude = -tan(alpha_v) * (distance + dist_ap_m)).
     _, _, rwy_psi, ltp, fpap = compute_aiming_point(
-        RUNWAY_DB_XPLANE, airport, runway, dist_ap_m
+        RUNWAY_DB_XPLANE, airport, runway, 0.0
     )
     ltp_lat, ltp_lon, ltp_alt = ecef2llh(ltp[0], ltp[1], ltp[2])
 
@@ -85,19 +88,23 @@ def get_runway_geometry(airport, runway, dist_ap_m=300.0):
 # Generation de timestamps pour chaque frame (au format attendu par LARD)
 # ---------------------------------------------------------------------------
 
-def generate_frame_times(n_frames, fps):
+def generate_frame_times(n_frames, fps, seed=None):
     """
     Genere un timestamp par frame (date/heure aleatoire, increment 1/fps).
 
     LARD attend un dict {year, month, day, hour, minute, second} par frame.
     On choisit une date/heure de base aleatoire puis on incremente.
+
+    :param seed: si fourni, la date/heure de base est deterministe (utile pour
+                 reproduire un meme CSV GT a partir du meme scenario).
     """
-    base_year = random.randint(2020, 2025)
-    base_month = random.randint(1, 12)
-    base_day = random.randint(1, 28)
-    base_hour = random.randint(9, 16)  # heures de plein jour (evite crepuscule)
-    base_minute = random.randint(0, 59)
-    base_second = random.randint(0, 59)
+    rng = random.Random(seed)
+    base_year = rng.randint(2020, 2025)
+    base_month = rng.randint(1, 12)
+    base_day = rng.randint(1, 28)
+    base_hour = rng.randint(9, 16)  # heures de plein jour (evite crepuscule)
+    base_minute = rng.randint(0, 59)
+    base_second = rng.randint(0, 59)
 
     dt_frame = 1.0 / fps
     times = []
