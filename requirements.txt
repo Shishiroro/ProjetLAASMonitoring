@@ -21,6 +21,12 @@ torch
 pandas
 matplotlib
 
+# Fautes capteur camera (glass_blur, snow)
+albumentations
+
+# Notebook (kernel Jupyter)
+ipykernel
+
 # Windows only (gestion fenetre X-Plane, DPI-aware)
 pywin32; sys_platform == "win32"
 

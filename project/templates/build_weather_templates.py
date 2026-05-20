@@ -56,49 +56,52 @@ DEFAULTS = {
     "cloud_margin_m":    (2000, 2000),
 }
 
-# Marge nuages commune a tous les profils de nuages (plage echantillonnee par TAF).
-CLOUD_MARGIN = (1500, 3000)
+# Marge base nuages au-dessus de l'avion, par type (plage echantillonnee par TAF).
+# Calquee sur l'altitude reelle de chaque genre de nuage.
+MARGIN_CIRRUS  = (3000, 5000)  # cirrus = haute altitude
+MARGIN_STRATUS = (150, 800)     # plafond bas realiste
+MARGIN_CUMULUS = (600, 1800)
+MARGIN_CB      = (600, 1400)
 
 # PRESETS : (sous_dossier, nom_fichier) -> surcharges {param: (min, max)}
 # Tout param absent garde sa valeur DEFAULTS.
 PRESETS = {
-    # --- Brouillard : visibilite seule (cloud_type=-1, precip=0) ---
+    # --- Brouillard 
     ("fog", "fog_light"):    {"fog_visibility": (10000, 15000)},
     ("fog", "fog_moderate"): {"fog_visibility": (4000, 10000)},
     ("fog", "fog_heavy"):    {"fog_visibility": (1000, 4000)},
 
     # --- Nuages : precip=0, cloud_type fixe, coverage/thickness par intensite ---
     # Cirrus (cloud_type=0)
-    ("clouds", "cirrus_light"):    {"cloud_type": (0, 0), "cloud_coverage": (0.3, 0.5), "cloud_thickness_m": (600, 600),   "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "cirrus_moderate"): {"cloud_type": (0, 0), "cloud_coverage": (0.5, 0.7), "cloud_thickness_m": (1000, 1000), "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "cirrus_heavy"):    {"cloud_type": (0, 0), "cloud_coverage": (0.7, 1.0), "cloud_thickness_m": (1500, 1500), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cirrus_light"):    {"cloud_type": (0, 0), "cloud_coverage": (0.3, 0.5), "cloud_thickness_m": (600, 600),   "cloud_margin_m": MARGIN_CIRRUS},
+    ("clouds", "cirrus_moderate"): {"cloud_type": (0, 0), "cloud_coverage": (0.5, 0.7), "cloud_thickness_m": (1000, 1000), "cloud_margin_m": MARGIN_CIRRUS},
+    ("clouds", "cirrus_heavy"):    {"cloud_type": (0, 0), "cloud_coverage": (0.7, 1.0), "cloud_thickness_m": (1500, 1500), "cloud_margin_m": MARGIN_CIRRUS},
     # Stratus (cloud_type=1)
-    ("clouds", "stratus_light"):    {"cloud_type": (1, 1), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (300, 300), "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "stratus_moderate"): {"cloud_type": (1, 1), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (500, 500), "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "stratus_heavy"):    {"cloud_type": (1, 1), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (800, 800), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "stratus_light"):    {"cloud_type": (1, 1), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (300, 300), "cloud_margin_m": MARGIN_STRATUS},
+    ("clouds", "stratus_moderate"): {"cloud_type": (1, 1), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (500, 500), "cloud_margin_m": MARGIN_STRATUS},
+    ("clouds", "stratus_heavy"):    {"cloud_type": (1, 1), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (800, 800), "cloud_margin_m": MARGIN_STRATUS},
     # Cumulus (cloud_type=2)
-    ("clouds", "cumulus_light"):    {"cloud_type": (2, 2), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (1000, 1000), "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "cumulus_moderate"): {"cloud_type": (2, 2), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (2000, 2000), "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "cumulus_heavy"):    {"cloud_type": (2, 2), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (3000, 3000), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cumulus_light"):    {"cloud_type": (2, 2), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (1000, 1000), "cloud_margin_m": MARGIN_CUMULUS},
+    ("clouds", "cumulus_moderate"): {"cloud_type": (2, 2), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (2000, 2000), "cloud_margin_m": MARGIN_CUMULUS},
+    ("clouds", "cumulus_heavy"):    {"cloud_type": (2, 2), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (3000, 3000), "cloud_margin_m": MARGIN_CUMULUS},
     # Cumulonimbus (cloud_type=3)
-    ("clouds", "cumulonimbus_light"):    {"cloud_type": (3, 3), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (6000, 6000),   "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "cumulonimbus_moderate"): {"cloud_type": (3, 3), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (8000, 8000),   "cloud_margin_m": CLOUD_MARGIN},
-    ("clouds", "cumulonimbus_heavy"):    {"cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "cloud_margin_m": CLOUD_MARGIN},
+    ("clouds", "cumulonimbus_light"):    {"cloud_type": (3, 3), "cloud_coverage": (0.3, 0.3), "cloud_thickness_m": (6000, 6000),   "cloud_margin_m": MARGIN_CB},
+    ("clouds", "cumulonimbus_moderate"): {"cloud_type": (3, 3), "cloud_coverage": (0.7, 0.7), "cloud_thickness_m": (8000, 8000),   "cloud_margin_m": MARGIN_CB},
+    ("clouds", "cumulonimbus_heavy"):    {"cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "cloud_margin_m": MARGIN_CB},
 
     # --- Pluie : precip + Cumulonimbus auto (cloud_type=-1) ---
     ("rain", "rain_light"):    {"precip_rate": (0.3, 0.3), "rain_scale": (1, 1),     "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 2000)},
-    ("rain", "rain_moderate"): {"precip_rate": (0.6, 0.6), "rain_scale": (2.0, 2.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+    ("rain", "rain_moderate"): {"precip_rate": (0.6, 0.6), "rain_scale": (2.5, 2.5), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
     ("rain", "rain_heavy"):    {"precip_rate": (1.0, 1.0), "rain_scale": (5.0, 5.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
 
     # --- Neige : precip + T < 0 (XP12 bascule les particules en neige) ---
     # NB : temperature plafonnee a -2 C (et non 0) pour garantir la neige.
-    ("snow", "snow_light"):    {"precip_rate": (0.3, 0.3), "temperature_c": (-15, -2),  "rain_scale": (1, 1),     "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 2000)},
-    ("snow", "snow_moderate"): {"precip_rate": (0.6, 0.6), "temperature_c": (-15, -2),  "rain_scale": (2.0, 2.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+    ("snow", "snow_light"):    {"precip_rate": (0.3, 0.3), "temperature_c": (-15, -15),  "rain_scale": (1, 1),     "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 2000)},
+    ("snow", "snow_moderate"): {"precip_rate": (0.6, 0.6), "temperature_c": (-15, -15),  "rain_scale": (2.5, 2.5), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
     ("snow", "snow_heavy"):    {"precip_rate": (1.0, 1.0), "temperature_c": (-15, -15), "rain_scale": (5.0, 5.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
 
-    # --- Ciel degage : aucune meteo. cloud_type=0 + coverage=0 force une
-    #     injection effective qui clear toutes les couches de nuages. ---
-    ("clear", "clear"): {"cloud_type": (0, 0), "cloud_thickness_m": (10, 10)},
+  
+    ("clear", "clear"): {"cloud_type": (0, 0), "cloud_thickness_m": (10, 10)}, #OK
 }
 
 

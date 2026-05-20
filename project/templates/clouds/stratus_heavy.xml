@@ -116,7 +116,7 @@
             <parameter name="rain_scale"          type="real" min="1" max="1"/>
 
             <!-- Marge base nuages au-dessus de l'avion (m) -->
-            <parameter name="cloud_margin_m"      type="real" min="1500" max="3000"/>
+            <parameter name="cloud_margin_m"      type="real" min="150" max="800"/>
 
             <!-- @@WEATHER_BLOCK_END@@ -->
 
@@ -126,7 +126,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="5"     max="5"/>
+            <parameter name="weather_effect_duration" type="real" min="0"     max="0"/>
 
         </node>
 
@@ -140,7 +140,7 @@
         <node name="settings">
 
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
-            <parameter name="time_of_day_h"           type="real" min="12"    max="15"/>
+            <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
@@ -303,6 +303,16 @@
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
             </node>
             <node name="dirt_on_lens">
+                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
+            <!-- Gouttelettes / eclaboussures sur la lentille
+                 (albumentations.Spatter mode 'rain') : seul gauss_sigma depend
+                 de severity (2 -> 5), tous les autres parametres sont fixes
+                 aux defauts du site albumentations. -->
+            <node name="droplets">
                 <parameter name="severity"     type="real" min="0"   max="0"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>

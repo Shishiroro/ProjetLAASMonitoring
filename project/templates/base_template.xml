@@ -90,13 +90,13 @@
 
             <!-- Precipitation : 0 = pas de pluie/neige.
                  Si > 0 ET cloud_type=-1 : Cumulonimbus force auto (sinon pas de source) -->
-            <parameter name="precip_rate"             type="real" min="0.4"   max="1"/>
+            <parameter name="precip_rate"             type="real" min="1"   max="1"/>
 
             <!-- cloud_type :
                   -1 = pas de nuages manuels (avec precip=0 -> ciel degage)
                    0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus -->
-            <parameter name="cloud_type"              type="real" min="3"    max="3"/>
-            <parameter name="cloud_coverage"          type="real" min="1"     max="1"/>
+            <parameter name="cloud_type"              type="real" min="-1"    max="-1"/>
+            <parameter name="cloud_coverage"          type="real" min="0"     max="0"/>
 
             <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
                  IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
@@ -104,7 +104,7 @@
             <parameter name="cloud_thickness_m"       type="real" min="6000"  max="6000"/>
 
             <!-- Visibilite (m) -->
-            <parameter name="fog_visibility"          type="real" min="10000" max="30000"/>
+            <parameter name="fog_visibility"          type="real" min="50000" max="50000"/>
 
             <!-- Temperature (°C) : pluie vs neige -->
             <parameter name="temperature_c"           type="real" min="-15"   max="45"/>
@@ -125,7 +125,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="5"     max="5"/>
+            <parameter name="weather_effect_duration" type="real" min="10"     max="10"/>
 
         </node>
 
@@ -139,7 +139,7 @@
         <node name="settings">
 
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
-            <parameter name="time_of_day_h"           type="real" min="12"    max="15"/>
+            <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
@@ -307,8 +307,17 @@
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
             </node>
+            <!-- Gouttelettes / eclaboussures sur la lentille
+                 (albumentations.Spatter mode 'rain') : seul gauss_sigma depend
+                 de severity (2 -> 5), bcp de gouttelettes -> peu de gouttes-->
+            <node name="droplets">
+                <parameter name="severity"     type="real" min="1"   max="1"/>
+                <parameter name="start_pct"    type="real" min="0"   max="0"/>
+                <parameter name="duration_pct" type="real" min="100" max="100"/>
+                <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>
+            </node>
             <node name="fog">
-                <parameter name="severity"     type="real" min="0"   max="0"/>
+                <parameter name="severity"     type="real" min="0.3"   max="0.3"/>
                 <parameter name="start_pct"    type="real" min="0"   max="0"/>
                 <parameter name="duration_pct" type="real" min="100" max="100"/>
                 <constraint name="bounded" expressions=".\start_pct + .\duration_pct INFEQ 100"/>

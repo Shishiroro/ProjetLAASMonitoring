@@ -17,14 +17,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-# 25 types de fautes capteur hardware
+# 26 types de fautes capteur hardware
 KNOWN_FAULT_TYPES = {
     "gaussian_noise", "shot_noise", "salt_pepper", "dead_pixels",
     "motion_blur", "defocus_blur", "glass_blur", "rolling_shutter",
     "overexposure", "underexposure",
     "vignetting", "chromatic_aberration", "radial_distortion", "lens_flare",
     "banding", "jpeg_artifacts", "color_shift", "channel_swap",
-    "condensation", "dirt_on_lens",
+    "condensation", "dirt_on_lens", "droplets",
     "fog", "snow", "zoom_blur", "contrast", "pixelate",
 }
 

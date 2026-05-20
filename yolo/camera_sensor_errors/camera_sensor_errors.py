@@ -309,6 +309,31 @@ def dirt_on_lens(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     return out
 
 
+def droplets(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
+    """Gouttelettes / eclaboussures sur la lentille (albumentations.Spatter, mode 'rain').
+
+    Seul gauss_sigma depend de severity (0 -> 2.0, 1 -> 5.0, plage du site
+    albumentations). Tous les autres parametres restent aux defauts du site.
+    """
+    import logging
+    logging.getLogger("albumentations").setLevel(logging.WARNING)
+    import albumentations as A
+    gauss_sigma = 2.0 + severity * 3.0  # 2.0 -> 5.0
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    transform = A.Spatter(
+        mean=(0.65, 0.65),
+        std=(0.3, 0.3),
+        gauss_sigma=(gauss_sigma, gauss_sigma),
+        cutout_threshold=(0.68, 0.68),
+        intensity=(0.6, 0.6),
+        mode="rain",
+        color=None,
+        p=1.0,
+    )
+    spattered_rgb = transform(image=rgb)["image"]
+    return cv2.cvtColor(spattered_rgb, cv2.COLOR_RGB2BGR)
+
+
 def snow(img: np.ndarray, severity: float = 0.5) -> np.ndarray:
     """Neige : delegue a albumentations.RandomSnow (methode bleach).
 
@@ -439,6 +464,7 @@ ERROR_REGISTRY: dict[str, Callable] = {
     # Environnement
     "condensation": condensation,
     "dirt_on_lens": dirt_on_lens,
+    "droplets": droplets,
     # Atmospherique / transmission
     "fog": fog,
     "snow": snow,
