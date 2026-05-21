@@ -1,25 +1,18 @@
 """
 camera_sensor_errors.py — Simulation de fautes capteur camera embarquee avion.
 
-Applique des degradations realistes a des images (GES, X-Plane, MSFS...)
-avant inference YOLOv8, pour evaluer la robustesse du modele.
+Applique des degradations realistes a des images X-Plane avant inference YOLOv8,
+pour evaluer la robustesse du modele.
 
-Usage standalone:
-    python yolo/camera_sensor_errors.py --images runs/LFPO_24/footage/ --output runs/LFPO_24/degraded/ --errors gaussian_noise,motion_blur
-    python yolo/camera_sensor_errors.py --images runs/LFPO_24/footage/ --output runs/LFPO_24/degraded/ --preset moderate
-    python yolo/camera_sensor_errors.py --list
+Importe par project/export/sensor_faults.py — pas de CLI standalone, le
+pipeline (run_pipeline.py) pilote tout via les fault_profile.json TAF.
 
-Usage depuis le code:
-    from yolo.camera_sensor_errors import apply_errors, PRESETS
+Usage:
+    from camera_sensor_errors import apply_errors, ERROR_REGISTRY
     img_degraded = apply_errors(img, ["gaussian_noise", "vignetting"], severity=0.5)
 """
 
-import argparse
-import os
-import sys
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import List, Optional, Callable
+from typing import Optional, Callable
 
 import cv2
 import numpy as np
@@ -475,90 +468,6 @@ ERROR_REGISTRY: dict[str, Callable] = {
 
 
 # ---------------------------------------------------------------------------
-# Presets (combinaisons realistes)
-# ---------------------------------------------------------------------------
-
-@dataclass
-class ErrorPreset:
-    """Combinaison nommee d'erreurs avec severites."""
-    name: str
-    description: str
-    errors: dict[str, float]  # nom_erreur -> severity
-
-
-PRESETS: dict[str, ErrorPreset] = {
-    "light": ErrorPreset(
-        name="light",
-        description="Conditions normales, defauts mineurs (bruit faible, leger vignettage)",
-        errors={"gaussian_noise": 0.15, "vignetting": 0.2, "chromatic_aberration": 0.1},
-    ),
-    "moderate": ErrorPreset(
-        name="moderate",
-        description="Turbulence moderee, capteur vieillissant",
-        errors={
-            "gaussian_noise": 0.3, "motion_blur": 0.3,
-            "vignetting": 0.3, "dead_pixels": 0.2,
-            "banding": 0.15,
-        },
-    ),
-    "severe": ErrorPreset(
-        name="severe",
-        description="Conditions degradees (vibrations fortes, objectif sale, bruit eleve)",
-        errors={
-            "gaussian_noise": 0.6, "motion_blur": 0.5,
-            "dirt_on_lens": 0.5, "banding": 0.4,
-            "rolling_shutter": 0.4, "color_shift": 0.3,
-        },
-    ),
-    "solar_glare": ErrorPreset(
-        name="solar_glare",
-        description="Soleil face camera (flare + surexposition)",
-        errors={
-            "lens_flare": 0.7, "overexposure": 0.4,
-            "chromatic_aberration": 0.3, "vignetting": 0.2,
-        },
-    ),
-    "low_light": ErrorPreset(
-        name="low_light",
-        description="Approche de nuit / faible luminosite",
-        errors={
-            "underexposure": 0.5, "gaussian_noise": 0.6,
-            "shot_noise": 0.5, "banding": 0.3,
-        },
-    ),
-    "icing": ErrorPreset(
-        name="icing",
-        description="Givre / condensation sur objectif",
-        errors={
-            "condensation": 0.6, "defocus_blur": 0.2,
-            "gaussian_noise": 0.2,
-        },
-    ),
-    "compression": ErrorPreset(
-        name="compression",
-        description="Liaison video degradee (compression forte)",
-        errors={
-            "jpeg_artifacts": 0.7, "color_shift": 0.2,
-            "banding": 0.15,
-        },
-    ),
-    "problematic_extreme": ErrorPreset(
-        name="problematic_extreme",
-        description="Toutes les erreurs simultanement a 0.3",
-        errors={k: 0.3 for k in [
-            "gaussian_noise", "shot_noise", "salt_pepper", "dead_pixels",
-            "motion_blur", "defocus_blur", "rolling_shutter",
-            "overexposure", "underexposure",
-            "vignetting", "chromatic_aberration", "radial_distortion", "lens_flare",
-            "banding", "jpeg_artifacts", "color_shift",
-            "condensation", "dirt_on_lens",
-            "fog", "zoom_blur", "contrast", "pixelate",
-        ]},
-    ),
-}
-
-
-# ---------------------------------------------------------------------------
 # API principale
 # ---------------------------------------------------------------------------
 
@@ -599,138 +508,3 @@ def apply_errors(
             kwargs = {k: v for k, v in extras[name].items() if k in sig_params}
         result = fn(result, s, **kwargs)
     return result
-
-
-def apply_preset(img: np.ndarray, preset_name: str, severity_scale: float = 1.0) -> np.ndarray:
-    """Applique un preset d'erreurs.
-
-    Args:
-        img: Image BGR uint8.
-        preset_name: Nom du preset (cle de PRESETS).
-        severity_scale: Multiplicateur de severite (0.5 = moitie, 2.0 = double).
-
-    Returns:
-        Image degradee BGR uint8.
-    """
-    if preset_name not in PRESETS:
-        raise ValueError(f"Preset inconnu: {preset_name}. Disponibles: {list(PRESETS.keys())}")
-    preset = PRESETS[preset_name]
-    scaled = {k: min(1.0, v * severity_scale) for k, v in preset.errors.items()}
-    return apply_errors(img, list(scaled.keys()), severities=scaled)
-
-
-def process_directory(
-    input_dir: str,
-    output_dir: str,
-    errors: Optional[list[str]] = None,
-    preset: Optional[str] = None,
-    severity: float = 0.5,
-    severity_scale: float = 1.0,
-) -> int:
-    """Traite toutes les images d'un dossier.
-
-    Returns:
-        Nombre d'images traitees.
-    """
-    input_path = Path(input_dir)
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff'}
-    images = sorted(f for f in input_path.iterdir() if f.suffix.lower() in extensions)
-
-    if not images:
-        print(f"Aucune image trouvee dans {input_dir}")
-        return 0
-
-    count = 0
-    for img_file in images:
-        img = cv2.imread(str(img_file))
-        if img is None:
-            print(f"[WARN] Impossible de lire: {img_file}")
-            continue
-
-        if preset:
-            result = apply_preset(img, preset, severity_scale)
-        elif errors:
-            result = apply_errors(img, errors, severity)
-        else:
-            print("[WARN] Ni erreurs ni preset specifies, copie brute.")
-            result = img
-
-        out_file = output_path / img_file.name
-        cv2.imwrite(str(out_file), result)
-        count += 1
-
-    print(f"{count}/{len(images)} images traitees → {output_dir}")
-    return count
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def list_errors():
-    """Affiche toutes les erreurs et presets disponibles."""
-    print("=== Erreurs capteur disponibles ===\n")
-    for name, func in ERROR_REGISTRY.items():
-        doc = (func.__doc__ or "").strip().split('\n')[0]
-        print(f"  {name:25s} {doc}")
-
-    print("\n=== Presets ===\n")
-    for name, preset in PRESETS.items():
-        errors_str = ", ".join(f"{k}({v:.1f})" for k, v in preset.errors.items())
-        print(f"  {name:15s} {preset.description}")
-        print(f"  {'':15s} → {errors_str}\n")
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Simulation de fautes capteur camera embarquee avion."
-    )
-    parser.add_argument("--images", type=str, help="Dossier d'images source")
-    parser.add_argument("--output", type=str, help="Dossier de sortie")
-    parser.add_argument(
-        "--errors", type=str, default=None,
-        help="Erreurs a appliquer (virgules). Ex: gaussian_noise,motion_blur"
-    )
-    parser.add_argument(
-        "--preset", type=str, default=None,
-        help=f"Preset a appliquer. Choix: {', '.join(PRESETS.keys())}"
-    )
-    parser.add_argument(
-        "--severity", type=float, default=0.5,
-        help="Severite globale 0-1 (defaut: 0.5)"
-    )
-    parser.add_argument(
-        "--severity-scale", type=float, default=1.0,
-        help="Multiplicateur severite pour presets (defaut: 1.0)"
-    )
-    parser.add_argument("--list", action="store_true", help="Lister erreurs et presets")
-
-    args = parser.parse_args()
-
-    if args.list:
-        list_errors()
-        return
-
-    if not args.images or not args.output:
-        parser.error("--images et --output requis (ou --list)")
-
-    error_list = args.errors.split(",") if args.errors else None
-
-    if not error_list and not args.preset:
-        parser.error("Specifier --errors ou --preset")
-
-    process_directory(
-        input_dir=args.images,
-        output_dir=args.output,
-        errors=error_list,
-        preset=args.preset,
-        severity=args.severity,
-        severity_scale=args.severity_scale,
-    )
-
-
-if __name__ == "__main__":
-    main()

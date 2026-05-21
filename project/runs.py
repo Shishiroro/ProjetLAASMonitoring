@@ -12,7 +12,7 @@ Layout :
 
 Orchestration (3 phases independantes) :
   - render_runs        : mode "render"   (Phase 2 : X-Plane + fautes)
-  - evaluate_runs      : mode "evaluate" (Phase 3 : GT + YOLO + IoU)
+  - evaluate_runs      : mode "evaluate" (Phase 3 : YOLO + IoU)
   - full_pipeline      : mode "full"     (Phase 1 + 2 + 3 enchainees)
 """
 
@@ -156,7 +156,7 @@ def aggregate_report(results):
 # Orchestration : 3 phases independantes
 # ---------------------------------------------------------------------------
 # render_runs    : Phase 2 (X-Plane + fautes) sur N runs filtres
-# evaluate_runs  : Phase 3 (GT + YOLO + IoU)  sur N runs filtres
+# evaluate_runs  : Phase 3 (YOLO + IoU)       sur N runs filtres
 # full_pipeline  : Phase 1 + 2 + 3 enchainees (mode "full" du CLI)
 # ===========================================================================
 
@@ -194,7 +194,7 @@ def render_runs(run_name=None, all_runs=False, xplane_dir=None):
 def evaluate_runs(run_name=None, all_runs=False, runway=None,
                   conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
                   xplane_dir=None):
-    """Mode "evaluate" : Phase 3 (GT + YOLO + IoU) sur les runs filtres.
+    """Mode "evaluate" : Phase 3 (YOLO + IoU) sur les runs filtres.
 
     `xplane_dir` est conserve pour compat de signature mais inutilise
     (Phase 3 ne touche pas a X-Plane).
@@ -202,7 +202,7 @@ def evaluate_runs(run_name=None, all_runs=False, runway=None,
     from Detection_Evaluation import evaluate_run
 
     print("=" * 60)
-    print(" PHASE 3 : GT LARD + Detection YOLO + IoU")
+    print(" PHASE 3 : Detection YOLO + IoU")
     print("=" * 60)
 
     runs = find_runs(run_name, all_runs)
@@ -258,7 +258,7 @@ def full_pipeline(nb_scenarios=None, quiet=False, conf=0.25, imgsz=512,
         return []
 
     print(f"\n{'=' * 60}")
-    print(" PHASE 3 : GT LARD + Detection YOLO + IoU")
+    print(" PHASE 3 : Detection YOLO + IoU")
     print(f"{'=' * 60}")
     all_results = []
     for run_dir in rendered:

@@ -6,8 +6,9 @@ Note: renomme depuis yolov8n.pt pour eviter qu'ultralytics auto-telecharge
 le modele COCO de base (80 classes) si le fichier est introuvable.
 
 Pipeline standard (recommande): voir run_pipeline.py a la racine.
-La phase 3 (Detection_Evaluation.py) appelle predict_run + evaluate_run
-sur chaque runs/<ICAO_RWY>/.
+La phase 2 (Export.render_run) genere la GT LARD ; la phase 3
+(Detection_Evaluation.py) appelle predict_run + evaluate_run sur chaque
+runs/<ICAO_RWY>/.
 
 == Modules ==
 
@@ -23,7 +24,7 @@ sur chaque runs/<ICAO_RWY>/.
                -- conversions bbox + IoU torch (IOU/GIOU/DIOU/CIOU).
 
   camera_sensor_errors/
-               22 fonctions de degradation OpenCV (apply_errors).
+               26 fonctions de degradation OpenCV (apply_errors).
                Appele depuis project/export/sensor_faults.py.
 
 == Usage CLI standalone ==

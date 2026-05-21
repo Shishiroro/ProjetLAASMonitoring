@@ -6,7 +6,7 @@
      Regenerer : py project/templates/build_weather_templates.py
      ============================================================ -->
 <!--
-    base_template.xml — Template de base : trajectoire + meteo + 22 fautes.
+    base_template.xml — Template de base : trajectoire + meteo + 26 fautes.
 
     Les variantes meteo (brouillard, nuages, pluie, neige, ciel clair) sont
     des XML autonomes generes dans templates/<profil>/ par :
@@ -151,22 +151,21 @@
 
             <!-- Rayon de la zone meteo injectee dans XPLMWeather (nm ; 1 nm = 1.852 km).
                  Plus le rayon est petit, plus la meteo est concentree localement.
-                 Plus il est grand, plus on voit les nuages au loin. -->
+                 Plus il est grand, plus on voit les nuages au loin.
+                 Recommendation =50 pour utilisation générale (effets météos constants), ou plusieurs centaines pour effets plus jolis -->
             <parameter name="weather_zone_radius_nm"  type="real" min="50"    max="50"/>
 
         </node>
 
 
         <!-- ===========================================================
-             FAUTES CAPTEUR : 22 sub-nodes, params propres a chaque faute
+             FAUTES CAPTEUR : 26 sub-nodes, params propres a chaque faute
              ===========================================================
              Pour activer une faute :
                1) severity min/max > 0
                2) ajuster start_pct + duration_pct selon le moment souhaite
 
              Plusieurs fautes se cumulent si leurs plages se chevauchent.
-
-           Voir différents effets dans le dossier examples.
         -->
         <node name="faults">
 

@@ -532,25 +532,6 @@ class XPlaneConnection:
         self.send_dref("sim/flightmodel/position/local_vz", 0.0)
         time.sleep(self.config.settle_time)
 
-    def read_actual_pose(self):
-        """Relit la position/orientation reelle depuis X-Plane apres positionnement.
-
-        Retourne la position avion telle que lue par X-Plane.
-        NOTE: pas de compensation pilot eye pour l'instant.
-
-        :return: dict {lat, lon, alt_m, heading, pitch, roll}
-        """
-        lat = self.read_dref("sim/flightmodel/position/latitude", 20)
-        lon = self.read_dref("sim/flightmodel/position/longitude", 21)
-        elev = self.read_dref("sim/flightmodel/position/elevation", 22)
-        theta = self.read_dref("sim/flightmodel/position/theta", 23)
-        phi = self.read_dref("sim/flightmodel/position/phi", 24)
-        psi = self.read_dref("sim/flightmodel/position/psi", 25)
-        return {
-            "lat": lat, "lon": lon, "alt_m": elev,
-            "heading": psi, "pitch": theta, "roll": phi,
-        }
-
     def capture_frame(self, output_path):
         """Capture la fenetre X-Plane et crop au centre a la taille desiree.
 
