@@ -1,8 +1,8 @@
 <settings>
     
-    <parameter name="template_path" type="path" value="templates/" />
+    <parameter name="template_path" type="path" value="templates/rain/" />
     
-    <parameter name="template_file_name" type="file" value="base_template.xml" />
+    <parameter name="template_file_name" type="file" value="rain_heavy.xml" />
 
     
     <parameter name="experiment_path" type="path" value="../" />
