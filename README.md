@@ -113,8 +113,8 @@ Deux éléments distincts à installer :
    X-Plane 12 et exposée directement par XPPython3 — rien à télécharger en plus.*
 
 2. **PI_weather.py** — le plugin météo de ce projet.
-   Copier `XPlanePlugin/PI_weather.py` dans :
-   `X-Plane 12/Resources/plugins/PythonPlugins/`
+   Créer le dossier `X-Plane 12/Resources/plugins/PythonPlugins/`, puis y copier
+   `XPlanePlugin/PI_weather.py`.
 
 Puis **recharger les scripts depuis le simulateur** : une fois X-Plane 12 lancé,
 utiliser la barre de menu en haut de la fenêtre du simulateur :
