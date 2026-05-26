@@ -1,8 +1,12 @@
 <settings>
     
     <parameter name="template_path" type="path" value="templates/rain/" />
-    
+
     <parameter name="template_file_name" type="file" value="rain_heavy.xml" />
+
+    <!-- Modele YOLO (poids .pt) place dans yolo/. Lu par yolo/predict.py
+         et les cellules du notebook : changer ici suffit pour switcher partout. -->
+    <parameter name="yolo_model" type="file" value="yolov8nTest.pt" />
 
     
     <parameter name="experiment_path" type="path" value="../" />

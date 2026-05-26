@@ -6,14 +6,26 @@ Genere les predictions (CSV avec bbox) et les images annotees.
 import csv
 import shutil
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from ultralytics import YOLO
 
 # --- Chemins ---
 YOLO_DIR = Path(__file__).resolve().parent
-MODEL_PATH = YOLO_DIR / "yolov8nTest.pt"
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
+
+
+def _read_yolo_model() -> Path:
+    """Lit le nom du modele YOLO depuis project/settings.xml."""
+    settings_file = YOLO_DIR.parent / "project" / "settings.xml"
+    for p in ET.parse(settings_file).getroot():
+        if p.attrib["name"] == "yolo_model":
+            return YOLO_DIR / p.attrib["value"]
+    raise KeyError("yolo_model absent de project/settings.xml")
+
+
+MODEL_PATH = _read_yolo_model()
 
 # Bootstrap sys.path via project/_paths.py
 _PROJECT_DIR = YOLO_DIR.parent / "project"
