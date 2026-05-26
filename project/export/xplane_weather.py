@@ -297,7 +297,7 @@ def _send_weather_command(action, weather=None, timeout=5.0, retries=2, **extra_
 
 def check_plugin():
     """Verifie que le plugin XPPython3 est actif."""
-    result = _send_weather_command("noop", timeout=3.0)
+    result = _send_weather_command("noop", timeout=10.0)
     return result is not None and result.get("ok", False)
 
 

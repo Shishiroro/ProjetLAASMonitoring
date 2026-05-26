@@ -15,24 +15,18 @@ YOLO_DIR = Path(__file__).resolve().parent
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
 
-
-def _read_yolo_model() -> Path:
-    """Lit le nom du modele YOLO depuis project/settings.xml."""
-    settings_file = YOLO_DIR.parent / "project" / "settings.xml"
-    for p in ET.parse(settings_file).getroot():
-        if p.attrib["name"] == "yolo_model":
-            return YOLO_DIR / p.attrib["value"]
-    raise KeyError("yolo_model absent de project/settings.xml")
-
-
-MODEL_PATH = _read_yolo_model()
-
 # Bootstrap sys.path via project/_paths.py
 _PROJECT_DIR = YOLO_DIR.parent / "project"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
 import _paths  # noqa: F401
 from runs import list_images, pick_image_source
+
+# Lit le nom du modele YOLO depuis project/settings.xml
+_settings = {p.attrib["name"]: p.attrib["value"]
+             for p in ET.parse(_PROJECT_DIR / "settings.xml").getroot()}
+MODEL_PATH = YOLO_DIR / _settings["yolo_model"]
+
 
 
 def _next_exp_dir() -> Path:

@@ -4,16 +4,18 @@
 
     <parameter name="template_file_name" type="file" value="rain_heavy.xml" />
 
-    <!-- Modele YOLO (poids .pt) place dans yolo/. Lu par yolo/predict.py
-         et les cellules du notebook : changer ici suffit pour switcher partout. -->
+    
     <parameter name="yolo_model" type="file" value="yolov8nTest.pt" />
+
+    
+    <parameter name="xplane_dir" type="path" value="C:/X-Plane 12" />
 
     
     <parameter name="experiment_path" type="path" value="../" />
     <parameter name="experiment_folder_name" type="folder" value="output" />
 
     
-    <parameter name="nb_test_cases" type="integer" value="1" />
+    <parameter name="nb_test_cases" type="integer" value="2" />
 
     
     <parameter name="test_case_folder_name" type="folder" value="scenario" />
@@ -23,7 +25,8 @@
  
     <parameter name="parameter_max_nb_instances" type="integer" value="50" />
     
-    <parameter name="string_parameter_max_size" type="integer" value="50" /> 
+    
+    <parameter name="string_parameter_max_size" type="integer" value="1000" />
 
     <parameter name="node_max_nb_instances" type="integer" value="200" />
     <parameter name="max_backtracking" type="integer" value="100" />

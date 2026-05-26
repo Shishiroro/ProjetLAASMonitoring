@@ -17,9 +17,9 @@ Modes :
     python run_pipeline.py full -n 100 --xplane-dir "C:/X-Plane 12"
 """
 
-import os
 import sys
 import argparse
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Bootstrap sys.path via project/_paths.py
@@ -76,7 +76,9 @@ Structure runs/ :
     sub = parser.add_subparsers(dest="mode", required=True)
 
     xplane_args = argparse.ArgumentParser(add_help=False)
-    _default_xp = "C:/X-Plane 12" if os.name == "nt" else os.path.expanduser("~/X-Plane 12")
+    _settings = {p.attrib["name"]: p.attrib["value"]
+                 for p in ET.parse(ROOT / "project" / "settings.xml").getroot()}
+    _default_xp = _settings["xplane_dir"]
     xplane_args.add_argument("--xplane-dir", type=str, default=_default_xp,
                              help=f"Repertoire X-Plane 12 (defaut: {_default_xp})")
 

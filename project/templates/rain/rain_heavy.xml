@@ -104,7 +104,7 @@
             <parameter name="cloud_coverage"      type="real" min="1" max="1"/>
 
             <!-- Epaisseur nuage (m) ; 0 => pas de particules -->
-            <parameter name="cloud_thickness_m"   type="real" min="500" max="500"/>
+            <parameter name="cloud_thickness_m"   type="real" min="2000" max="2000"/>
 
             <!-- Visibilite (m) -->
             <parameter name="fog_visibility"      type="real" min="50000" max="50000"/>
@@ -116,7 +116,7 @@
             <parameter name="rain_scale"          type="real" min="4" max="5"/>
 
             <!-- Marge base nuages au-dessus de l'avion (m) -->
-            <parameter name="cloud_margin_m"      type="real" min="300" max="700"/>
+            <parameter name="cloud_margin_m"      type="real" min="300" max="300"/>
 
             <!-- @@WEATHER_BLOCK_END@@ -->
 
@@ -144,7 +144,7 @@
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="3"     max="3"/>
+            <parameter name="load_texture_duration"   type="real" min="10"     max="10"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>

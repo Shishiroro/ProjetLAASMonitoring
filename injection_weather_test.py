@@ -24,7 +24,6 @@ Usage :
 """
 
 import argparse
-import os
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -108,7 +107,9 @@ def main():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    default_xp = "C:/X-Plane 12" if os.name == "nt" else os.path.expanduser("~/X-Plane 12")
+    _settings = {p.attrib["name"]: p.attrib["value"]
+                 for p in ET.parse(ROOT / "project" / "settings.xml").getroot()}
+    default_xp = _settings["xplane_dir"]
     parser.add_argument("--xplane-dir", type=str, default=default_xp,
                         help=f"Repertoire X-Plane 12 (defaut: {default_xp})")
     parser.add_argument("--run", type=str, default=None,
