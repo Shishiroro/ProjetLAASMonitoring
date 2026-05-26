@@ -1,16 +1,17 @@
 # LARD-LAAS-TAF
 
 Pipeline de génération de **trajectoires d'approche réalistes** pour avions, rendu
-sous **X-Plane 12**, avec dégradation capteur et évaluation d'un modèle de détection
-de piste **YOLOv8**.
+sous **X-Plane 12**, avec dégradation capteur et évaluation d'un modèle de
+détection de piste.
 
 Le pipeline échantillonne des scénarios sous contraintes avec **TAF** (Testing
 Automation Framework, LAAS-CNRS), calcule les trajectoires, génère les images via
 X-Plane 12, puis évalue la détection de piste contre une vérité terrain produite
-par **LARD** (ONERA / DEEL).
+par **LARD** (ONERA, IRT Saint Exupéry et AIRBUS).
 
-L'utilisateur n'a normalement qu'à éditer des fichiers **XML** pour définir ses
-scénarios, puis à lancer le pipeline en ligne de commande.
+L'utilisateur n'a qu'à éditer des fichiers **XML** pour définir ses scénarios,
+puis à lancer le pipeline en ligne de commande. Un `notebook.ipynb` est également
+disponible pour ceux qui préfèrent travailler en interactif.
 
 ---
 
@@ -27,7 +28,7 @@ scénarios, puis à lancer le pipeline en ligne de commande.
                    + fautes capteur + vérité terrain (GT) LARD
           │
           ▼
-   evaluate   ──►  YOLOv8 détecte la piste + calcul IoU vs GT
+   evaluate   ──►  Le modèle détecte la piste + calcul IoU vs GT
           │
           ▼
    runs/pipeline_report.json   (métriques : IoU, AP, F1, P, R)
@@ -39,10 +40,9 @@ scénarios, puis à lancer le pipeline en ligne de commande.
 
 | Composant   | Détail |
 |-------------|--------|
-| **X-Plane 12** | Version **complète (payante)** obligatoire. La version démo ne convient pas : durée et zone limitées, plugins bridés. |
-| **Python**  | 3.9 ou supérieur (testé avec 3.10). |
-| **Git**     | Pour cloner les dépôts. |
-| **OS**      | Windows ou Linux. |
+| **X-Plane 12** | Version **complète (payante)** obligatoire. Sinon, l'accès est limité à seulement quelques aéroports/pistes. |
+| **Python**  | Python 3.10.10 (version utilisée pour le développement). Python 3.9+ devrait convenir (les dépendances `scipy ≥ 1.11` et `albumentations` exigent au minimum 3.9). |
+| **OS**      | Compatible Windows et Linux. |
 
 ---
 
@@ -71,15 +71,14 @@ TAF n'est **pas** inclus dans le dépôt. Le télécharger depuis :
 
 > https://wp.laas.fr/taf/download/
 
-Extraire l'archive dans un dossier `taf/` à la racine du projet, de sorte que le
-chemin `taf/src/` existe.
+Extraire l'archive dans le dossier `taf/` à la racine du projet.
 
 Après les étapes 1 à 3, la racine doit contenir :
 
 ```
 ProjetLAASMonitoring/
 ├── LARD/          ← cloné à l'étape 2
-├── taf/           ← téléchargé à l'étape 3 (taf/src/ doit exister)
+├── taf/           ← cloné à l'étape 3
 ├── project/
 ├── yolo/
 ├── XPlanePlugin/
@@ -98,8 +97,14 @@ pip install -r requirements.txt
 Deux éléments distincts à installer :
 
 1. **XPPython3** — le moteur de plugins Python pour X-Plane.
-   Le télécharger (version pour X-Plane 12) et l'installer dans :
-   `X-Plane 12/Resources/plugins/`
+   Suivre la procédure officielle :
+
+   > https://xppython3.readthedocs.io/en/latest/usage/installation_plugin.html
+
+   Il s'installe dans : `X-Plane 12/Resources/plugins/`.
+
+   *Note : l'API **XPLMWeather** utilisée par le plugin météo est intégrée à
+   X-Plane 12 et exposée directement par XPPython3 — rien à télécharger en plus.*
 
 2. **PI_weather.py** — le plugin météo de ce projet.
    Copier `XPlanePlugin/PI_weather.py` dans :
@@ -113,14 +118,14 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
 
 ## Configuration de X-Plane 12
 
-- Lancer X-Plane 12 en **mode fenêtré** (pas en plein écran) : la capture des
-  images se fait par capture d'écran de la fenêtre.
+- Lancer X-Plane 12 en **mode fenêtré** (pas en plein écran). Le réglage se fait
+  dans les paramètres d'affichage du simulateur. La capture des images se fait
+  par capture d'écran de la fenêtre.
 - Régler la **mise à l'échelle de l'affichage (scaling) à 100 %**.
   La capture est ensuite recadrée à une résolution fixe. Si le scaling de l'OS
   n'est pas à 100 %, les pixels capturés ne correspondent plus aux coordonnées
   attendues : la **bounding box de la vérité terrain (GT LARD)** se retrouve
-  décalée par rapport à la piste. Le 100 % garantit un alignement pixel-exact
-  entre l'image et la GT.
+  décalée par rapport à la piste.
 
 ---
 
@@ -185,14 +190,25 @@ python run_pipeline.py generate -n 5
 # Phase 2 — rendu X-Plane + fautes capteur + vérité terrain
 python run_pipeline.py render --all --xplane-dir "C:/X-Plane 12"
 
-# Phase 3 — détection YOLO + calcul IoU
+# Phase 3 — détection + calcul IoU
 python run_pipeline.py evaluate --all
 
 # Tout enchaîner d'un coup
 python run_pipeline.py full -n 5 --xplane-dir "C:/X-Plane 12"
 ```
 
-Adapter `--xplane-dir` au chemin réel de l'installation X-Plane 12.
+**Pour une utilisation normale, la commande `full` suffit** : elle enchaîne les
+trois phases en une seule invocation. Les commandes `generate` / `render` /
+`evaluate` ci-dessus restent disponibles pour relancer une phase précise.
+
+Le chemin d'installation X-Plane 12 peut aussi être renseigné directement dans
+`project/settings.xml` via le paramètre `xplane_dir` :
+
+```xml
+<parameter name="xplane_dir" type="path" value="C:/X-Plane 12" />
+```
+
+Dans ce cas, l'option `--xplane-dir` en ligne de commande n'est plus nécessaire.
 
 ---
 
@@ -208,7 +224,23 @@ runs/
 │   ├── footage/              images rendues par X-Plane
 │   ├── degraded/             images avec fautes capteur (si actives)
 │   ├── LFPO_24_labels.csv    vérité terrain LARD
-│   ├── predictions.csv       détections YOLO
-│   └── predictions_txt/      labels YOLO bruts
+│   ├── predictions.csv       détections du modèle
+│   └── predictions_txt/      labels bruts du modèle
 └── pipeline_report.json      rapport agrégé : IoU, AP, F1, P, R par scénario
 ```
+
+### Aller plus loin avec le notebook
+
+Le fichier `notebook.ipynb` à la racine du projet propose des fonctionnalités
+complémentaires, à utiliser à la demande :
+
+- création de **datasets** à partir des images générées,
+- assemblage des images d'un scénario en **flux vidéo**,
+- export de **fichiers optionnels** (`params_trace.xml`, `xplane_config.json`),
+- **visualisations des bounding boxes** (`yolo_box/`, `lard_box/`) pour comparer
+  prédictions du modèle et vérité terrain LARD.
+
+Utilisation : lancer d'abord le pipeline normalement (`full` ou les phases
+individuelles), puis ouvrir `notebook.ipynb` et exécuter les sections
+correspondant aux artefacts souhaités. Les sorties sont écrites dans le dossier
+du run concerné.
