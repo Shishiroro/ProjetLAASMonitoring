@@ -125,8 +125,10 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
 ## Configuration de X-Plane 12
 
 - Lancer X-Plane 12 en **mode fenêtré** (pas en plein écran). Le réglage se fait
-  dans les paramètres d'affichage du simulateur. La capture des images se fait
-  par capture d'écran de la fenêtre.
+  dans les paramètres d'affichage du simulateur. Les captures sont prises
+  directement sur la fenêtre du simulateur : **laisser l'écran allumé** et la
+  fenêtre X-Plane visible pendant tout le rendu (ne pas la minimiser ni la
+  recouvrir d'une autre fenêtre).
 - Régler la **mise à l'échelle de l'affichage (scaling) à 100 %**.
   La capture est ensuite recadrée à une résolution fixe. Si le scaling de l'OS
   n'est pas à 100 %, les pixels capturés ne correspondent plus aux coordonnées
