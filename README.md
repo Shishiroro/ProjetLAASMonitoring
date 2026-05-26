@@ -71,11 +71,13 @@ Le dossier `LARD/` doit se trouver à la racine, à côté de `project/`.
 
 ### 3. Récupérer TAF
 
-TAF n'est **pas** inclus dans le dépôt. Le télécharger depuis :
+TAF n'est **pas** inclus dans le dépôt. Depuis la racine du projet :
 
-> https://wp.laas.fr/taf/download/
+```bash
+git clone https://redmine.laas.fr/laas/taf.git
+```
 
-Extraire l'archive dans le dossier `taf/` à la racine du projet.
+*Plus de détails sur TAF : <https://wp.laas.fr/taf/download/>*
 
 Après les étapes 1 à 3, la racine doit contenir :
 
@@ -132,6 +134,8 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
   décalée par rapport à la piste.
 
 ---
+
+=
 
 ## Configurer un scénario : les fichiers XML
 
