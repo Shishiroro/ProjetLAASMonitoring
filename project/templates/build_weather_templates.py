@@ -90,9 +90,9 @@ PRESETS = {
     ("clouds", "cumulonimbus_heavy"):    {"cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "cloud_margin_m": MARGIN_CB},
 
     # --- Pluie : precip + Cumulonimbus auto (cloud_type=-1) ---
-    ("rain", "rain_light"):    {"precip_rate": (0.3, 0.3), "rain_scale": (1, 1),     "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 2000)},
-    ("rain", "rain_moderate"): {"precip_rate": (0.6, 0.6), "rain_scale": (2.5, 2.5), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
-    ("rain", "rain_heavy"):    {"precip_rate": (1.0, 1.0), "rain_scale": (5.0, 5.0), "cloud_thickness_m": (6000, 6000), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1500, 1500)},
+    ("rain", "rain_light"):    {"precip_rate": (1.0, 1.0), "rain_scale": (1.0, 2.0), "cloud_thickness_m": (500, 500), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (2000, 3000)},
+    ("rain", "rain_moderate"): {"precip_rate": (1.0, 1.0), "rain_scale": (2.5, 3.0), "cloud_thickness_m": (500, 500), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (1000, 1500)},
+    ("rain", "rain_heavy"):    {"precip_rate": (1.0, 1.0), "rain_scale": (4.0, 5.0), "cloud_thickness_m": (500, 500), "cloud_coverage": (1.0, 1.0), "cloud_margin_m": (300, 700)},
 
     # --- Neige : precip + T < 0 (XP12 bascule les particules en neige) ---
     # NB : temperature plafonnee a -2 C (et non 0) pour garantir la neige.
