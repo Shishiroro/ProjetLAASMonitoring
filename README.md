@@ -5,9 +5,13 @@ sous **X-Plane 12**, avec dégradation capteur et évaluation d'un modèle de
 détection de piste.
 
 Le pipeline échantillonne des scénarios sous contraintes avec **TAF** (Testing
-Automation Framework, LAAS-CNRS), calcule les trajectoires, génère les images via
-X-Plane 12, puis évalue la détection de piste contre une vérité terrain produite
-par **LARD** (ONERA, IRT Saint Exupéry et AIRBUS).
+Automation Framework, LAAS-CNRS), calcule les trajectoires et génère les images
+via X-Plane 12. Sur ces images, un **modèle de détection** (choisi par
+l'utilisateur dans `settings.xml`) prédit la position de la piste. Ces prédictions
+sont ensuite comparées à la **vérité terrain** — la position réelle de la piste
+projetée en 2D sur l'image — produite par **LARD** (ONERA, IRT Saint Exupéry et
+AIRBUS). La qualité de la détection est mesurée par l'**IoU** (intersection sur
+union) entre prédiction et vérité terrain.
 
 L'utilisateur n'a qu'à éditer des fichiers **XML** pour définir ses scénarios,
 puis à lancer le pipeline en ligne de commande. Un `notebook.ipynb` est également
@@ -240,7 +244,7 @@ complémentaires, à utiliser à la demande :
 - **visualisations des bounding boxes** (`yolo_box/`, `lard_box/`) pour comparer
   prédictions du modèle et vérité terrain LARD.
 
-Utilisation : lancer d'abord le pipeline normalement (`full` ou les phases
-individuelles), puis ouvrir `notebook.ipynb` et exécuter les sections
-correspondant aux artefacts souhaités. Les sorties sont écrites dans le dossier
-du run concerné.
+Le notebook permet également de lancer les **trois phases du pipeline**
+(`generate`, `render`, `evaluate`) directement depuis ses cellules, sans passer
+par la ligne de commande. C'est une alternative complète au CLI pour les
+utilisateurs qui préfèrent travailler en interactif.
