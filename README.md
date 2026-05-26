@@ -175,12 +175,13 @@ Chaque paramètre a un `min` et un `max` :
 - `min` et `max` **différents** → TAF échantillonne une valeur dans la plage
   (résolution sous contraintes par le solveur z3).
 
-### Les 3 blocs d'un template
+### Les 4 blocs d'un template
 
 | Bloc | Contenu |
 |------|---------|
 | **trajectory** | `fps`, distances de début/fin d'approche, `ground_speed_kts`, `turbulence_intensity`, vent, distance de stabilisation, `airport_runway`. |
 | **weather** | Précipitations, type/couverture/épaisseur de nuages, visibilité, température. Injecté une fois avant le rendu. |
+| **settings** | Réglages de rendu / simulation, indépendants de la météo et des fautes : `time_of_day_h` (heure locale), `load_texture_duration` (délai de chargement des textures et stabilisation des nuages), `screenshot_duration` (délai de stabilisation après chaque téléportation caméra), `weather_zone_radius_nm` (rayon de la zone météo injectée). |
 | **faults** | 26 types de fautes capteur. Chaque faute a `severity`, `start_pct`, `duration_pct`. Une faute est **active si `severity > 0`**, désactivée si `severity = 0`. |
 
 ### Piste cible
