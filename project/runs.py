@@ -111,13 +111,11 @@ def pick_image_source(run_dir):
 
 
 def _scan_all_run_dirs():
-    """Scan complet de runs/ : traverse les generations + accepte les legacy.
+    """Scan complet de runs/ : descend d'un niveau dans chaque generation.
 
-    Pour chaque dossier direct sous runs/ :
-      - s'il contient un .yaml a son 1er niveau, c'est un run legacy
-        (ancien layout runs/<run>/)
-      - sinon on le considere comme generation et on descend d'un niveau
-        (nouveau layout runs/<gen>/<run>/)
+    Layout attendu : runs/<generation>/<run>/. Un sous-dossier n'est retenu
+    que s'il contient un .yaml, ce qui filtre les dossiers post-traitement
+    (dataset/, dataset_regroup/, ...).
     """
     if not RUNS_DIR.exists():
         return []
@@ -125,12 +123,9 @@ def _scan_all_run_dirs():
     for d in sorted(RUNS_DIR.iterdir()):
         if not d.is_dir():
             continue
-        if list(d.glob("*.yaml")):
-            found.append(d)  # legacy
-        else:
-            for sub in sorted(d.iterdir()):
-                if sub.is_dir():
-                    found.append(sub)
+        for sub in sorted(d.iterdir()):
+            if sub.is_dir() and list(sub.glob("*.yaml")):
+                found.append(sub)
     return found
 
 
@@ -147,9 +142,8 @@ def find_runs(run_name=None, all_runs=False, generation=None):
 
     Modes `all_runs` :
       - + generation             : scanne runs/<generation>/
-      - sans generation          : scanne tout runs/ (toutes les generations
-                                   + runs legacy a la racine) — surtout utile
-                                   en mode notebook
+      - sans generation          : scanne tout runs/ (toutes les generations)
+                                   — surtout utile en mode notebook
 
     Le CLI applique une regle supplementaire (`--all requiert --generation`)
     AVANT d'appeler cette fonction (cf. run_pipeline.py), pour ne pas mixer
@@ -170,7 +164,7 @@ def find_runs(run_name=None, all_runs=False, generation=None):
             if p.is_absolute() and p.exists():
                 candidates = [p]
             else:
-                # Recherche par nom dans toutes les generations + legacy
+                # Recherche par nom dans toutes les generations
                 matches = [d for d in _scan_all_run_dirs() if d.name == run_name]
                 if len(matches) > 1:
                     print(f"[ERREUR] '{run_name}' trouve dans plusieurs emplacements :")
