@@ -805,12 +805,15 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
     return output_dir
 
 
-def render_run(run_dir, xplane_dir):
+def render_xplane_run(run_dir, xplane_dir):
     """Rend les images d'un run via X-Plane 12.
 
     Lit run_dir/poses_cam_export.json (+ weather_profile.json si present),
     sauve les images dans run_dir/footage/. Skip si footage/ contient deja
     des images.
+
+    Renomme depuis `render_run` pour eviter la collision avec
+    Export.render_run (qui orchestre la Phase 2 entiere : rendu + fautes + GT).
 
     :param run_dir: dossier du run
     :param xplane_dir: chemin du repertoire X-Plane 12

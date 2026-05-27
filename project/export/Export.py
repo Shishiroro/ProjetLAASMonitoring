@@ -237,11 +237,11 @@ def step_render(run_dir, xplane_dir):
     :return: True si images presentes apres rendu, False sinon
     """
     from runs import has_images
-    from xplane_bridge import render_run
+    from xplane_bridge import render_xplane_run
 
     run_dir = Path(run_dir)
 
-    if not render_run(run_dir, xplane_dir or ""):
+    if not render_xplane_run(run_dir, xplane_dir or ""):
         print(f"  [Image] Echec rendu X-Plane pour {run_dir.name}")
         return False
 

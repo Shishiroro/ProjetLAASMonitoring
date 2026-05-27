@@ -10,11 +10,12 @@ Entry point CLI minimal. Toute la logique vit dans :
 
 Modes :
     python run_pipeline.py generate -n 5
-    python run_pipeline.py render LFPO_24 --xplane-dir "C:/X-Plane 12"
-    python run_pipeline.py render --all --xplane-dir "C:/X-Plane 12"
-    python run_pipeline.py evaluate LFPO_24
-    python run_pipeline.py evaluate --all
-    python run_pipeline.py full -n 100 --xplane-dir "C:/X-Plane 12"
+    python run_pipeline.py generate -n 100 --name pluie --clean
+    python run_pipeline.py render generation_01/LFPO_24 --xplane-dir "C:/X-Plane 12"
+    python run_pipeline.py render --all --generation generation_01 --xplane-dir "..."
+    python run_pipeline.py evaluate generation_01/LFPO_24
+    python run_pipeline.py evaluate --all --generation pluie_01
+    python run_pipeline.py full -n 100 --name pluie --xplane-dir "C:/X-Plane 12"
 """
 
 import sys
@@ -36,6 +37,25 @@ def _add_generate_args(parser):
     parser.add_argument("-n", "--nb-scenarios", type=int, default=None,
                         help="Nombre de scenarios (surcharge settings.xml)")
     parser.add_argument("-q", "--quiet", action="store_true")
+    parser.add_argument("--name", type=str, default=None,
+                        help="Nom de la generation (cree runs/<name>_NN/ "
+                             "au lieu de runs/generation_NN/)")
+    parser.add_argument("--clean", action="store_true",
+                        help="Vider runs/ avant la generation")
+
+
+def _add_target_args(parser):
+    """Ajoute les args de ciblage runs partages par 'render' et 'evaluate'."""
+    parser.add_argument("run", nargs="?", default=None,
+                        help="Run a traiter, format '<generation>/<nom>' "
+                             "(ex: generation_01/LFPO_24) ou nom seul "
+                             "si --generation est fourni")
+    parser.add_argument("--all", action="store_true", dest="all_runs",
+                        help="Traiter tous les runs d'une generation "
+                             "(requiert --generation)")
+    parser.add_argument("--generation", type=str, default=None,
+                        help="Cible une generation existante "
+                             "(ex: generation_01, pluie_03)")
 
 
 def _add_yolo_args(parser):
@@ -57,17 +77,20 @@ def main():
         epilog="""
 Structure runs/ :
   runs/
-    LFPO_24/
-      LFPO_24.yaml             <- genere par 'generate' (Phase 1)
-      poses_cam_export.json    <- poses camera + trajectory_config TAF
-      fault_profile.json       <- profil fautes capteur (si actif)
-      weather_profile.json     <- profil meteo X-Plane (si actif)
-      footage/                 <- images rendu X-Plane (Phase 2)
-      degraded/                <- images avec fautes capteur (Phase 2)
-      LFPO_24_labels.csv       <- GT LARD (Phase 2)
-      predictions.csv          <- predictions YOLO (Phase 3)
-      predictions_txt/         <- labels YOLO (.txt, Phase 3)
-    pipeline_report.json       <- rapport agrege (metriques IoU par run)
+    generation_01/                  <- un dossier par batch (--name pour personnaliser)
+      LFPO_24/
+        LFPO_24.yaml                <- genere par 'generate' (Phase 1)
+        poses_cam_export.json       <- poses camera + trajectory_config TAF
+        fault_profile.json          <- profil fautes capteur (si actif)
+        weather_profile.json        <- profil meteo X-Plane (si actif)
+        footage/                    <- images rendu X-Plane (Phase 2)
+        degraded/                   <- images avec fautes capteur (Phase 2)
+        LFPO_24_labels.csv          <- GT LARD (Phase 2)
+        predictions.csv             <- predictions YOLO (Phase 3)
+        predictions_txt/            <- labels YOLO (.txt, Phase 3)
+      pipeline_report.json          <- rapport agrege (metriques IoU par run)
+    pluie_01/                       <- generations nommees (via --name pluie)
+      ...
 
   Visualisations on-demand via notebook.ipynb : yolo_box/, lard_box/,
   xplane_config.json, params_trace.xml.
@@ -88,17 +111,11 @@ Structure runs/ :
 
     p_render = sub.add_parser("render", parents=[xplane_args],
                               help="Phase 2 : rendu X-Plane + fautes capteur")
-    p_render.add_argument("run", nargs="?", default=None,
-                          help="Nom du run (ex: LFPO_24)")
-    p_render.add_argument("--all", action="store_true", dest="all_runs",
-                          help="Rendre tous les runs dans runs/")
+    _add_target_args(p_render)
 
     p_eval = sub.add_parser("evaluate",
                             help="Phase 3 : GT LARD + Detection YOLO + IoU")
-    p_eval.add_argument("run", nargs="?", default=None,
-                        help="Nom du run (ex: LFPO_24)")
-    p_eval.add_argument("--all", action="store_true", dest="all_runs",
-                        help="Evaluer tous les runs dans runs/")
+    _add_target_args(p_eval)
     p_eval.add_argument("--runway", type=str, default=None,
                         help="Filtrer GT sur une piste")
     _add_yolo_args(p_eval)
@@ -111,24 +128,38 @@ Structure runs/ :
     args = parser.parse_args()
 
     if args.mode == "generate":
-        generate_runs(nb_scenarios=args.nb_scenarios, quiet=args.quiet)
-        print(f"  Prochaine etape : run_pipeline.py render --all")
+        created = generate_runs(nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+                                name=args.name, clean=args.clean)
+        if created:
+            gen = created[0].parent.name
+            print(f"  Prochaine etape : run_pipeline.py render --all --generation {gen}")
 
     elif args.mode == "render":
         if not args.run and not args.all_runs:
-            print("Specifier un run ou --all. Ex: python run_pipeline.py render LFPO_24")
+            print("Specifier un run ou --all. Ex: render generation_01/LFPO_24 "
+                  "ou render --all --generation generation_01")
+            return
+        if args.all_runs and not args.generation:
+            print("[ERREUR] --all requiert --generation <nom>. "
+                  "Ex: render --all --generation generation_01")
             return
         render_runs(
             run_name=args.run, all_runs=args.all_runs,
-            xplane_dir=args.xplane_dir,
+            generation=args.generation, xplane_dir=args.xplane_dir,
         )
 
     elif args.mode == "evaluate":
         if not args.run and not args.all_runs:
-            print("Specifier un run ou --all. Ex: python run_pipeline.py evaluate LFPO_24")
+            print("Specifier un run ou --all. Ex: evaluate generation_01/LFPO_24 "
+                  "ou evaluate --all --generation generation_01")
+            return
+        if args.all_runs and not args.generation:
+            print("[ERREUR] --all requiert --generation <nom>. "
+                  "Ex: evaluate --all --generation generation_01")
             return
         evaluate_runs(
-            run_name=args.run, all_runs=args.all_runs, runway=args.runway,
+            run_name=args.run, all_runs=args.all_runs,
+            generation=args.generation, runway=args.runway,
             conf=args.conf, imgsz=args.imgsz,
             iou_thresh=args.iou_thresh, iou_method=args.iou_method,
         )
@@ -136,6 +167,7 @@ Structure runs/ :
     elif args.mode == "full":
         full_pipeline(
             nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+            name=args.name, clean=args.clean,
             conf=args.conf, imgsz=args.imgsz,
             iou_thresh=args.iou_thresh, iou_method=args.iou_method,
             xplane_dir=args.xplane_dir,

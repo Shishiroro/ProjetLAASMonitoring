@@ -142,28 +142,38 @@ def run(nb_test_cases=None, verbose=True):
     print("\n[Generate] Termine.")
 
 
-def generate_runs(nb_scenarios=None, quiet=False):
-    """Phase 1 complete : cleanup output/ + run() TAF + organize en runs/.
+def generate_runs(nb_scenarios=None, quiet=False, name=None, clean=False):
+    """Phase 1 complete : cleanup output/ + run() TAF + organize en runs/<generation>/.
 
     Wrapper haut-niveau de run() : nettoie le dossier temporaire output/,
     lance la generation TAF, puis reorganise les .yaml + JSON configs vers
-    runs/<ICAO_RWY>/.
+    runs/<generation>/<ICAO_RWY>/.
 
-    :return: list[Path] des dossiers runs/ crees
+    :param name: nom optionnel de la generation (genere `<name>_NN/`
+                 au lieu de `generation_NN/`)
+    :param clean: si True, vide runs/ avant la generation
+    :return: list[Path] des dossiers runs/<generation>/<ICAO_RWY>/ crees
     """
     import shutil
-    from runs import TAF_OUTPUT_DIR, create_runs_from_taf_output
+    from runs import (TAF_OUTPUT_DIR, clean_runs_dir, create_runs_from_taf_output,
+                      next_generation_dir)
 
     print("=" * 60)
     print(" PHASE 1 : Generation TAF")
     print("=" * 60)
+
+    if clean:
+        clean_runs_dir()
+
+    generation_dir = next_generation_dir(name)
+    print(f"[Pipeline] Generation : {generation_dir.name}/")
 
     if TAF_OUTPUT_DIR.exists():
         shutil.rmtree(TAF_OUTPUT_DIR)
 
     run(nb_test_cases=nb_scenarios, verbose=not quiet)
 
-    return create_runs_from_taf_output()
+    return create_runs_from_taf_output(generation_dir)
 
 
 if __name__ == "__main__":
@@ -174,6 +184,11 @@ if __name__ == "__main__":
                         help="Nombre de scenarios (surcharge settings.xml)")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Mode silencieux")
+    parser.add_argument("--name", type=str, default=None,
+                        help="Nom de la generation (sinon 'generation')")
+    parser.add_argument("--clean", action="store_true",
+                        help="Vider runs/ avant la generation")
     args = parser.parse_args()
 
-    run(nb_test_cases=args.nb_scenarios, verbose=not args.quiet)
+    generate_runs(nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+                  name=args.name, clean=args.clean)
