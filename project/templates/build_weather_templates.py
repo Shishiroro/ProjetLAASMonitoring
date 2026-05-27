@@ -90,15 +90,10 @@ PRESETS = {
     ("clouds", "cumulonimbus_heavy"):    {"cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "cloud_margin_m": MARGIN_CB},
 
 
-
-
     # --- Pluie : precip + Cumulonimbus auto (cloud_type=-1) ---
     ("rain", "rain_light"):    {"precip_rate": (1.0, 1.0), "cloud_type": (1, -3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (15, 15), "rain_scale": (1.0, 2.0), "cloud_margin_m": (2000, 5000)},
     ("rain", "rain_moderate"): {"precip_rate": (1.0, 1.0), "cloud_type": (1, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (15, 15), "rain_scale": (2.0, 4.0), "cloud_margin_m": (500, 1800)},
     ("rain", "rain_heavy"):    {"precip_rate": (1.0, 1.0), "cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "temperature_c": (15, 15), "rain_scale": (4.0, 5.0), "cloud_margin_m": (300, 500)},
-
-
-
 
 
     # --- Neige : precip + T < 0 (XP12 bascule les particules en neige) ---

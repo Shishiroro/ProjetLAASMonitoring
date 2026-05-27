@@ -11,9 +11,10 @@ Layout :
   - agregation d'un rapport multi-run (dans la generation)
 
 Orchestration (3 phases independantes) :
-  - render_runs        : mode "render"   (Phase 2 : X-Plane + fautes)
-  - evaluate_runs      : mode "evaluate" (Phase 3 : YOLO + IoU)
-  - full_pipeline      : mode "full"     (Phase 1 + 2 + 3 enchainees)
+  - render_runs           : mode "render"        (Phase 2 : X-Plane + fautes)
+  - evaluate_runs         : mode "evaluate"      (Phase 3 : YOLO + IoU)
+  - full_pipeline         : mode "full"          (Phase 1 + 2 enchainees)
+  - full_evaluate_pipeline: mode "full_evaluate" (Phase 1 + 2 + 3 enchainees)
 """
 
 import json
@@ -309,13 +310,14 @@ def aggregate_report(results, generation_dir=None):
 # ===========================================================================
 # Orchestration : 3 phases independantes
 # ---------------------------------------------------------------------------
-# render_runs    : Phase 2 (X-Plane + fautes) sur N runs filtres
-# evaluate_runs  : Phase 3 (YOLO + IoU)       sur N runs filtres
-# full_pipeline  : Phase 1 + 2 + 3 enchainees (mode "full" du CLI)
+# render_runs            : Phase 2 (X-Plane + fautes) sur N runs filtres
+# evaluate_runs          : Phase 3 (YOLO + IoU)       sur N runs filtres
+# full_pipeline          : Phase 1 + 2     enchainees (mode "full" du CLI)
+# full_evaluate_pipeline : Phase 1 + 2 + 3 enchainees (mode "full_evaluate")
 # ===========================================================================
 
 def _render_loop(runs, xplane_dir):
-    """Boucle Phase 2 partagee par render_runs et full_pipeline.
+    """Boucle Phase 2 partagee par render_runs et les pipelines full.
 
     Itere sur une liste de runs deja resolus, appelle Export.render_run pour
     chacun, et reset la meteo a la fin. Retourne la sous-liste des runs
@@ -337,7 +339,7 @@ def _render_loop(runs, xplane_dir):
 
 def _evaluate_loop(runs, runway=None, conf=0.25, imgsz=512,
                    iou_thresh=0.5, iou_method="CIOU"):
-    """Boucle Phase 3 partagee par evaluate_runs et full_pipeline."""
+    """Boucle Phase 3 partagee par evaluate_runs et full_evaluate_pipeline."""
     from Detection_Evaluation import evaluate_run
 
     all_results = []
@@ -398,9 +400,26 @@ def evaluate_runs(run_name=None, all_runs=False, generation=None, runway=None,
 
 
 def full_pipeline(nb_scenarios=None, quiet=False, name=None, clean=False,
-                  conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
                   xplane_dir=None):
-    """Mode "full" : Phase 1 + Phase 2 + Phase 3 enchainees sur les runs crees."""
+    """Mode "full" : Phase 1 + Phase 2 enchainees (sans evaluation YOLO)."""
+    from Generate import generate_runs
+
+    created_runs = generate_runs(nb_scenarios=nb_scenarios, quiet=quiet,
+                                 name=name, clean=clean)
+    if not created_runs:
+        print("[Pipeline] Aucun scenario genere, arret.")
+        return []
+
+    print(f"\n{'=' * 60}")
+    print(" PHASE 2 : Rendu X-Plane + fautes capteur")
+    print(f"{'=' * 60}")
+    return _render_loop(created_runs, xplane_dir)
+
+
+def full_evaluate_pipeline(nb_scenarios=None, quiet=False, name=None, clean=False,
+                           conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
+                           xplane_dir=None):
+    """Mode "full_evaluate" : Phase 1 + 2 + 3 enchainees sur les runs crees."""
     from Generate import generate_runs
 
     created_runs = generate_runs(nb_scenarios=nb_scenarios, quiet=quiet,

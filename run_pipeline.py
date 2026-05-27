@@ -5,7 +5,8 @@ Entry point CLI minimal. Toute la logique vit dans :
   - Phase 1            : project/Generate.generate_runs
   - Phase 2            : project/export/Export.render_run
   - Phase 3            : project/Detection_Evaluation.evaluate_run
-  - Modes batch        : project/runs.render_runs / evaluate_runs / full_pipeline
+  - Modes batch        : project/runs.render_runs / evaluate_runs /
+                         full_pipeline / full_evaluate_pipeline
                          (boucles + agregation + cleanup meteo)
 
 Modes :
@@ -16,6 +17,7 @@ Modes :
     python run_pipeline.py evaluate generation_01/LFPO_24
     python run_pipeline.py evaluate --all --generation pluie_01
     python run_pipeline.py full -n 100 --name pluie --xplane-dir "C:/X-Plane 12"
+    python run_pipeline.py full_evaluate -n 100 --name pluie --xplane-dir "C:/X-Plane 12"
 """
 
 import sys
@@ -29,7 +31,7 @@ sys.path.insert(0, str(ROOT / "project"))
 import _paths  # noqa: F401
 
 from Generate import generate_runs
-from runs import render_runs, evaluate_runs, full_pipeline
+from runs import render_runs, evaluate_runs, full_pipeline, full_evaluate_pipeline
 
 
 def _add_generate_args(parser):
@@ -121,9 +123,13 @@ Structure runs/ :
     _add_yolo_args(p_eval)
 
     p_full = sub.add_parser("full", parents=[xplane_args],
-                            help="Pipeline complet (Phase 1 + 2 + 3)")
+                            help="Phase 1 + 2 enchainees (generation + rendu)")
     _add_generate_args(p_full)
-    _add_yolo_args(p_full)
+
+    p_full_eval = sub.add_parser("full_evaluate", parents=[xplane_args],
+                                 help="Phase 1 + 2 + 3 (generation + rendu + YOLO/IoU)")
+    _add_generate_args(p_full_eval)
+    _add_yolo_args(p_full_eval)
 
     args = parser.parse_args()
 
@@ -166,6 +172,13 @@ Structure runs/ :
 
     elif args.mode == "full":
         full_pipeline(
+            nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+            name=args.name, clean=args.clean,
+            xplane_dir=args.xplane_dir,
+        )
+
+    elif args.mode == "full_evaluate":
+        full_evaluate_pipeline(
             nb_scenarios=args.nb_scenarios, quiet=args.quiet,
             name=args.name, clean=args.clean,
             conf=args.conf, imgsz=args.imgsz,

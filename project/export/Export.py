@@ -19,6 +19,7 @@ Chaine pipeline : run_dir -> step_render -> step_faults -> step_ground_truth
 
 import sys
 import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Bootstrap sys.path via project/_paths.py (parent dossier de project/export/)
@@ -187,6 +188,19 @@ def export(root_node, path):
         weather=weather_arg,
     )
 
+    # Nom du template XML actif (lu depuis settings.xml, CWD = project/).
+    # Sauvegarde dans poses_cam_export.json pour que le notebook puisse
+    # remplir la colonne `weather` du metadata.csv.
+    template_file_name = ""
+    try:
+        settings_tree = ET.parse("settings.xml")
+        for p in settings_tree.getroot():
+            if p.attrib.get("name") == "template_file_name":
+                template_file_name = p.attrib.get("value", "")
+                break
+    except (ET.ParseError, OSError):
+        pass
+
     # --- Sauver poses_cam_export.json (format X-Plane, coords locales) ---
     save_poses_json(
         flight_data, cfg.fps, scenario_name,
@@ -202,6 +216,7 @@ def export(root_node, path):
             "stabilization_distance_m": stabilization_distance_m,
             "airport_runway": f"{airport}_{runway}",
             "screenshot_duration": screenshot_duration,
+            "template_file_name": template_file_name,
         },
     )
 
