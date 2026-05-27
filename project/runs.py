@@ -81,10 +81,18 @@ def find_runs(run_name=None, all_runs=False):
 def create_runs_from_taf_output():
     """Reorganise la sortie TAF (output/) vers runs/<ICAO_RWY>/.
 
-    Pour chaque .yaml trouve dans output/ : copie yaml + poses_cam_export.json
-    (avec scenario_name mis a jour si suffixe) + fault_profile.json +
-    weather_profile.json. Genere un suffixe _NNN si une piste est generee
-    plusieurs fois.
+    TAF ecrit dans output/test_case_*/test_artifact_*/, un dossier "plat" non
+    indexable par nom de piste. On regroupe le .yaml + ses JSON compagnons
+    sous runs/<ICAO_RWY>/ (le pipeline travaille a ce niveau-la).
+
+    Pour chaque .yaml trouve dans output/, on copie :
+      - <name>.yaml                (renomme depuis le stem)
+      - poses_cam_export.json      (scenario_name patche si suffixe applique)
+      - fault_profile.json         (optionnel)
+      - weather_profile.json       (optionnel)
+
+    Si une meme piste est generee plusieurs fois (collisions de seed ou
+    re-generation), on suffixe _002, _003, ... pour eviter d'ecraser.
 
     :return: list[Path] des runs crees
     """

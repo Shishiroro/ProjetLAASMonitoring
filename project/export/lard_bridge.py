@@ -67,9 +67,10 @@ def get_runway_geometry(airport, runway):
     :return: dict avec ltp_lat, ltp_lon, ltp_alt,
              runway_heading_deg, runway_back_azimuth_deg
     """
-    # compute_aiming_point exige dist_m mais on jette l'aiming point retourne.
-    # La distance reelle d'aiming est appliquee dans trajectory_builder.build_trajectory
-    # via OUParams.dist_ap_m (altitude = -tan(alpha_v) * (distance + dist_ap_m)).
+    # compute_aiming_point() exige une dist_m mais on ne veut que les sorties
+    # geometriques (rwy_psi, ltp) ; on passe 0 et on ignore l'aiming point.
+    # La vraie distance d'aiming est gardee dans trajectory_builder via
+    # OUParams.dist_ap_m (altitude = -tan(alpha_v) * (distance + dist_ap_m)).
     _, _, rwy_psi, ltp, fpap = compute_aiming_point(
         RUNWAY_DB_XPLANE, airport, runway, 0.0
     )
@@ -259,9 +260,13 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None):
     csv_file = dataset_dir / csv_name
     footage_dir = dataset_dir / "footage"
 
-    # On pointe out_images_dir vers footage/ pour eviter le doublon exported_images/
-    # cree par LARD. Comme src == dst, on neutralise shutil.copy dans le module
-    # label_export uniquement (le CSV reference alors les vraies images de footage/).
+    # LARD recopie les images dans `out_images_dir` (typiquement exported_images/)
+    # avant de generer le CSV. On veut juste pointer ce CSV sur les images deja
+    # presentes dans footage/, sans duplication.
+    # Astuce : on passe out_images_dir = footage_dir et on monkey-patch shutil
+    # dans le module label_export pour qu'une copie src->dst identique soit
+    # un no-op au lieu d'une SameFileError. Le patch est local au module et
+    # restaure dans le finally en sortie.
     import src.labeling.label_export as _le
     import shutil as _real_shutil
 
@@ -274,8 +279,8 @@ def generate_labels_csv(yaml_path, dataset_dir, csv_name=None):
 
     _orig_shutil = _le.shutil
     _le.shutil = _SmartShutil
-    # Mute les print() verbeux de LARD (Labelling Pose / ORIENTATION / not labelled).
-    # Stdout redirige vers un buffer jete a la fin du with — aucun fichier cree.
+    # Mute les print() verbeux de LARD (Labelling Pose / ORIENTATION / not labelled)
+    # en redirigeant stdout vers un buffer jete a la fin du with (rien n'est ecrit).
     import contextlib, io
     try:
         with _lard_cwd(), contextlib.redirect_stdout(io.StringIO()):

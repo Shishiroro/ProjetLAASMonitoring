@@ -64,8 +64,10 @@ def load_ground_truths(csv_path: Path, image_names: list[str], runway: str | Non
     """
     df = pd.read_csv(csv_path, sep=";")
     if runway is not None:
-        # LARD stocke le nom de piste du cote LARD (ex: approche 10L → label 28L).
-        # On accepte le runway demande ET son reciprocal.
+        # Une piste physique a deux noms (sens opposes). LARD libelle ses GT
+        # avec le nom du seuil oppose a l'approche : si on atterrit en 10L,
+        # le CSV ecrit "28L". On garde les deux pour matcher quel que soit
+        # le sens choisi en argument.
         recip = reciprocal_runway(str(runway))
         df = df[df["runway"].astype(str).isin([str(runway), recip])]
     rows = []

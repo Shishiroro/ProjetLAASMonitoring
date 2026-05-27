@@ -96,9 +96,9 @@ def run(nb_test_cases=None, verbose=True):
                 p.set("value", str(nb_test_cases))
         tree.write(settings_file)
 
-    # Pre-creer les dossiers : mkdir -p n'existe pas sur Windows,
-    # et sur Linux ca evite le prompt interactif de TAF.
-    # Path.mkdir() est cross-platform, donc on appelle toujours.
+    # TAF utilise `mkdir -p` (Unix) qui casse sur Windows, et sur Linux ouvre
+    # un prompt interactif au premier passage. On pre-cree l'arborescence
+    # avec Path.mkdir() (cross-platform) pour court-circuiter les deux.
     _precreate_output_dirs(project_dir)
 
     import Taf

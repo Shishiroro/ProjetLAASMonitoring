@@ -126,7 +126,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="10"     max="10"/>
+            <parameter name="weather_effect_duration" type="real" min="0"     max="0"/>
 
         </node>
 
@@ -144,7 +144,7 @@
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="3"     max="3"/>
+            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>

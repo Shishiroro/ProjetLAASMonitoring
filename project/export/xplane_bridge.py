@@ -10,17 +10,19 @@ Protocole UDP X-Plane :
   - RREF : request dataref (lecture)
 
 Positionnement valide :
-  - Pause sim + override planepath
-  - Paquet VEHS (lat/lon en double precision float64, angles en float32)
+  - Pause sim + override planepath (l'avion est verrouille, plus de physique)
+  - Paquet VEHS (lat/lon en double precision float64, angles en float32) —
+    indispensable car les datarefs natifs sont en float32 et le bruit
+    quantif. sur la latitude se voit dans le rendu en courte finale.
   - Les poses du JSON sont en lon/lat/alt geodesique (renderer-agnostique)
 
 Capture :
-  - mss (screen grab) cible sur la fenetre X-Plane
-  - JPEG pour la vitesse (~25ms/frame vs 300ms avec screenshot X-Plane)
+  - mss (screen grab) cible sur la zone client de la fenetre X-Plane
+  - Sortie JPEG (qualite 90) : compromis taille / latence pour les datasets longs
 
 Convention pitch stockee : 90 = regard horizontal (level).
-X-Plane : pitch 0 = level, negatif = nez en bas.
-Conversion : xplane_pitch = pitch_stocke - 90.
+X-Plane attend : pitch 0 = level, negatif = nez en bas.
+Conversion appliquee dans _convert_pose : xplane_pitch = pitch_stocke - 90.
 
 Usage :
     from xplane_bridge import render_scenario, XPlaneConfig
@@ -445,7 +447,8 @@ class XPlaneConnection:
         self.send_dref("sim/joystick/mouse_is_yoke", 0.0)
         time.sleep(0.1)
 
-        # Capture region (pas de resize — on garde la fenetre telle quelle)
+        # Capture region : on relit la geometrie reelle apres le resize ci-dessus
+        # (le WM peut imposer une taille legerement differente — bordures, decorations).
         if HAS_WINDOW_MGMT:
             self.capture_region = get_xplane_capture_region()
             if self.capture_region:
@@ -505,8 +508,9 @@ class XPlaneConnection:
         """Positionne l'avion via VEHS (lat/lon en double precision float64).
 
         Protocole VEHS X-Plane : lat/lon/alt en double, angles en float32.
-        Envoye 2x car X-Plane recalcule l'elevation au 1er paquet
-        (hack du code LARD officiel).
+        On envoie le paquet 2x : X-Plane recale l'elevation au sol au 1er
+        paquet (l'alt envoyee est ignoree), le 2e applique vraiment l'alt
+        demandee. Astuce reprise du connecteur LARD officiel.
         """
         msg = struct.pack('<4sxidddfff', b'VEHS',
                           0,          # aircraft index (0 = ego)
@@ -708,12 +712,14 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
             xp_first["heading"], xp_first["pitch"], xp_first["roll"],
         )
 
-        # Injecter la meteo (per-scenario, une seule fois) APRES teleportation
-        # La stabilisation (load_texture_duration / weather_effect_duration, via XML)
-        # laisse le temps a X-Plane de charger les textures
-        # IMPORTANT : on unpause la sim avant injection pour que les particules
-        # de pluie/neige soient generees (avec sim pausee, X-Plane ne spawn rien).
-        # override_planepath/flight_control/throttles restent a 1.0 → avion locke.
+        # Injecter la meteo (per-scenario, une seule fois) APRES teleportation,
+        # afin que X-Plane charge les textures de la zone pendant la stabilisation
+        # (load_texture_duration / weather_effect_duration, lus depuis le XML).
+        #
+        # IMPORTANT : on unpause la sim avant l'injection. X-Plane ne spawn pas
+        # de particules (pluie/neige) tant que la sim est pausee. Les overrides
+        # planepath / flight_control / throttles restent a 1.0 -> l'avion reste
+        # fige meme si la sim tourne (seul le moteur graphique avance).
         weather_active = False
         weather_status = "no_weather"  # no_weather | ok | plugin_timeout | inject_failed
         if weather_profile_path and Path(weather_profile_path).exists():
@@ -740,13 +746,11 @@ def render_scenario(poses_path, output_dir, config=None, weather_profile_path=No
                         print(f"  [XPLANE] ATTENTION: plugin XPPython3 ne repond pas — meteo ignoree")
                         weather_status = "plugin_timeout"
 
-        # Garder la sim active pendant la capture pour que les particules continuent
-        # a spawner (sinon X-Plane les fige et la pluie disparait apres quelques frames).
-        # override_planepath verrouille la position avion → seul le rendu temporel avance.
+        # Si la meteo est active, on garde la sim qui tourne pendant la capture :
+        # sinon X-Plane fige le moteur de particules et la pluie/neige disparait
+        # apres quelques frames. override_planepath verrouille deja la position.
         if weather_active:
             conn.send_dref("sim/time/paused", 0.0)
-
-        # Positionnement via VEHS (double precision) — pas besoin de reference locale
 
         render_w = conn.capture_region["width"] if conn.capture_region else config.window_width
         render_h = conn.capture_region["height"] if conn.capture_region else config.window_height

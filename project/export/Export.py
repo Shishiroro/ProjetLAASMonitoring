@@ -114,9 +114,11 @@ def export(root_node, path):
         weather_effect_duration=float(_read_param(weather_node, "weather_effect_duration")),
     )
 
-    # Delai de settle apres chaque teleport camera (per-machine / per-scenario).
-    # Reglage de rendu (node settings), independant de la meteo.
-    # Plombe via poses_cam_export.json.
+    # Delai d'attente apres chaque teleport camera, avant la capture (en s).
+    # A regler par machine : plus le GPU est lent a charger les textures, plus
+    # il faut augmenter cette valeur pour eviter les flashs gris a l'ecran.
+    # Independant de la meteo ; relu cote rendu via poses_cam_export.json
+    # (champ trajectory.screenshot_duration) -> XPlaneConfig.settle_time.
     screenshot_duration = float(_read_param(settings_node, "screenshot_duration"))
 
     if has_weather(weather_cfg):
@@ -135,9 +137,11 @@ def export(root_node, path):
         print(f"[Export] Meteo : {', '.join(parts)}")
 
     # --- Calcul auto de tau (Dryden simplifie) ---
-    # tau ≈ h / V, ou h = altitude geometrique au debut du segment (3° de glide).
+    # Modele turbulence atmospherique : tau ~= h / V, ou h est l'altitude
+    # geometrique en debut de segment (deduite du glide slope 3°) et V la
+    # vitesse sol. Plus on est haut/lent, plus la turbulence est correlee.
     h_m = along_track_distance_start * math.tan(math.radians(3.0))
-    speed_ms = ground_speed_kts * 0.514444
+    speed_ms = ground_speed_kts * 0.514444  # 1 kt = 0.514444 m/s
     correlation_time_s = h_m / speed_ms
 
     # --- Construire les configs ---

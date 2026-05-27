@@ -121,7 +121,8 @@ def local_hour_to_zulu(local_hour, lat, lon, date=None):
         date = datetime.now()
     tz_name = _TZ_FINDER.timezone_at(lat=lat, lng=lon)
     if tz_name is None:
-        # Fallback : approximation longitude (ocean, latitudes extremes)
+        # Pas de fuseau politique (ocean, polaire) : on retombe sur le fuseau
+        # solaire ~longitude/15. Approximation suffisante hors zones DST.
         return (local_hour - lon / 15.0) % 24.0
     tz = pytz.timezone(tz_name)
     utc_offset_h = tz.utcoffset(date).total_seconds() / 3600
@@ -158,17 +159,22 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, latitude=0.0, longitu
     zulu_h = local_hour_to_zulu(config.time_of_day_h, latitude, longitude)
     params["time_of_day_h"] = zulu_h
 
-    # Nuages — base dynamique : au-dessus de l'avion avec marge
-    # Garde-fou : un nuage avec thickness=0 (base=top) ne genere AUCUNE particule
-    # de pluie/neige (XPLMWeather le considere comme degenere). On force un
-    # minimum coherent avec le type pour eviter une "pluie invisible".
-    MIN_THICKNESS_BY_TYPE = {0: 1000, 1: 500, 2: 2000, 3: 6000}  # Cirrus/Stratus/Cumulus/Cb
+    # Position des nuages : on les place dynamiquement au-dessus de l'avion
+    # (alt_max + cloud_margin_m) plutot qu'a une altitude absolue, pour eviter
+    # qu'ils soient sous l'avion sur les approches montagneuses.
+    #
+    # Fallback `cloud_thickness_m <= 0` UNIQUEMENT : un nuage avec base==top
+    # est un nuage degenere pour XPLMWeather et ne genere AUCUNE particule
+    # (bug "pluie invisible"). Si l'utilisateur met 0 dans le XML on substitue
+    # une epaisseur par defaut coherente avec le genre. Toute valeur positive
+    # (meme petite, ex: 50 m) est respectee telle quelle — on ne plancher pas.
+    THICKNESS_DEFAULT_BY_TYPE = {0: 1000, 1: 500, 2: 2000, 3: 6000}  # Cirrus/Stratus/Cumulus/Cb
     cloud_base = aircraft_max_alt_m + config.cloud_margin_m
     if config.cloud_type >= 0:
         # Nuages manuels demandes par l'utilisateur
         thickness = config.cloud_thickness_m
         if thickness <= 0:
-            thickness = MIN_THICKNESS_BY_TYPE.get(int(config.cloud_type), 2000)
+            thickness = THICKNESS_DEFAULT_BY_TYPE.get(int(config.cloud_type), 2000)
         params["cloud_type"] = config.cloud_type
         params["cloud_coverage"] = config.cloud_coverage
         params["cloud_base_msl"] = cloud_base
@@ -177,7 +183,7 @@ def build_plugin_command(config, aircraft_max_alt_m=200.0, latitude=0.0, longitu
         # Pluie sans nuages manuels : forcer Cumulonimbus
         # XP12 ne genere pas ses propres nuages via l'API setWeatherAtLocation,
         # contrairement a l'interface utilisateur
-        thickness = config.cloud_thickness_m if config.cloud_thickness_m > 0 else MIN_THICKNESS_BY_TYPE[3]
+        thickness = config.cloud_thickness_m if config.cloud_thickness_m > 0 else THICKNESS_DEFAULT_BY_TYPE[3]
         params["cloud_type"] = 3.0   # Cumulonimbus
         params["cloud_coverage"] = 1.0
         params["cloud_base_msl"] = cloud_base
@@ -262,7 +268,12 @@ def _send_weather_command(action, weather=None, timeout=5.0, retries=2, **extra_
             cmd["weather"] = weather
         cmd.update(extra_fields)
 
-        # Ecriture atomique (os.replace = atomique sur POSIX, remplace sur Windows)
+        # Ecriture atomique : on serialise dans un .tmp puis on os.replace.
+        # os.replace est atomique sur POSIX et autorise l'ecrasement sur Windows
+        # (contrairement a os.rename). Le plugin XPPython3 voit donc soit
+        # l'ancien fichier complet, soit le nouveau complet — jamais un JSON
+        # tronque. La boucle de retry couvre le cas ou le plugin a le fichier
+        # ouvert en lecture au meme instant (sharing violation sur Windows).
         tmp = cmd_file + ".tmp"
         with open(tmp, "w") as f:
             json.dump(cmd, f)

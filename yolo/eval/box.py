@@ -6,7 +6,16 @@ import numpy as np
 ###################
 
 def box_extract(xs: np.ndarray, ys: np.ndarray):
-    """
+    """Construit la bbox englobante (tlbr) a partir de coordonnees x/y dispersees.
+
+    Utilise pour convertir les 4 coins piste du GT LARD en bbox 2D.
+
+    Args:
+        xs: tableau des coordonnees X (n points).
+        ys: tableau des coordonnees Y (n points).
+
+    Returns:
+        np.ndarray [x_min, y_min, x_max, y_max] au format 'tlbr'.
     """
     x_min = float(xs.min())
     x_max = float(xs.max())

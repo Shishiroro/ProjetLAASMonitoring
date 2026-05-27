@@ -90,13 +90,13 @@
 
             <!-- Precipitation : 0 = pas de pluie/neige.
                  Si > 0 ET cloud_type=-1 : Cumulonimbus force auto (sinon pas de source) -->
-            <parameter name="precip_rate"             type="real" min="1"   max="1"/>
+            <parameter name="precip_rate"             type="real" min="0"   max="0"/>
 
             <!-- cloud_type :
                   -1 = pas de nuages manuels (avec precip=0 -> ciel degage)
                    0 = Cirrus, 1 = Stratus, 2 = Cumulus, 3 = Cumulonimbus -->
             <parameter name="cloud_type"              type="real" min="0"    max="3"/>
-            <parameter name="cloud_coverage"          type="real" min="1"     max="1"/>
+            <parameter name="cloud_coverage"          type="real" min="0"     max="1"/>
 
             <!-- Epaisseur du nuage (alt_top = alt_base + thickness)
                  IMPORTANT : si 0, XPLMWeather cree un nuage degenere (base=top) qui ne
@@ -104,7 +104,7 @@
             <parameter name="cloud_thickness_m"       type="real" min="500"  max="3000"/>
 
             <!-- Visibilite (m) -->
-            <parameter name="fog_visibility"          type="real" min="50000" max="50000"/>
+            <parameter name="fog_visibility"          type="real" min="20000" max="50000"/>
 
             <!-- Temperature (°C) : pluie vs neige -->
             <parameter name="temperature_c"           type="real" min="-15"   max="45"/>
@@ -115,7 +115,7 @@
             <parameter name="rain_scale"              type="real" min="1"     max="5"/>
   
             <!-- Marge nuages (m) au-dessus de l'avion pour la base nuages -->
-            <parameter name="cloud_margin_m"          type="real" min="500"  max="3000"/>
+            <parameter name="cloud_margin_m"          type="real" min="500"  max="5000"/>
 
             <!-- @@WEATHER_BLOCK_END@@ -->
 
@@ -125,7 +125,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="10"     max="10"/>
+            <parameter name="weather_effect_duration" type="real" min="0"     max="0"/>
 
         </node>
 
@@ -143,7 +143,7 @@
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="3"     max="3"/>
+            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>

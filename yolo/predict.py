@@ -106,13 +106,15 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
 
     model = YOLO(str(MODEL_PATH))
 
-    # Passer le dossier si toutes les images y sont, sinon une liste
-    # (une liste fait perdre les noms originaux -> image0, image1...)
+    # Passer le chemin du dossier conserve les noms d'origine des images ;
+    # passer une liste de chemins force ultralytics a renommer en image0,
+    # image1... ce qui casse la correspondance avec les CSV GT.
     all_in_dir = (start == 0 and n_images is None)
     source = str(src) if all_in_dir else [str(img) for img in images]
 
-    # Workspace temporaire pour ultralytics (uniquement les .txt labels, pas les images annotees).
-    # Les bbox sont dessinees on-demand depuis le notebook (build_yolo_box / show_sanity).
+    # Workspace temporaire pour ultralytics : on ne garde que les .txt labels.
+    # Les bbox annotees sont produites a la demande depuis notebook.ipynb
+    # (build_yolo_box / show_sanity) — pas besoin d'images annotees ici.
     yolo_tmp = (out / "_yolo_tmp").resolve()
     model.predict(
         source=source,

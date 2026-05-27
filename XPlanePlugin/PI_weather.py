@@ -1,23 +1,29 @@
 """
-PI_weather.py  —  XPPython3 plugin for LARD weather injection (v2)
+PI_weather.py  —  XPPython3 plugin for LARD weather injection
 ========================================================================
 Uses the official XPLMWeather API (X-Plane 12.0+) to inject weather.
-Communicates with the LARD pipeline via JSON files.
+Communicates with the LARD pipeline (project/export/xplane_weather.py)
+via JSON files exchanged in Resources/plugins/PythonPlugins/lard_exchange/.
 
-v2 fixes:
-  - cloud_type uses new enum (0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus)
-  - change_mode dataref instead of deprecated use_real_weather_bool
-  - isIncremental=False for clean clear
-  - radius_nm / max_altitude_msl_ft always set (never 0)
-  - Removed broken rain_percent dataref hacks
-  - setWeatherAtAirport support (stronger control)
+Key implementation notes (XPLMWeather quirks discovered while building this):
+  - cloud_type enum: 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus.
+  - use_real_weather_bool is deprecated/read-only — use the change_mode
+    dataref to switch between manual (0) and real-weather (7) modes.
+  - getWeatherAtLocation returns radius_nm=0 and max_altitude_msl_ft=0;
+    we MUST set them explicitly each call or XP ignores the injection.
+  - isIncremental=False replaces all prior records (used both for set
+    and for clear).
+  - To force snow, write the same temperature on every temp_layers slot —
+    otherwise XP blends with the +15°C layers and rain stays rain.
 
 Installation:
-  Copy to X-Plane 12/Resources/plugins/PythonPlugins/
+  Copy this file to X-Plane 12/Resources/plugins/PythonPlugins/
+  then reload via menu: Plugins > XPPython3 > Reload Scripts.
 
 Protocol:
   Python pipeline writes weather_command.json  {seq, action, weather}
   Plugin reads, applies via XPLMWeather API, writes weather_status.json
+  Sequence number guards against duplicate processing.
 """
 
 import os
@@ -197,8 +203,8 @@ class PythonInterface:
           2 = Cumulus
           3 = Cumulonimbus
         """
-        # Leave real-weather mode so our injection takes effect
-        # change_mode: 7 = real weather, anything else = manual
+        # change_mode dataref: 0..6 = manual modes, 7 = real weather (online METAR).
+        # We must switch out of mode 7 or XP overwrites our injection from METAR.
         try:
             xp.setDatai(self.dr_change_mode, 0)
         except Exception:
@@ -262,16 +268,15 @@ class PythonInterface:
         info.max_altitude_msl_ft = float(weather.get("max_alt_ft", 30000.0))
 
         # -- Time of day --
+        # time_of_day_h is already in UTC (the pipeline converts local hour ->
+        # UTC via timezonefinder + pytz in xplane_weather.local_hour_to_zulu).
+        # zulu_time_sec is XP's dataref for "seconds since midnight UTC".
         if "time_of_day_h" in weather:
             hour = float(weather["time_of_day_h"])
-            # Desactiver le temps systeme pour pouvoir fixer l'heure
             try:
                 xp.setDatai(self.dr_use_system_time, 0)
             except Exception:
                 pass
-            # zulu_time_sec = secondes depuis minuit UTC
-            # On traite time_of_day_h comme heure locale approximative
-            # (pour un controle precis il faudrait le fuseau horaire de l'aeroport)
             xp.setDataf(self.dr_zulu_time, hour * 3600.0)
 
         # Apply weather — isIncremental=False to replace all prior records
@@ -342,30 +347,29 @@ class PythonInterface:
     def _clear_weather(self):
         """Reset to default weather.
 
-        Strategy:
-          1. isIncremental=False context with no setWeatherAtLocation
-             → erases ALL prior records from this plugin
-          2. regen_weather command → forces XP12 to regenerate weather
-          3. change_mode=7 → back to real weather
+        Calling each step in isolation is not enough — XP's weather state
+        survives across our plugin's life unless we also force a regen
+        and switch back to real-weather mode.
         """
-        # Step 1: erase all our plugin's weather records
+        # 1) Entering an isIncremental=False context and exiting without any
+        #    setWeatherAtLocation call wipes all records we previously injected.
         with xp.weatherUpdateContext(isIncremental=False, updateImmediately=True):
-            # Empty context with isIncremental=False erases everything
             pass
 
-        # Step 2: force weather regeneration
+        # 2) Force XP to rebuild the weather grid from scratch (otherwise the
+        #    cleared cells stay "manual but empty" — clouds linger visually).
         try:
             xp.commandOnce(self.cmd_regen_weather)
         except Exception:
             pass
 
-        # Step 3: back to real weather mode
+        # 3) Hand control back to METAR-driven real weather.
         try:
             xp.setDatai(self.dr_change_mode, 7)
         except Exception:
             pass
 
-        # Step 4: restore system time
+        # 4) Restore system time (we forced time_of_day_h while injecting).
         try:
             xp.setDatai(self.dr_use_system_time, 1)
         except Exception:

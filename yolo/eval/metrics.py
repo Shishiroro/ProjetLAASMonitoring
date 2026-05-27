@@ -30,12 +30,15 @@ def compute_metrics(
     Function to evaluate an ML model.
 
     Args:
-        pred_box (Union[torch.Tensor, np.ndarray]): The prediction boxes   [image_id, class_id, x1, y1, x2, y2, score]
-        true_box (Union[torch.Tensor, np.ndarray]): The ground truth boxes [image_id, class_id, x1, y1, x2, y2]
-        iou_thresh (Union[np.ndarray, List[float], float]): IOU threshold or list-like of IOU thresholds
-        iou_method (str): Method to use for IOU computation
-        box_format (str): Format of the boxes.
-        conf (float): The confidence at which to evaluate the prediction P, R. If None, metrics of max F1 score are returned.
+        y_pred (Union[torch.Tensor, np.ndarray]): The prediction boxes   [image_id, class_id, x1, y1, x2, y2, score]
+        y_true (Union[torch.Tensor, np.ndarray]): The ground truth boxes [image_id, class_id, x1, y1, x2, y2]
+        iou_thresh (Union[np.ndarray, List[float], float]): IOU threshold or list-like of IOU thresholds.
+        iou_method (str): Method to use for IOU computation (IOU/GIOU/DIOU/CIOU).
+        box_format (str): Format of the boxes (xyxy/xywh/cxcywh).
+        t_conf (float | None): Confidence threshold at which to evaluate P, R.
+                               If None, the metrics at max F1 score are returned.
+        return_lst (bool): If True, cast tensor metrics to plain Python lists.
+        return_agg (bool): If True, average per-class metrics into a single scalar.
     """
     # Compute binary matching of prediction and ground truths at iou_thresh
     tpfp, _ = match_predictions(y_pred, y_true, iou_thresh=iou_thresh, iou_method=iou_method, box_format=box_format)
@@ -62,7 +65,9 @@ def match_predictions(box_p: torch.Tensor, box_g: torch.Tensor, iou_thresh: floa
     Args:
         box_p (torch.Tensor, [N, 7]): The predictions 'boxes'   [image_id, class_id, x1, y1, x2, y2, score]
         box_g (torch.Tensor, [M, 6]): The ground truths 'boxes' [image_id, class_id, x1, y1, x2, y2]
-        iou_threshold (float): IoU threshold for matching.
+        iou_thresh (float): IoU threshold for matching.
+        iou_method (str): IoU variant (IOU/GIOU/DIOU/CIOU).
+        box_format (str): Box format (xyxy/xywh/cxcywh).
 
     Note:
         The boxes are expected to be in the 'xyxy' format.
@@ -167,13 +172,16 @@ def compute_ap_per_cls(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute the average precision (AP) per class for given TP array.
-    
+
     Args:
-        tp (np.ndarray): [N,] Binary array (1=correct, 0=incorrect).
-        pred_b (torch.Tensor): [N, 7] The predictions   (img_id, cls_id, x1, y1, x2, y2, conf)
-        true_b (torch.Tensor): [M, 6] The ground truths (img_id, cls_id, x1, y1, x2, y2)
-        conf (float): The confidence at which to compute P, R, F1
-    
+        tp (np.ndarray): [N,] Binary array (1=correct, 0=incorrect), aligned with y_pred.
+        y_pred (torch.Tensor): [N, 7] The predictions   (img_id, cls_id, x1, y1, x2, y2, conf)
+        y_true (torch.Tensor): [M, 6] The ground truths (img_id, cls_id, x1, y1, x2, y2)
+        t_conf (float | list | np.ndarray | None): Confidence threshold at which
+            to compute P, R, F1. If None, the operating point at max F1 is used.
+        eps (float): Numerical stabilization.
+        return_curves (bool): If True, the result dict also contains p_curve / r_curve.
+
     Returns:
         ap_ (nc,): Average precision per class and IOU threshold
         f1_ (nc,): F1-score, per-class, maximum or at given confidence

@@ -98,13 +98,13 @@
             <parameter name="precip_rate"         type="real" min="1" max="1"/>
 
             <!-- -1=Cb auto, 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus -->
-            <parameter name="cloud_type"          type="real" min="-1" max="-1"/>
+            <parameter name="cloud_type"          type="real" min="3" max="3"/>
 
             <!-- Couverture nuageuse [0-1] -->
             <parameter name="cloud_coverage"      type="real" min="1" max="1"/>
 
             <!-- Epaisseur nuage (m) ; 0 => pas de particules -->
-            <parameter name="cloud_thickness_m"   type="real" min="2000" max="2000"/>
+            <parameter name="cloud_thickness_m"   type="real" min="10000" max="10000"/>
 
             <!-- Visibilite (m) -->
             <parameter name="fog_visibility"      type="real" min="50000" max="50000"/>
@@ -116,7 +116,7 @@
             <parameter name="rain_scale"          type="real" min="4" max="5"/>
 
             <!-- Marge base nuages au-dessus de l'avion (m) -->
-            <parameter name="cloud_margin_m"      type="real" min="300" max="300"/>
+            <parameter name="cloud_margin_m"      type="real" min="300" max="500"/>
 
             <!-- @@WEATHER_BLOCK_END@@ -->
 
@@ -126,7 +126,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="10"     max="10"/>
+            <parameter name="weather_effect_duration" type="real" min="0"     max="0"/>
 
         </node>
 
@@ -144,7 +144,7 @@
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="10"     max="10"/>
+            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>

@@ -8,7 +8,7 @@ import torch
 
 def _box_xywh_to_xyxy(box: torch.Tensor):
     """
-    Converts a box from xywh format to xywh format.
+    Converts a box from xywh format to xyxy format.
     https://github.com/pytorch/vision/blob/main/torchvision/ops/_box_convert.py#L50
     """
     x1, y1, w, h = box.unbind(-1)

@@ -45,20 +45,20 @@ class TrajectoryConfig:
 @dataclass
 class OUParams:
     """Hyperparametres OU (dans le code, pas dans le XML)."""
-    alpha_v_deg: float = -3.0       # angle vertical moyen (glide slope ~3°), pente de descente standard
-    alpha_h_deg: float = 0.0        # angle horizontal moyen (axe piste), l'avion viste la piste
-    pitch_deg: float = -4.0         # pitch moyen
+    alpha_v_deg: float = -3.0       # angle vertical moyen (glide slope ~3°, pente de descente standard ILS)
+    alpha_h_deg: float = 0.0        # angle horizontal moyen (axe piste = l'avion vise la piste)
+    pitch_deg: float = -4.0         # pitch moyen (assiette negative en approche)
     yaw_deg: float = 0.0            # yaw moyen (deviation)
-    roll_deg: float = 0.0           # roll moyen
+    roll_deg: float = 0.0           # roll moyen (ailes a plat)
 
     std_alpha_v_deg: float = 0.25   # ecart-type vertical (~half-dot glide slope)
     std_alpha_h_deg: float = 0.35   # ecart-type horizontal (~half-dot localizer, ±15m a 3km)
     std_yaw_deg: float = 1.2        # ecart-type yaw (approche stabilisee A320)
     std_pitch_deg: float = 0.7      # ecart-type pitch (assiette quasi fixe sur glide)
-    std_roll_deg: float = 2.5       # ecart-type roll (+ couplage lateral en sus)
+    std_roll_deg: float = 2.5       # ecart-type roll (+ couplage lateral ajoute apres OU)
 
-    dist_ap_m: float = 300.0        # distance aiming point depuis LTP (où l'avion vise)
- 
+    dist_ap_m: float = 300.0        # distance aiming point depuis LTP, ou l'avion vise (touchdown ~300m apres seuil)
+
     # Offset initial (degrade avec la convergence finale)
     alpha_h_offset_deg: float = 0.0   # ex: 2.0 = 2° lateral au start
     alpha_v_offset_deg: float = 0.0   # ex: 0.5 = 0.5° au-dessus du glide
@@ -68,18 +68,16 @@ class OUParams:
 # ---------------------------------------------------------------------------
 
 def compute_spatial_timeline(cfg: TrajectoryConfig):
-    """
-    Frames uniformes en distance, dt variable (vitesse constante).
+    """Genere N frames uniformement espacees en distance.
 
-    Avec vitesse constante, dt est en fait constant aussi.
-    On garde la structure a dt variable pour compatibilite future
-    (si on reintroduit la deceleration).
+    A vitesse constante (cas actuel), dt est aussi constant — la structure
+    dt_array reste un vecteur pour permettre une future deceleration variable
+    sans changer le reste du pipeline.
 
     :return: (distances_m, dt_array)
-        distances_m : ndarray (n_frames,), decroissant
-        dt_array    : ndarray (n_frames-1,)
+        distances_m : ndarray (n_frames,), decroissant (start -> end)
+        dt_array    : ndarray (n_frames-1,) en secondes
     """
-    # crée N frames uniformément espacées en distance (décroissant de start à end), calcule le dt entre chaque frame
     speed_ms = cfg.ground_speed_kts * KTS_TO_MS
     total_dist = cfg.along_track_distance_start - cfg.along_track_distance_end
     duration = total_dist / speed_ms
@@ -206,15 +204,18 @@ def compute_convergence_factors(distances_m, along_track_distance_end,
 # ---------------------------------------------------------------------------
 # Crab angle
 # ---------------------------------------------------------------------------
-# Angle de crabe pour compenser le vent traversier, avec correction pilote.
+
 def compute_crab_angle(wind_speed_kts, wind_direction_deg,
                        runway_heading_deg, groundspeed_kts,
                        pilot_correction=0.30):
-    """
-    Angle de crabe pour compenser le vent traversier.
+    """Angle de crabe pour compenser le vent traversier (avec correction pilote).
 
-    :param pilot_correction: fraction du crab corrigee par le pilote (0=full crab)
-    :return: crab angle en degres
+    L'avion pointe le nez face au vent pour que la trajectoire reste alignee
+    sur l'axe piste. En pratique, le pilote ne maintient pas le crab pur :
+    `pilot_correction` modelise cette fraction corrigee (0 = full crab nominal,
+    1 = avion parfaitement aligne par defaut).
+
+    :return: crab angle en degres (signe = sens de la correction)
     """
     if wind_speed_kts <= 0 or groundspeed_kts <= 0:
         return 0.0
@@ -314,16 +315,18 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     pitch_dev   = _rate_limit(pitch_dev, max_pitch_rate_ds)
 
     # --- Couplage roll-lateral : l'avion penche dans le sens de sa deviation ---
-    # On utilise la derivee filtree (EMA) de alpha_h pour eviter les oscillations
-    # que causait la derivee brute (echec v3).
-    # Gain ~2.0 : 1 deg/s de deviation laterale → 2 deg de roll.
+    # Pour eviter les oscillations parasites, on couple le roll a la derivee de
+    # alpha_h filtree par un EMA passe-bas (la derivee brute introduisait des
+    # micro-oscillations a haute frequence sur les trajectoires de test).
+    # Gain ~2.0 : 1 deg/s de deviation laterale -> 2 deg de roll.
     roll_lateral_gain = 2.0
-    # Filtre passe-bas du 1er ordre : ema_alpha = 1 - exp(-dt/tau_filter).
-    # tau_filter=0.615s reproduit l'ancien comportement fixe ema_alpha=0.15 a fps=10.
+    # tau_filter=0.615s : equivalent fps-aware d'un EMA fixe (alpha=0.15 a fps=10).
+    # ema_alpha = 1 - exp(-dt/tau_filter) garantit le meme lissage quel que soit le fps.
     tau_filter_s = 0.615
     ema_alpha = 1.0 - np.exp(-dt_frame / tau_filter_s)
     d_alpha_h = np.diff(alpha_h_dev, prepend=alpha_h_dev[0]) / dt_frame  # derivee deg/s
-    # Filtre EMA passe-bas sur la derivee
+    # Filtre EMA passe-bas sur la derivee (recurrence Markov -> boucle Python
+    # necessaire, mais sur quelques centaines de frames ca reste negligeable).
     d_alpha_h_filtered = np.zeros_like(d_alpha_h)
     d_alpha_h_filtered[0] = d_alpha_h[0]
     for i in range(1, len(d_alpha_h)):
@@ -373,8 +376,11 @@ def build_trajectory(cfg: TrajectoryConfig, ou: OUParams,
     ltp_lats = np.full(n_frames, ltp_lat)
     lons, lats, _ = g.fwd(ltp_lons, ltp_lats, azimuths, distances_m, radians=False)
 
-    # Camera regarde vers FPAP (runway_heading = LTP -> FPAP)
+    # Camera regarde vers FPAP : runway_heading_deg = azimut LTP -> FPAP,
+    # donc l'avion (qui arrive depuis l'arriere du seuil) regarde droit dans
+    # l'axe piste. On y ajoute le crab (correction vent) et le yaw_dev (bruit).
     yaws    = runway_heading_deg + crab_angles + yaw_dev
+    # Convention pitch stockee : 90 = level. xplane_bridge soustrait 90 a la lecture.
     pitches = 90.0 + ou.pitch_deg + pitch_dev
     rolls   = ou.roll_deg + roll_dev
 
