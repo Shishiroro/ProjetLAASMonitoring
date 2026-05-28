@@ -81,7 +81,7 @@ Ces deux commandes prennent **soit** un run précis, **soit** `--all` :
 
 | Forme | Exemple | Effet |
 |-------|---------|-------|
-| Chemin composé | `render generation_01/LFPO_24` | Cible exactement ce run (recommandé) |
+| Chemin composé | `render generation_01/LFPO_24` | Cible exactement ce run |
 | Nom + `--generation` | `render LFPO_24 --generation generation_01` | Idem, autre syntaxe |
 | Nom seul | `render LFPO_24` | Cherche dans toutes les générations ; **erreur** si le nom existe dans plusieurs |
 | `--all --generation` | `render --all --generation generation_01` | Tous les runs de cette génération |
@@ -112,8 +112,7 @@ py run_pipeline.py generate -n 5
 py run_pipeline.py generate -n 100 --name pluie --clean
 ```
 
-> `--clean` supprime l'intégralité de `runs/` (toutes les générations). À
-> utiliser en connaissance de cause.
+> `--clean` supprime l'intégralité de `runs/` (toutes les générations).
 
 ---
 
@@ -182,13 +181,13 @@ py run_pipeline.py full [-n N] [--name NOM] [--clean] [--xplane-dir CHEMIN]
 ```
 
 Enchaîne `generate` puis `render` sur les runs créés. **Sans évaluation.**
-X-Plane 12 doit être lancé.
+X-Plane 12 doit être lancé.  C'est la commande à utiliser pour un cycle complet sans l'évaluation.
 
-Options : celles de [`generate`](#generate--phase-1) + `--xplane-dir`.
 
 ```bash
 py run_pipeline.py full -n 5
-py run_pipeline.py full -n 100 --name pluie --clean --xplane-dir "C:/X-Plane 12"
+py run_pipeline.py full -n 20  --clean 
+py run_pipeline.py full -n 100 --name pluie --clean 
 ```
 
 ---
@@ -201,15 +200,13 @@ py run_pipeline.py full_evaluate [-n N] [--name NOM] [--clean] \
 ```
 
 **Pipeline complet de bout en bout** : génération + rendu + détection + IoU,
-zéro intervention. C'est la commande à utiliser pour un cycle complet.
+zéro intervention. C'est la commande à utiliser pour un cycle complet avec évaluation.
 X-Plane 12 doit être lancé.
 
-Options : celles de [`generate`](#generate--phase-1) + `--xplane-dir` + les
-options YOLO/IoU de [`evaluate`](#evaluate--phase-3).
 
 ```bash
 py run_pipeline.py full_evaluate -n 5
-py run_pipeline.py full_evaluate -n 100 --name pluie --xplane-dir "C:/X-Plane 12"
+py run_pipeline.py full_evaluate -n 100 --name nuage_et_pluie 
 ```
 
 ---
@@ -235,10 +232,16 @@ py run_pipeline.py full_evaluate -n 100 --name pluie --xplane-dir "C:/X-Plane 12
 
 ## Workflows typiques
 
-**Cycle complet en une commande** (le plus courant) :
+**Générer et rendre (Cas courant)** :
 
 ```bash
-py run_pipeline.py full_evaluate -n 5 --xplane-dir "C:/X-Plane 12"
+py run_pipeline.py full -n 20 --name brouillard 
+```
+
+**Cycle complet en une commande** :
+
+```bash
+py run_pipeline.py full_evaluate -n 5 
 ```
 
 **Phase par phase** (contrôle fin, ré-exécution ciblée) :
@@ -255,13 +258,7 @@ py run_pipeline.py evaluate --all --generation test_01
 py run_pipeline.py evaluate --all --generation test_01 --conf 0.4 --iou-method DIOU
 ```
 
-**Générer et rendre maintenant, évaluer plus tard** :
 
-```bash
-py run_pipeline.py full -n 20 --name pluie --xplane-dir "C:/X-Plane 12"
-# ... plus tard, X-Plane peut être fermé ...
-py run_pipeline.py evaluate --all --generation pluie_01
-```
 
 ---
 
@@ -279,21 +276,21 @@ section **Setup**.
 | `evaluate_runs(...)`      | `evaluate`     | Phase 3 |
 | `build_yolo_box(...)`     | —              | Images annotées avec les bbox YOLO (`yolo_box/`) |
 | `build_lard_box(...)`     | —              | Images annotées avec la vérité terrain LARD (`lard_box/`) |
-| `show_sanity(...)` / `show_sanity_lard(...)` | — | Aperçu rapide (1re / milieu / dernière image) |
-| `build_xplane_config(...)`| —              | (Re)génère `xplane_config.json` |
-| `build_params_trace(...)` | —              | (Re)génère `params_trace.xml` |
-| `build_video(...)`        | —              | Assemble les images d'un run en MP4 |
+| `show_sanity(...)` / `show_sanity_lard(...)` | — | Aperçu rapide des box yolo ou lard (1re / milieu / dernière image) |
+| `build_xplane_config(...)`| —              | Génère `xplane_config.json` |
+| `build_params_trace(...)` | —              | Génère `params_trace.xml` |
+| `build_video(...)`        | —              | Assemble les images d'un/des run en MP4 |
 
-Les fonctions du notebook acceptent les mêmes formes de ciblage que le CLI :
-sans argument = tous les runs ; nom seul si unique ; chemin composé
-`"<gen>/<run>"` sinon.
+Les fonctions du notebook acceptent les mêmes formes de ciblage que le CLI (voir Notebook)
 
 ---
 
 ## Où vont les résultats
 
 Voir la section **Résultats** du [README.md](README.md) pour le détail de
-l'arborescence `runs/<generation>/<ICAO_RWY>/`. En résumé :
+l'arborescence `runs/<generation>/<ICAO_RWY>/`. 
+
+En résumé :
 
 - `footage/` — images brutes X-Plane ; `degraded/` — images avec fautes capteur
 - `*_labels.csv` — vérité terrain LARD ; `predictions.csv` — détections YOLO
