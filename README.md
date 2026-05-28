@@ -1,4 +1,4 @@
-# LARD-LAAS-TAF
+# Projet :p 
 
 Pipeline de génération de **trajectoires d'approche réalistes** pour avions, rendu
 sous **X-Plane 12**, avec dégradation capteur et évaluation d'un modèle de

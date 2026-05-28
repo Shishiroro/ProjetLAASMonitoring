@@ -1,4 +1,4 @@
-# Référence des commandes — LARD-LAAS-TAF
+# Référence des commandes
 
 Référence complète du CLI `run_pipeline.py` (toutes les sous-commandes et leurs
 options) et de ses équivalents notebook.
