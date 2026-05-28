@@ -14,8 +14,10 @@ AIRBUS). La qualité de la détection est mesurée par l'**IoU** (intersection s
 union) entre prédiction et vérité terrain.
 
 L'utilisateur n'a qu'à éditer des fichiers **XML** pour définir ses scénarios,
-puis à lancer le pipeline en ligne de commande. Un `notebook.ipynb` est également
-disponible pour ceux qui préfèrent travailler en interactif.
+puis à lancer le pipeline en ligne de commande. Deux notebooks
+(`notebook_generation.ipynb` pour les 3 phases, `notebook_features.ipynb` pour
+les outils annexes) sont également disponibles pour ceux qui préfèrent travailler
+en interactif.
 
 ---
 
@@ -199,13 +201,13 @@ Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`
 python run_pipeline.py generate -n 5
 
 # Phase 2 — rendu X-Plane + fautes capteur
-python run_pipeline.py render --all --generation generation_01 --xplane-dir "C:/X-Plane 12"
+python run_pipeline.py render --all --generation generation_01
 
 # Phase 3 — vérité terrain LARD + détection + calcul IoU
 python run_pipeline.py evaluate --all --generation generation_01
 
 # Tout enchaîner d'un coup (pipeline complet)
-python run_pipeline.py full_evaluate -n 5 --xplane-dir "C:/X-Plane 12"
+python run_pipeline.py full_evaluate -n 5
 ```
 
 **Pour une utilisation normale, la commande `full_evaluate` suffit** : elle
@@ -222,14 +224,17 @@ une phase précise.
 options, workflows types et équivalents notebook) : voir
 [COMMANDES.md](COMMANDES.md).
 
-Le chemin d'installation X-Plane 12 peut aussi être renseigné directement dans
+Le chemin d'installation X-Plane 12 est renseigné une seule fois dans
 `project/settings.xml` via le paramètre `xplane_dir` :
 
 ```xml
 <parameter name="xplane_dir" type="path" value="C:/X-Plane 12" />
 ```
 
-Dans ce cas, l'option `--xplane-dir` en ligne de commande n'est plus nécessaire.
+Les commandes le lisent automatiquement : **l'option `--xplane-dir` en ligne de
+commande n'est donc pas nécessaire** (elle ne sert qu'à surcharger ponctuellement
+ce chemin). Ce répertoire n'est utilisé que pour localiser le plugin météo ; le
+positionnement et la capture d'images n'en dépendent pas.
 
 ---
 
@@ -250,18 +255,16 @@ runs/
 └── pipeline_report.json      rapport agrégé : IoU, AP, F1, P, R par scénario
 ```
 
-### Aller plus loin avec le notebook
+### Aller plus loin avec les notebooks
 
-Le fichier `notebook.ipynb` à la racine du projet propose des fonctionnalités
-complémentaires, à utiliser à la demande :
+Deux notebooks à la racine du projet :
 
-- création de **datasets** à partir des images générées,
-- assemblage des images d'un scénario en **flux vidéo**,
-- export de **fichiers optionnels** (`params_trace.xml`, `xplane_config.json`),
-- **visualisations des bounding boxes** (`yolo_box/`, `lard_box/`) pour comparer
-  prédictions du modèle et vérité terrain LARD.
-
-Le notebook permet également de lancer les **trois phases du pipeline**
-(`generate`, `render`, `evaluate`) directement depuis ses cellules, sans passer
-par la ligne de commande. C'est une alternative complète au CLI pour les
-utilisateurs qui préfèrent travailler en interactif.
+- **`notebook_generation.ipynb`** — reproduit les **trois phases du pipeline**
+  (`generate`, `render`, `evaluate`), exécutables séparément depuis ses cellules,
+  sans passer par la ligne de commande. Alternative complète au CLI.
+- **`notebook_features.ipynb`** — fonctionnalités complémentaires, à la demande :
+  - création de **datasets** à partir des images générées,
+  - assemblage des images d'un scénario en **flux vidéo**,
+  - export de **fichiers optionnels** (`params_trace.xml`, `xplane_config.json`),
+  - **visualisations des bounding boxes** (`yolo_box/`, `lard_box/`) pour comparer
+    prédictions du modèle et vérité terrain LARD.

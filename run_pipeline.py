@@ -38,7 +38,6 @@ def _add_generate_args(parser):
     """Ajoute les args de generation TAF partages par 'generate' et 'full'."""
     parser.add_argument("-n", "--nb-scenarios", type=int, default=None,
                         help="Nombre de scenarios (surcharge settings.xml)")
-    parser.add_argument("-q", "--quiet", action="store_true")
     parser.add_argument("--name", type=str, default=None,
                         help="Nom de la generation (cree runs/<name>_NN/ "
                              "au lieu de runs/generation_NN/)")
@@ -134,7 +133,7 @@ Structure runs/ :
     args = parser.parse_args()
 
     if args.mode == "generate":
-        created = generate_runs(nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+        created = generate_runs(nb_scenarios=args.nb_scenarios,
                                 name=args.name, clean=args.clean)
         if created:
             gen = created[0].parent.name
@@ -172,14 +171,14 @@ Structure runs/ :
 
     elif args.mode == "full":
         full_pipeline(
-            nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+            nb_scenarios=args.nb_scenarios,
             name=args.name, clean=args.clean,
             xplane_dir=args.xplane_dir,
         )
 
     elif args.mode == "full_evaluate":
         full_evaluate_pipeline(
-            nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+            nb_scenarios=args.nb_scenarios,
             name=args.name, clean=args.clean,
             conf=args.conf, imgsz=args.imgsz,
             iou_thresh=args.iou_thresh, iou_method=args.iou_method,

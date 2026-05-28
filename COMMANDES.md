@@ -1,12 +1,13 @@
 # Référence des commandes — LARD-LAAS-TAF
 
 Référence complète du CLI `run_pipeline.py` (toutes les sous-commandes et leurs
-options) et de ses équivalents dans `notebook.ipynb`.
+options) et de ses équivalents notebook.
 
 - Pour l'**installation**, les **prérequis** et la **configuration des scénarios
   (XML)** → voir [README.md](README.md).
-- Pour le **mode interactif** → voir `notebook.ipynb` (chaque section est
-  documentée en tête de cellule).
+- Pour le **mode interactif** → voir `notebook_generation.ipynb` (les 3 phases)
+  et `notebook_features.ipynb` (outils annexes : dataset, regroup, sanity,
+  exports, vidéo). Chaque section est documentée en tête de cellule.
 
 Toutes les commandes se lancent depuis la racine du projet. Les exemples
 utilisent `py` (lanceur Python Windows) ; sous Linux, remplacer par `python3`.
@@ -95,7 +96,7 @@ Ces deux commandes prennent **soit** un run précis, **soit** `--all` :
 ### `generate` — Phase 1
 
 ```bash
-py run_pipeline.py generate [-n N] [--name NOM] [--clean] [-q]
+py run_pipeline.py generate [-n N] [--name NOM] [--clean]
 ```
 
 Échantillonne les scénarios via TAF et crée la génération sous `runs/`.
@@ -105,7 +106,6 @@ py run_pipeline.py generate [-n N] [--name NOM] [--clean] [-q]
 | `-n`, `--nb-scenarios` | `nb_test_cases` de `settings.xml` (= 3) | Nombre de scénarios à générer |
 | `--name NOM` | `generation` | Préfixe du dossier de génération (`<NOM>_NN/`) |
 | `--clean` | désactivé | Vide **tout** `runs/` avant de générer |
-| `-q`, `--quiet` | désactivé | Sortie réduite |
 
 ```bash
 py run_pipeline.py generate -n 5
@@ -131,7 +131,7 @@ Phase 1 déjà faite. **X-Plane 12 doit être lancé** (mode fenêtré, scaling 
 | `run` (positionnel) | — | Run à rendre : `<gen>/<run>` ou nom seul |
 | `--all` | désactivé | Tous les runs de la génération (requiert `--generation`) |
 | `--generation NOM` | — | Génération ciblée |
-| `--xplane-dir CHEMIN` | `xplane_dir` de `settings.xml` (= `C:/X-Plane 12`) | Répertoire d'installation X-Plane 12 |
+| `--xplane-dir CHEMIN` | `xplane_dir` de `settings.xml` (= `C:/X-Plane 12`) | **Optionnel.** Surcharge ponctuelle du répertoire X-Plane 12. Sert uniquement à localiser le plugin météo ; sans météo, sa valeur n'a aucun effet. À renseigner de préférence dans `settings.xml`. |
 
 ```bash
 py run_pipeline.py render generation_01/LFPO_24
@@ -177,7 +177,7 @@ py run_pipeline.py evaluate --all --generation generation_01 --conf 0.4 --iou-me
 ### `full` — Phases 1 + 2
 
 ```bash
-py run_pipeline.py full [-n N] [--name NOM] [--clean] [-q] [--xplane-dir CHEMIN]
+py run_pipeline.py full [-n N] [--name NOM] [--clean] [--xplane-dir CHEMIN]
 ```
 
 Enchaîne `generate` puis `render` sur les runs créés. **Sans évaluation.**
@@ -195,7 +195,7 @@ py run_pipeline.py full -n 100 --name pluie --clean --xplane-dir "C:/X-Plane 12"
 ### `full_evaluate` — Phases 1 + 2 + 3
 
 ```bash
-py run_pipeline.py full_evaluate [-n N] [--name NOM] [--clean] [-q] \
+py run_pipeline.py full_evaluate [-n N] [--name NOM] [--clean] \
     [--xplane-dir CHEMIN] [--conf C] [--imgsz S] [--iou-thresh T] [--iou-method M]
 ```
 
@@ -220,11 +220,10 @@ py run_pipeline.py full_evaluate -n 100 --name pluie --xplane-dir "C:/X-Plane 12
 | `-n / --nb-scenarios` | ✓ | | | ✓ | ✓ |
 | `--name`              | ✓ | | | ✓ | ✓ |
 | `--clean`             | ✓ | | | ✓ | ✓ |
-| `-q / --quiet`        | ✓ | | | ✓ | ✓ |
 | `run` (positionnel)   | | ✓ | ✓ | | |
 | `--all`               | | ✓ | ✓ | | |
 | `--generation`        | | ✓ | ✓ | | |
-| `--xplane-dir`        | | ✓ | | ✓ | ✓ |
+| `--xplane-dir` *(opt.)* | | ✓ | | ✓ | ✓ |
 | `--runway`            | | | ✓ | | |
 | `--conf`              | | | ✓ | | ✓ |
 | `--imgsz`             | | | ✓ | | ✓ |
@@ -267,8 +266,10 @@ py run_pipeline.py evaluate --all --generation pluie_01
 
 ## Équivalents dans le notebook
 
-`notebook.ipynb` reproduit les 3 phases et ajoute des outils à la demande. Lancer
-les cellules dans l'ordre après la section **Setup**.
+Deux notebooks : `notebook_generation.ipynb` reproduit les 3 phases (Setup,
+Generate, Render, Evaluate — exécutables séparément) ; `notebook_features.ipynb`
+ajoute les outils à la demande. Lancer les cellules dans l'ordre après la
+section **Setup**.
 
 | Notebook (fonction)       | CLI équivalent | Rôle |
 |---------------------------|----------------|------|

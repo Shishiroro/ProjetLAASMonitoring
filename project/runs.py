@@ -393,12 +393,12 @@ def evaluate_runs(run_name=None, all_runs=False, generation=None, runway=None,
     return all_results
 
 
-def full_pipeline(nb_scenarios=None, quiet=False, name=None, clean=False,
+def full_pipeline(nb_scenarios=None, name=None, clean=False,
                   xplane_dir=None):
     """Mode "full" : Phase 1 + Phase 2 enchainees (sans evaluation YOLO)."""
     from Generate import generate_runs
 
-    created_runs = generate_runs(nb_scenarios=nb_scenarios, quiet=quiet,
+    created_runs = generate_runs(nb_scenarios=nb_scenarios,
                                  name=name, clean=clean)
     if not created_runs:
         print("[Pipeline] Aucun scenario genere, arret.")
@@ -410,13 +410,13 @@ def full_pipeline(nb_scenarios=None, quiet=False, name=None, clean=False,
     return _render_loop(created_runs, xplane_dir)
 
 
-def full_evaluate_pipeline(nb_scenarios=None, quiet=False, name=None, clean=False,
+def full_evaluate_pipeline(nb_scenarios=None, name=None, clean=False,
                            conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
                            xplane_dir=None):
     """Mode "full_evaluate" : Phase 1 + 2 + 3 enchainees sur les runs crees."""
     from Generate import generate_runs
 
-    created_runs = generate_runs(nb_scenarios=nb_scenarios, quiet=quiet,
+    created_runs = generate_runs(nb_scenarios=nb_scenarios,
                                  name=name, clean=clean)
     if not created_runs:
         print("[Pipeline] Aucun scenario genere, arret.")

@@ -142,7 +142,7 @@ def run(nb_test_cases=None, verbose=True):
     print("\n[Generate] Termine.")
 
 
-def generate_runs(nb_scenarios=None, quiet=False, name=None, clean=False):
+def generate_runs(nb_scenarios=None, name=None, clean=False):
     """Phase 1 complete : cleanup output/ + run() TAF + organize en runs/<generation>/.
 
     Wrapper haut-niveau de run() : nettoie le dossier temporaire output/,
@@ -171,7 +171,7 @@ def generate_runs(nb_scenarios=None, quiet=False, name=None, clean=False):
     if TAF_OUTPUT_DIR.exists():
         shutil.rmtree(TAF_OUTPUT_DIR)
 
-    run(nb_test_cases=nb_scenarios, verbose=not quiet)
+    run(nb_test_cases=nb_scenarios)
 
     return create_runs_from_taf_output(generation_dir)
 
@@ -182,13 +182,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generation de scenarios TAF")
     parser.add_argument("-n", "--nb-scenarios", type=int, default=None,
                         help="Nombre de scenarios (surcharge settings.xml)")
-    parser.add_argument("-q", "--quiet", action="store_true",
-                        help="Mode silencieux")
     parser.add_argument("--name", type=str, default=None,
                         help="Nom de la generation (sinon 'generation')")
     parser.add_argument("--clean", action="store_true",
                         help="Vider runs/ avant la generation")
     args = parser.parse_args()
 
-    generate_runs(nb_scenarios=args.nb_scenarios, quiet=args.quiet,
+    generate_runs(nb_scenarios=args.nb_scenarios,
                   name=args.name, clean=args.clean)
