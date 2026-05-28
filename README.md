@@ -200,10 +200,10 @@ Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`
 # Phase 1 — génère les scénarios (.yaml + poses caméra) dans runs/generation_01/
 py run_pipeline.py generate -n 5
 
-# Phase 2 — rendu X-Plane + fautes capteur
+# Phase 2 — rendu X-Plane + fautes capteur + vérité terrain LARD
 py run_pipeline.py render --all --generation generation_01
 
-# Phase 3 — vérité terrain LARD + détection + calcul IoU
+# Phase 3 — détection + calcul IoU vs vérité terrain
 py run_pipeline.py evaluate --all --generation generation_01
 
 # Tout enchaîner d'un coup (pipeline complet)

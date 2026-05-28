@@ -21,8 +21,8 @@ enchaînent**.
 | Commande | Phases | Rôle | X-Plane requis |
 |----------|--------|------|----------------|
 | `generate`      | 1       | Échantillonne N scénarios via TAF/z3 (`.yaml` + poses + profils JSON) | Non |
-| `render`        | 2       | Rend les images sous X-Plane 12 + applique les fautes capteur | **Oui** |
-| `evaluate`      | 3       | Génère la vérité terrain LARD, lance la détection YOLO + calcule l'IoU | Non |
+| `render`        | 2       | Rend les images sous X-Plane 12, applique les fautes capteur **et génère la vérité terrain LARD** | **Oui** |
+| `evaluate`      | 3       | Lance la détection YOLO + calcule l'IoU vs la vérité terrain (produite en Phase 2) | Non |
 | `full`          | 1 + 2   | `generate` puis `render` (**sans** évaluation) | **Oui** |
 | `full_evaluate` | 1 + 2 + 3 | Pipeline complet de bout en bout | **Oui** |
 
@@ -44,11 +44,12 @@ py run_pipeline.py <commande> --help # options d'une sous-commande
    chaque scénario, `runs/<generation>/<ICAO_RWY>/` avec `.yaml`,
    `poses_cam_export.json`, et si actifs `fault_profile.json` /
    `weather_profile.json`. Hors ligne, ne touche pas à X-Plane.
-2. **`render`** (Phase 2) — X-Plane 12 rend les images dans `footage/`, puis les
-   fautes capteur produisent `degraded/`. Requiert X-Plane lancé. **Ne génère
-   pas** la vérité terrain.
-3. **`evaluate`** (Phase 3) — génère la vérité terrain LARD à la volée
-   (`*_labels.csv`), lance YOLO (`predictions.csv`), calcule l'IoU et agrège un
+2. **`render`** (Phase 2) — X-Plane 12 rend les images dans `footage/`, les
+   fautes capteur produisent `degraded/`, puis la **vérité terrain LARD** est
+   générée (`*_labels.csv`, projection 3D→2D des coins de piste). Requiert
+   X-Plane lancé.
+3. **`evaluate`** (Phase 3) — lance YOLO (`predictions.csv`), calcule l'IoU
+   contre la vérité terrain **produite en Phase 2** et agrège un
    `pipeline_report.json`. Hors ligne, ré-exécutable à volonté avec d'autres
    seuils sans re-rendre.
 
@@ -122,8 +123,9 @@ py run_pipeline.py generate -n 100 --name pluie --clean
 py run_pipeline.py render (<run> | --all --generation NOM) [--xplane-dir CHEMIN]
 ```
 
-Rend les images sous X-Plane 12 puis applique les fautes capteur. Suppose la
-Phase 1 déjà faite. **X-Plane 12 doit être lancé** (mode fenêtré, scaling 100 %).
+Rend les images sous X-Plane 12, applique les fautes capteur, puis génère la
+vérité terrain LARD (`*_labels.csv`). Suppose la Phase 1 déjà faite. **X-Plane 12
+doit être lancé** (mode fenêtré, scaling 100 %).
 
 | Option | Défaut | Description |
 |--------|--------|-------------|
@@ -147,9 +149,9 @@ py run_pipeline.py evaluate (<run> | --all --generation NOM) \
     [--runway PISTE] [--conf C] [--imgsz S] [--iou-thresh T] [--iou-method M]
 ```
 
-Génère la vérité terrain LARD, lance la détection YOLO et calcule l'IoU. Suppose
-`footage/` ou `degraded/` déjà présent (Phase 2 faite). **Pas besoin de
-X-Plane.** Écrit `pipeline_report.json` dans la génération.
+Lance la détection YOLO et calcule l'IoU contre la vérité terrain. Suppose la
+Phase 2 faite : images (`footage/` ou `degraded/`) **et** `*_labels.csv` déjà
+présents. **Pas besoin de X-Plane.** Écrit `pipeline_report.json` dans la génération.
 
 | Option | Défaut | Description |
 |--------|--------|-------------|
