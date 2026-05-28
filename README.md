@@ -195,22 +195,32 @@ Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`
 ## Lancer le pipeline
 
 ```bash
-# Phase 1 — génère les scénarios (.yaml + poses caméra) dans runs/
+# Phase 1 — génère les scénarios (.yaml + poses caméra) dans runs/generation_01/
 python run_pipeline.py generate -n 5
 
-# Phase 2 — rendu X-Plane + fautes capteur + vérité terrain
-python run_pipeline.py render --all --xplane-dir "C:/X-Plane 12"
+# Phase 2 — rendu X-Plane + fautes capteur
+python run_pipeline.py render --all --generation generation_01 --xplane-dir "C:/X-Plane 12"
 
-# Phase 3 — détection + calcul IoU
-python run_pipeline.py evaluate --all
+# Phase 3 — vérité terrain LARD + détection + calcul IoU
+python run_pipeline.py evaluate --all --generation generation_01
 
-# Tout enchaîner d'un coup
-python run_pipeline.py full -n 5 --xplane-dir "C:/X-Plane 12"
+# Tout enchaîner d'un coup (pipeline complet)
+python run_pipeline.py full_evaluate -n 5 --xplane-dir "C:/X-Plane 12"
 ```
 
-**Pour une utilisation normale, la commande `full` suffit** : elle enchaîne les
-trois phases en une seule invocation. Les commandes `generate` / `render` /
-`evaluate` ci-dessus restent disponibles pour relancer une phase précise.
+**Pour une utilisation normale, la commande `full_evaluate` suffit** : elle
+enchaîne les trois phases en une seule invocation. La commande `full`, elle,
+n'enchaîne **que** la génération et le rendu (Phases 1 + 2, sans évaluation). Les
+commandes `generate` / `render` / `evaluate` restent disponibles pour relancer
+une phase précise.
+
+> En mode `--all`, l'option `--generation <nom>` est obligatoire (elle évite de
+> mélanger plusieurs batchs). Pour cibler un seul scénario, utiliser le chemin
+> composé, ex. `render generation_01/LFPO_24`.
+
+📖 **Référence complète des commandes** (toutes les sous-commandes, toutes les
+options, workflows types et équivalents notebook) : voir
+[COMMANDES.md](COMMANDES.md).
 
 Le chemin d'installation X-Plane 12 peut aussi être renseigné directement dans
 `project/settings.xml` via le paramètre `xplane_dir` :
