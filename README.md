@@ -166,7 +166,7 @@ C'est la seule partie à éditer pour définir ses propres scénarios.
 Pour régénérer les variantes météo après modification du template de base :
 
 ```bash
-python project/templates/build_weather_templates.py
+py project/templates/build_weather_templates.py
 ```
 
 ### Convention min / max
@@ -198,16 +198,16 @@ Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`
 
 ```bash
 # Phase 1 — génère les scénarios (.yaml + poses caméra) dans runs/generation_01/
-python run_pipeline.py generate -n 5
+py run_pipeline.py generate -n 5
 
 # Phase 2 — rendu X-Plane + fautes capteur
-python run_pipeline.py render --all --generation generation_01
+py run_pipeline.py render --all --generation generation_01
 
 # Phase 3 — vérité terrain LARD + détection + calcul IoU
-python run_pipeline.py evaluate --all --generation generation_01
+py run_pipeline.py evaluate --all --generation generation_01
 
 # Tout enchaîner d'un coup (pipeline complet)
-python run_pipeline.py full_evaluate -n 5
+py run_pipeline.py full_evaluate -n 5
 ```
 
 **Pour une utilisation normale, la commande `full_evaluate` suffit** : elle

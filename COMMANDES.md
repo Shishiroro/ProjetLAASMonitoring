@@ -9,8 +9,7 @@ options) et de ses équivalents notebook.
   et `notebook_features.ipynb` (outils annexes : dataset, regroup, sanity,
   exports, vidéo). Chaque section est documentée en tête de cellule.
 
-Toutes les commandes se lancent depuis la racine du projet. Les exemples
-utilisent `py` (lanceur Python Windows) ; sous Linux, remplacer par `python3`.
+Toutes les commandes se lancent depuis la racine du projet.
 
 ---
 
