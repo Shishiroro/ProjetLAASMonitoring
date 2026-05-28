@@ -139,7 +139,7 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
 
 ---
 
-=
+
 
 ## Configurer un scénario : les fichiers XML
 
@@ -240,19 +240,23 @@ positionnement et la capture d'images n'en dépendent pas.
 
 ## Résultats
 
-Chaque scénario produit un dossier dans `runs/` :
+Chaque génération (batch) produit un dossier dans `runs/`, avec un sous-dossier
+par scénario (`<ICAO_RWY>`) :
 
 ```
 runs/
-├── LFPO_24/
-│   ├── LFPO_24.yaml          scénario généré (Phase 1)
-│   ├── poses_cam_export.json poses caméra
-│   ├── footage/              images rendues par X-Plane
-│   ├── degraded/             images avec fautes capteur (si actives)
-│   ├── LFPO_24_labels.csv    vérité terrain LARD
-│   ├── predictions.csv       détections du modèle
-│   └── predictions_txt/      labels bruts du modèle
-└── pipeline_report.json      rapport agrégé : IoU, AP, F1, P, R par scénario
+└── generation_01/                  un batch (--name pour personnaliser)
+    ├── LFPO_24/                     un dossier par scénario (format ICAO_RWY)
+    │   ├── LFPO_24.yaml             scénario généré (Phase 1)
+    │   ├── poses_cam_export.json    poses caméra
+    │   ├── fault_profile.json       profil fautes capteur (si actif)
+    │   ├── weather_profile.json     profil météo X-Plane (si actif)
+    │   ├── footage/                 images rendues par X-Plane
+    │   ├── degraded/                images avec fautes capteur (si actives)
+    │   ├── LFPO_24_labels.csv       vérité terrain LARD
+    │   ├── predictions.csv          détections du modèle
+    │   └── predictions_txt/         labels bruts du modèle
+    └── pipeline_report.json         rapport agrégé : IoU, AP, F1, P, R par scénario
 ```
 
 ### Aller plus loin avec les notebooks
