@@ -34,13 +34,14 @@ Avant de lancer un batch complet (long, rend des images), prévisualisation de
 la météo du XML actif directement dans X-Plane :
 
 ```powershell
+py run_pipeline.py generate -n 1 (Pour générer une position)
 py injection_weather_test.py
 py injection_weather_test.py --run KPDX_10L
 py injection_weather_test.py --alt-offset 200 
 ```
 
 > Prérequis : `py run_pipeline.py generate -n 1`. 
---alt-offset 200 (200m au dessus de la piste, 100 est la valeur par défaut).
+Arg : --alt-offset 200 (200m au dessus de la piste, 100 est la valeur par défaut).
 > 
 
 ---
