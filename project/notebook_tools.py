@@ -1,8 +1,8 @@
 """
-notebook_tools.py — Outils appelables depuis notebook.ipynb
-============================================================
+notebook_tools.py — Outils appelables depuis notebook/features.ipynb
+====================================================================
 
-Regroupe les fonctions utilisees par notebook.ipynb (dataset, sanity checks,
+Regroupe les fonctions utilisees par notebook/features.ipynb (dataset, sanity checks,
 generation yolo_box/lard_box, params_trace.xml, xplane_config.json, video MP4)
 pour que le notebook se reduise a une suite d'appels.
 

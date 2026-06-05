@@ -1,8 +1,8 @@
 """
 build_weather_templates.py — Generateur des XML de profils meteo
 =================================================================
-Lit base_template.xml et genere les 22 variantes de profil meteo dans
-templates/<profil>/. Chaque variante = base_template.xml dont le bloc des
+Lit base.xml et genere les 22 variantes de profil meteo dans
+templates/<profil>/. Chaque variante = base.xml dont le bloc des
 8 parametres meteo (entre @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@)
 est remplace par les valeurs du preset.
 
@@ -10,18 +10,20 @@ C'est du tooling BUILD-TIME : rien ici ne tourne pendant la generation TAF.
 Au runtime, TAF lit simplement le XML pointe par project/settings.xml
 (parametre template_file_name, ex: value="rain/rain_heavy.xml").
 
-Usage :
-    py project/templates/build_weather_templates.py
+Usage (depuis la racine du projet) :
+    py scripts/build_weather_templates.py
 
 Pour modifier un profil : editer la table PRESETS ci-dessous (ou
-base_template.xml pour la trajectoire / les fautes), puis relancer ce script.
+base.xml pour la trajectoire / les fautes), puis relancer ce script.
 NE PAS editer les XML generes a la main : ils seront ecrases.
 """
 
 from pathlib import Path
 
-TEMPLATES_DIR = Path(__file__).resolve().parent
-BASE_FILE = TEMPLATES_DIR / "base_template.xml"
+# Ce script vit dans scripts/ ; les templates sont dans project/templates/.
+ROOT = Path(__file__).resolve().parent.parent
+TEMPLATES_DIR = ROOT / "project" / "templates"
+BASE_FILE = TEMPLATES_DIR / "base.xml"
 
 START_MARKER = "<!-- @@WEATHER_BLOCK_START@@ -->"
 END_MARKER = "<!-- @@WEATHER_BLOCK_END@@ -->"
@@ -103,7 +105,7 @@ PRESETS = {
     ("snow", "snow_heavy"):    {"precip_rate": (1.0, 1.0), "cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "temperature_c": (-15, -15), "rain_scale": (4.0, 5.0), "cloud_margin_m": (300, 500)},
 
   
-    ("clear", "clear"): {"cloud_type": (0, 0), "cloud_thickness_m": (10, 10)}, #OK
+    ("clear", "clear"): {"cloud_type": (0, 0), "cloud_thickness_m": (10, 10), }, #OK
 }
 
 
@@ -133,23 +135,23 @@ def _banner(profile):
     """Bandeau d'avertissement insere en tete des fichiers generes."""
     return (
         "<!-- ============================================================\n"
-        "     FICHIER GENERE par project/templates/build_weather_templates.py\n"
+        "     FICHIER GENERE par scripts/build_weather_templates.py\n"
         f"     Profil : {profile}   |   NE PAS EDITER A LA MAIN\n"
-        "     Source : base_template.xml + table PRESETS du generateur.\n"
-        "     Regenerer : py project/templates/build_weather_templates.py\n"
+        "     Source : base.xml + table PRESETS du generateur.\n"
+        "     Regenerer : py scripts/build_weather_templates.py\n"
         "     ============================================================ -->\n"
     )
 
 
 def main():
     if not BASE_FILE.exists():
-        raise SystemExit(f"base_template.xml introuvable : {BASE_FILE}")
+        raise SystemExit(f"base.xml introuvable : {BASE_FILE}")
 
     base = BASE_FILE.read_text(encoding="utf-8")
     if START_MARKER not in base or END_MARKER not in base:
         raise SystemExit(
             "Marqueurs @@WEATHER_BLOCK_START@@ / @@WEATHER_BLOCK_END@@ "
-            "absents de base_template.xml"
+            "absents de base.xml"
         )
 
     before, _, rest = base.partition(START_MARKER)

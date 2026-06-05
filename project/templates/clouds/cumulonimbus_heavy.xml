@@ -1,16 +1,16 @@
 <?xml version="1.0"?>
 <!-- ============================================================
-     FICHIER GENERE par project/templates/build_weather_templates.py
+     FICHIER GENERE par scripts/build_weather_templates.py
      Profil : clouds/cumulonimbus_heavy   |   NE PAS EDITER A LA MAIN
-     Source : base_template.xml + table PRESETS du generateur.
-     Regenerer : py project/templates/build_weather_templates.py
+     Source : base.xml + table PRESETS du generateur.
+     Regenerer : py scripts/build_weather_templates.py
      ============================================================ -->
 <!--
-    base_template.xml — Template de base : trajectoire + meteo + 26 fautes.
+    base.xml — Template de base : trajectoire + meteo + 26 fautes.
 
     Les variantes meteo (brouillard, nuages, pluie, neige, ciel clair) sont
     des XML autonomes generes dans templates/<profil>/ par :
-        py project/templates/build_weather_templates.py
+        py scripts/build_weather_templates.py
     Choisir le XML actif dans project/settings.xml (parametre template_file_name,
     ex: value="rain/rain_heavy.xml").
 
@@ -40,7 +40,7 @@
             <parameter name="fps"                          type="integer" min="12"   max="12"/>
 
             <parameter name="along_track_distance_start"   type="real"    min="2800" max="3200"/>
-            <parameter name="along_track_distance_end"     type="real"    min="280"  max="320"/>
+            <parameter name="along_track_distance_end"     type="real"    min="0"  max="0"/>
             <parameter name="ground_speed_kts"             type="real"    min="145"  max="145"/>
 
             <!-- Processus Ornstein-Uhlenbeck (turbulence) -->
@@ -82,10 +82,10 @@
 
              cloud_type enum : 0=Cirrus, 1=Stratus, 2=Cumulus, 3=Cumulonimbus, -1=auto
 
-             Ce fichier (base_template.xml) garde des valeurs meteo de base.
+             Ce fichier (base.xml) garde des valeurs meteo de base.
              Les variantes de profil (brouillard, nuages, pluie, neige, clair)
              sont generees dans templates/<profil>/ par :
-                 py project/templates/build_weather_templates.py
+                 py scripts/build_weather_templates.py
              Le generateur remplace UNIQUEMENT les 8 parametres situes entre
              @@WEATHER_BLOCK_START@@ et @@WEATHER_BLOCK_END@@. Le reste
              (weather_effect_duration, node settings) est commun a tous.
@@ -126,7 +126,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="0"     max="0"/>
+            <parameter name="weather_effect_duration" type="real" min="5"     max="15"/>
 
         </node>
 
@@ -140,11 +140,11 @@
         <node name="settings">
 
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
-            <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
+            <parameter name="time_of_day_h"           type="real" min="8"    max="18"/>
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="5"     max="5"/>
+            <parameter name="load_texture_duration"   type="real" min="30"     max="30"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>

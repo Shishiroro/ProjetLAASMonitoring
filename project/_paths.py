@@ -10,6 +10,7 @@ Les modules feuilles n'ont alors rien a faire eux-memes.
 """
 
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # project/_paths.py -> project/ -> racine
@@ -17,8 +18,34 @@ PROJECT_DIR = Path(__file__).resolve().parent
 ROOT = PROJECT_DIR.parent
 EXPORT_DIR = PROJECT_DIR / "export"
 YOLO_DIR = ROOT / "yolo"
-LARD_ROOT = ROOT / "LARD"
-TAF_SRC = ROOT / "taf" / "src"
+
+
+def _resolve_dir(value, default):
+    """Resout un chemin de settings.xml : vide -> defaut ; relatif -> / ROOT."""
+    if not value or not value.strip():
+        return default
+    p = Path(value.strip())
+    return p if p.is_absolute() else (ROOT / p)
+
+
+# Chemins LARD/ et taf/ : surcharges optionnelles via project/settings.xml
+# (parametres lard_dir / taf_dir). Vide => clones a la racine (./LARD, ./taf).
+_lard_dir, _taf_dir = "", ""
+_settings = PROJECT_DIR / "settings.xml"
+if _settings.exists():
+    try:
+        for _p in ET.parse(_settings).getroot():
+            _name = _p.attrib.get("name")
+            if _name == "lard_dir":
+                _lard_dir = _p.attrib.get("value", "")
+            elif _name == "taf_dir":
+                _taf_dir = _p.attrib.get("value", "")
+    except ET.ParseError:
+        pass
+
+LARD_ROOT = _resolve_dir(_lard_dir, ROOT / "LARD")
+TAF_ROOT = _resolve_dir(_taf_dir, ROOT / "taf")
+TAF_SRC = TAF_ROOT / "src"
 
 _PATHS = (ROOT, PROJECT_DIR, EXPORT_DIR, YOLO_DIR, YOLO_DIR / "eval", LARD_ROOT)
 

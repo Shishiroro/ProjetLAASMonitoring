@@ -1,36 +1,37 @@
-# Projet :p 
+# LARDON
 
-Pipeline de génération de **trajectoires d'approche réalistes** pour avions, rendu
-sous **X-Plane 12**, avec dégradation capteur et évaluation d'un modèle de
-détection de piste.
+Outil de génération de **trajectoires d'approche réalistes aériennes** , rendues sous **X-Plane 12**, avec dégradation capteur et évaluation d'un
+modèle de détection de piste.
 
-Le pipeline échantillonne des scénarios sous contraintes avec **TAF** (Testing
-Automation Framework, LAAS-CNRS), calcule les trajectoires et génère les images
-via X-Plane 12. Sur ces images, un **modèle de détection** (choisi par
-l'utilisateur dans `settings.xml`) prédit la position de la piste. Ces prédictions
-sont ensuite comparées à la **vérité terrain** — la position réelle de la piste
-projetée en 2D sur l'image — produite par **LARD** (ONERA, IRT Saint Exupéry et
-AIRBUS). La qualité de la détection est mesurée par l'**IoU** (intersection sur
-union) entre prédiction et vérité terrain.
+L'outil échantillonne des scénarios sous contraintes avec **TAF** (Testing
+Automation Framework, LAAS-CNRS), calcule les trajectoires d'approche et génère
+les images correspondantes via X-Plane 12. Pour chaque image, il produit également
+la **vérité terrain** — la position réelle de la piste projetée en 2D sur l'image
+— à l'aide de **LARD** (ONERA, IRT Saint Exupéry et AIRBUS).
+
+Sur ces images, un **modèle de détection** (choisi par l'utilisateur dans
+`settings.xml`) prédit la position de la piste. Ces prédictions sont ensuite
+comparées à la vérité terrain : la qualité de la détection est mesurée par l'**IoU**
+(intersection sur union) entre prédiction et vérité terrain.
 
 L'utilisateur n'a qu'à éditer des fichiers **XML** pour définir ses scénarios,
-puis à lancer le pipeline en ligne de commande. Deux notebooks
-(`notebook_generation.ipynb` pour les 3 phases, `notebook_features.ipynb` pour
+puis à lancer l'outil en ligne de commande. Deux notebooks
+(`notebook/generation.ipynb` pour les 3 phases, `notebook/features.ipynb` pour
 les outils annexes) sont également disponibles pour ceux qui préfèrent travailler
 en interactif.
 
 ---
 
-## Aperçu du pipeline
+## Aperçu de l'outil
 
 ```
-  base_template.xml  /  templates/<profil>/*.xml      (contraintes utilisateur)
+  base.xml  /  templates/<profil>/*.xml      (contraintes utilisateur)
           │
           ▼
    generate   ──►  TAF échantillonne N scénarios valides (solveur z3)
           │
           ▼
-   render     ──►  X-Plane 12 rend les images
+   export     ──►  X-Plane 12 rend les images
                    + fautes capteur + vérité terrain (GT) LARD
           │
           ▼
@@ -46,9 +47,9 @@ en interactif.
 
 | Composant   | Détail |
 |-------------|--------|
-| **X-Plane 12** | Version **complète (payante)** obligatoire. Sinon, l'accès est limité à seulement quelques aéroports/pistes. |
-| **Python**  | Python 3.10.10 (version utilisée pour le développement). Python 3.9+ devrait convenir (les dépendances `scipy ≥ 1.11` et `albumentations` exigent au minimum 3.9). |
 | **OS**      | Compatible Windows et Linux. |
+| **Python**  | Python 3.10.10. |
+| **X-Plane 12** | Version **complète (payante)** obligatoire. Sinon, l'accès est limité à seulement quelques aéroports/pistes. Téléchargement : <https://www.x-plane.com/> |
 
 ---
 
@@ -71,6 +72,9 @@ git clone https://github.com/deel-ai/LARD
 
 Le dossier `LARD/` doit se trouver à la racine, à côté de `project/`.
 
+> Vous avez déjà LARD installé ailleurs ? Inutile de le re-cloner : renseignez son
+> chemin absolu dans `project/settings.xml` via le paramètre `lard_dir`.
+
 ### 3. Récupérer TAF
 
 TAF n'est **pas** inclus dans le dépôt. Depuis la racine du projet :
@@ -81,15 +85,18 @@ git clone https://redmine.laas.fr/laas/taf.git
 
 *Plus de détails sur TAF : <https://wp.laas.fr/taf/download/>*
 
+> Vous avez déjà TAF installé ailleurs ? Renseignez son chemin absolu dans
+> `project/settings.xml` via le paramètre `taf_dir`.
+
 Après les étapes 1 à 3, la racine doit contenir :
 
 ```
 ProjetLAASMonitoring/
-├── LARD/          ← cloné à l'étape 2
-├── taf/           ← cloné à l'étape 3
 ├── project/
+├── scripts/
 ├── yolo/
 ├── XPlanePlugin/
+├── notebook/
 ├── run_pipeline.py
 └── requirements.txt
 ```
@@ -97,8 +104,19 @@ ProjetLAASMonitoring/
 ### 4. Installer les dépendances Python
 
 ```bash
+# Créer l'environnement (une seule fois)
+py -m venv .venv
+
+# L'activer
+.venv\Scripts\activate        # Windows (PowerShell / cmd)
+source .venv/bin/activate     # Linux / macOS
+
+# Installer les dépendances
 pip install -r requirements.txt
 ```
+
+À chaque nouvelle session, il suffit de ré-activer l'environnement
+(`.venv\Scripts\activate`) avant de lancer l'outil.
 
 ### 5. Installer le plugin météo dans X-Plane 12
 
@@ -114,9 +132,17 @@ Deux éléments distincts à installer :
    *Note : l'API **XPLMWeather** utilisée par le plugin météo est intégrée à
    X-Plane 12 et exposée directement par XPPython3 — rien à télécharger en plus.*
 
-2. **PI_weather.py** — le plugin météo de ce projet.
-   Créer le dossier `X-Plane 12/Resources/plugins/PythonPlugins/`, puis y copier
-   `XPlanePlugin/PI_weather.py`.
+2. **PI_weather.py** — le plugin météo de ce projet. Un script l'installe au bon
+   endroit (et crée le dossier `PythonPlugins/` si nécessaire) :
+
+   ```bash
+   py scripts/install_weather_plugin.py
+   ```
+
+   Le script lit `xplane_dir` depuis `project/settings.xml`.
+   *(Installation manuelle équivalente : créer le dossier
+   `X-Plane 12/Resources/plugins/PythonPlugins/` puis y copier
+   `XPlanePlugin/PI_weather.py`.)*
 
 Puis **recharger les scripts depuis le simulateur** : une fois X-Plane 12 lancé,
 utiliser la barre de menu en haut de la fenêtre du simulateur :
@@ -131,15 +157,13 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
   directement sur la fenêtre du simulateur : **laisser l'écran allumé** et la
   fenêtre X-Plane visible pendant tout le rendu (ne pas la minimiser ni la
   recouvrir d'une autre fenêtre).
-- Régler la **mise à l'échelle de l'affichage (scaling) à 100 %**.
+- Régler la **mise à l'échelle de l'affichage (scaling) à 100 % sur l'OS**.
   La capture est ensuite recadrée à une résolution fixe. Si le scaling de l'OS
   n'est pas à 100 %, les pixels capturés ne correspondent plus aux coordonnées
   attendues : la **bounding box de la vérité terrain (GT LARD)** se retrouve
   décalée par rapport à la piste.
 
 ---
-
-
 
 ## Configurer un scénario : les fichiers XML
 
@@ -157,19 +181,36 @@ C'est la seule partie à éditer pour définir ses propres scénarios.
 - `nb_test_cases` : nombre de scénarios à générer (peut être surchargé par `-n` en
   ligne de commande).
 
-### Templates disponibles
+### Templates pré-générées
 
-- `project/templates/base_template.xml` — template de base (trajectoire + météo + 26 fautes).
+- `project/templates/base.xml` — template de base (trajectoire + météo + 26 fautes).
 - `project/templates/<profil>/*.xml` — variantes météo pré-générées, profils
-  `clear`, `fog`, `clouds`, `rain`, `snow`, chacun en intensités *light / moderate / heavy*.
+  `clear`, `fog`, `clouds`, `rain`, `snow`, chacun en intensités
+  *light / moderate / heavy*.
 
-Pour régénérer les variantes météo après modification du template de base :
+### Générer ou ajouter des templates
+
+Les variantes météo sont produites par un script de *build* à partir de `base.xml`
+et d'une table de presets. Pour les régénérer (par exemple après modification de
+`base.xml`) ou pour ajouter un nouveau profil :
 
 ```bash
-py project/templates/build_weather_templates.py
+py scripts/build_weather_templates.py
 ```
 
-### Convention min / max
+Pour **ajouter un scénario / dossier**, éditer la table `PRESETS` dans
+`scripts/build_weather_templates.py` (clé `(sous_dossier, nom_fichier)` →
+surcharges des paramètres météo), puis relancer le script : il (re)crée les XML
+correspondants dans `project/templates/<profil>/`. Les fichiers générés ne
+doivent **pas** être édités à la main — ils seront écrasés au prochain build.
+
+### Explication des templates
+
+Un template décrit, en un seul XML, l'ensemble des contraintes d'un scénario :
+trajectoire, météo, réglages de rendu et fautes capteur. TAF lit ces contraintes
+et échantillonne des valeurs concrètes (via le solveur z3).
+
+#### Convention min / max
 
 Chaque paramètre a un `min` et un `max` :
 
@@ -177,16 +218,19 @@ Chaque paramètre a un `min` et un `max` :
 - `min` et `max` **différents** → TAF échantillonne une valeur dans la plage
   (résolution sous contraintes par le solveur z3).
 
-### Les 4 blocs d'un template
+#### Les 4 blocs d'un template
 
-| Bloc | Contenu |
-|------|---------|
-| **trajectory** | `fps`, distances de début/fin d'approche, `ground_speed_kts`, `turbulence_intensity`, vent, distance de stabilisation, `airport_runway`. |
-| **weather** | Précipitations, type/couverture/épaisseur de nuages, visibilité, température. Injecté une fois avant le rendu. |
-| **settings** | Réglages de rendu / simulation, indépendants de la météo et des fautes : `time_of_day_h` (heure locale), `load_texture_duration` (délai de chargement des textures et stabilisation des nuages), `screenshot_duration` (délai de stabilisation après chaque téléportation caméra), `weather_zone_radius_nm` (rayon de la zone météo injectée). |
+Chaque variable est commentée directement dans le XML (`base.xml`) — se référer
+à ces commentaires pour le détail de chaque paramètre.
+
+| Bloc | Variables |
+|------|-----------|
+| **trajectory** | `fps`, `along_track_distance_start`, `along_track_distance_end`, `ground_speed_kts`, `turbulence_intensity`, `wind_speed_kts`, `wind_direction_deg`, `stabilization_distance_m`, `airport_runway`. |
+| **weather** | `precip_rate`, `cloud_type`, `cloud_coverage`, `cloud_thickness_m`, `fog_visibility`, `temperature_c`, `rain_scale`, `cloud_margin_m`, `weather_effect_duration`. |
+| **settings** | `time_of_day_h`, `load_texture_duration`, `screenshot_duration`, `weather_zone_radius_nm`. |
 | **faults** | 26 types de fautes capteur. Chaque faute a `severity`, `start_pct`, `duration_pct`. Une faute est **active si `severity > 0`**, désactivée si `severity = 0`. |
 
-### Piste cible
+#### Piste cible
 
 Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`,
 `KPDX_10L`). La liste des pistes disponibles se trouve dans :
@@ -194,33 +238,33 @@ Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`
 
 ---
 
-## Lancer le pipeline
+## Lancer l'outil
 
 ```bash
 # Phase 1 — génère les scénarios (.yaml + poses caméra) dans runs/generation_01/
 py run_pipeline.py generate -n 5
 
 # Phase 2 — rendu X-Plane + fautes capteur + vérité terrain LARD
-py run_pipeline.py render --all --generation generation_01
+py run_pipeline.py export --all --generation generation_01
 
 # Phase 3 — détection + calcul IoU vs vérité terrain
 py run_pipeline.py evaluate --all --generation generation_01
 
-# Tout enchaîner d'un coup (pipeline complet)
+# Tout enchaîner d'un coup (cycle complet avec évaluation)
 py run_pipeline.py full_evaluate -n 5
 ```
 
 **Pour une utilisation normale, la commande `full_evaluate` suffit** : elle
 enchaîne les trois phases en une seule invocation. La commande `full`, elle,
 n'enchaîne **que** la génération et le rendu (Phases 1 + 2, sans évaluation). Les
-commandes `generate` / `render` / `evaluate` restent disponibles pour relancer
+commandes `generate` / `export` / `evaluate` restent disponibles pour relancer
 une phase précise.
 
 > En mode `--all`, l'option `--generation <nom>` est obligatoire (elle évite de
 > mélanger plusieurs batchs). Pour cibler un seul scénario, utiliser le chemin
-> composé, ex. `render generation_01/LFPO_24`.
+> composé, ex. `export generation_01/LFPO_24`.
 
-📖 **Référence complète des commandes** (toutes les sous-commandes, toutes les
+**Référence complète des commandes** (toutes les sous-commandes, toutes les
 options, workflows types et équivalents notebook) : voir
 [COMMANDES.md](COMMANDES.md).
 
@@ -261,12 +305,12 @@ runs/
 
 ### Aller plus loin avec les notebooks
 
-Deux notebooks à la racine du projet :
+Deux notebooks dans le dossier `notebook/` :
 
-- **`notebook_generation.ipynb`** — reproduit les **trois phases du pipeline**
-  (`generate`, `render`, `evaluate`), exécutables séparément depuis ses cellules,
+- **`notebook/generation.ipynb`** — reproduit les **trois phases de l'outil**
+  (`generate`, `export`, `evaluate`), exécutables séparément depuis ses cellules,
   sans passer par la ligne de commande. Alternative complète au CLI.
-- **`notebook_features.ipynb`** — fonctionnalités complémentaires, à la demande :
+- **`notebook/features.ipynb`** — fonctionnalités complémentaires, à la demande :
   - création de **datasets** à partir des images générées,
   - assemblage des images d'un scénario en **flux vidéo**,
   - export de **fichiers optionnels** (`params_trace.xml`, `xplane_config.json`),

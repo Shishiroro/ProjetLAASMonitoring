@@ -69,15 +69,9 @@ def run(nb_test_cases=None, verbose=True):
     :param verbose: afficher les details TAF
     """
     project_dir = Path(__file__).resolve().parent
-    root_dir = project_dir.parent
 
     # CWD = project/ (TAF lit ./settings.xml depuis le CWD)
     os.chdir(project_dir)
-
-    # Copier notre Export.py dans taf/src/ (point d'extension prevu par TAF)
-    src_export = project_dir / "export" / "Export.py"
-    taf_export = root_dir / "taf" / "src" / "Export.py"
-    shutil.copy2(src_export, taf_export)
 
     # sys.path : centralise via _paths + taf/src/ (specifique TAF)
     if str(project_dir) not in sys.path:
@@ -86,6 +80,12 @@ def run(nb_test_cases=None, verbose=True):
     taf_src = str(_paths.TAF_SRC)
     if taf_src not in sys.path:
         sys.path.insert(1, taf_src)
+
+    # Copier notre Export.py dans taf/src/ (point d'extension prevu par TAF).
+    # taf/src est resolu via _paths (honore le parametre taf_dir de settings.xml).
+    src_export = project_dir / "export" / "Export.py"
+    taf_export = _paths.TAF_SRC / "Export.py"
+    shutil.copy2(src_export, taf_export)
 
     # Surcharger nb_test_cases dans le XML avant import TAF (SETTINGS lit au module-level)
     if nb_test_cases is not None:

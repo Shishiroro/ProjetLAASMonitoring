@@ -53,7 +53,7 @@ KNOWN_FAULT_TYPES = {
 > Le nom doit être identique dans `ERROR_REGISTRY` et `KNOWN_FAULT_TYPES`.
 
 ### Étape 4 — Ajouter le nœud XML
-Fichier : [project/templates/base_template.xml](project/templates/base_template.xml),
+Fichier : [project/templates/base.xml](project/templates/base.xml),
 sous `<node name="faults">`.
 
 ```xml

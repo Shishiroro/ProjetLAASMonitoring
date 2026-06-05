@@ -12,8 +12,8 @@ Entry point CLI minimal. Toute la logique vit dans :
 Modes :
     python run_pipeline.py generate -n 5
     python run_pipeline.py generate -n 100 --name pluie --clean
-    python run_pipeline.py render generation_01/LFPO_24 --xplane-dir "C:/X-Plane 12"
-    python run_pipeline.py render --all --generation generation_01 --xplane-dir "..."
+    python run_pipeline.py export generation_01/LFPO_24 --xplane-dir "C:/X-Plane 12"
+    python run_pipeline.py export --all --generation generation_01 --xplane-dir "..."
     python run_pipeline.py evaluate generation_01/LFPO_24
     python run_pipeline.py evaluate --all --generation pluie_01
     python run_pipeline.py full -n 100 --name pluie --xplane-dir "C:/X-Plane 12"
@@ -93,7 +93,7 @@ Structure runs/ :
     pluie_01/                       <- generations nommees (via --name pluie)
       ...
 
-  Visualisations on-demand via notebook.ipynb : yolo_box/, lard_box/,
+  Visualisations on-demand via notebook/features.ipynb : yolo_box/, lard_box/,
   xplane_config.json, params_trace.xml.
         """,
     )
@@ -110,9 +110,9 @@ Structure runs/ :
                            help="Phase 1 : genere les scenarios TAF (.yaml) dans runs/")
     _add_generate_args(p_gen)
 
-    p_render = sub.add_parser("render", parents=[xplane_args],
+    p_export = sub.add_parser("export", parents=[xplane_args],
                               help="Phase 2 : rendu X-Plane + fautes capteur")
-    _add_target_args(p_render)
+    _add_target_args(p_export)
 
     p_eval = sub.add_parser("evaluate",
                             help="Phase 3 : GT LARD + Detection YOLO + IoU")
@@ -137,16 +137,16 @@ Structure runs/ :
                                 name=args.name, clean=args.clean)
         if created:
             gen = created[0].parent.name
-            print(f"  Prochaine etape : run_pipeline.py render --all --generation {gen}")
+            print(f"  Prochaine etape : run_pipeline.py export --all --generation {gen}")
 
-    elif args.mode == "render":
+    elif args.mode == "export":
         if not args.run and not args.all_runs:
-            print("Specifier un run ou --all. Ex: render generation_01/LFPO_24 "
-                  "ou render --all --generation generation_01")
+            print("Specifier un run ou --all. Ex: export generation_01/LFPO_24 "
+                  "ou export --all --generation generation_01")
             return
         if args.all_runs and not args.generation:
             print("[ERREUR] --all requiert --generation <nom>. "
-                  "Ex: render --all --generation generation_01")
+                  "Ex: export --all --generation generation_01")
             return
         render_runs(
             run_name=args.run, all_runs=args.all_runs,

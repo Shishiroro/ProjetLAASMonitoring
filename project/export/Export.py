@@ -97,7 +97,7 @@ def export(root_node, path):
         print(f"[Export] Fautes capteur : {fault_str}")
 
     # --- Meteo X-Plane (per-scenario) ---
-    # Les params meteo sont lus tels quels depuis le XML actif (base_template.xml
+    # Les params meteo sont lus tels quels depuis le XML actif (base.xml
     # ou une variante de profil generee dans templates/<profil>/). Le choix du
     # profil se fait en pointant settings.xml sur le bon XML, pas dans le code.
     weather_cfg = WeatherConfig(

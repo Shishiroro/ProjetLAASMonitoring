@@ -5,8 +5,8 @@ options) et de ses équivalents notebook.
 
 - Pour l'**installation**, les **prérequis** et la **configuration des scénarios
   (XML)** → voir [README.md](README.md).
-- Pour le **mode interactif** → voir `notebook_generation.ipynb` (les 3 phases)
-  et `notebook_features.ipynb` (outils annexes : dataset, regroup, sanity,
+- Pour le **mode interactif** → voir `notebook/generation.ipynb` (les 3 phases)
+  et `notebook/features.ipynb` (outils annexes : dataset, regroup, sanity,
   exports, vidéo). Chaque section est documentée en tête de cellule.
 
 Toutes les commandes se lancent depuis la racine du projet.
@@ -15,19 +15,21 @@ Toutes les commandes se lancent depuis la racine du projet.
 
 ## Vue d'ensemble
 
-Le pipeline se découpe en **3 phases indépendantes**, plus **2 modes qui les
+L'outil se découpe en **3 phases indépendantes**, plus **2 modes qui les
 enchaînent**.
 
 | Commande | Phases | Rôle | X-Plane requis |
 |----------|--------|------|----------------|
 | `generate`      | 1       | Échantillonne N scénarios via TAF/z3 (`.yaml` + poses + profils JSON) | Non |
-| `render`        | 2       | Rend les images sous X-Plane 12, applique les fautes capteur **et génère la vérité terrain LARD** | **Oui** |
+| `export`        | 2       | Rend les images sous X-Plane 12, applique les fautes capteur **et génère la vérité terrain LARD** | **Oui** |
 | `evaluate`      | 3       | Lance la détection YOLO + calcule l'IoU vs la vérité terrain (produite en Phase 2) | Non |
-| `full`          | 1 + 2   | `generate` puis `render` (**sans** évaluation) | **Oui** |
-| `full_evaluate` | 1 + 2 + 3 | Pipeline complet de bout en bout | **Oui** |
+| `full`          | 1 + 2   | `generate` puis `export` (**sans** évaluation) | **Oui** |
+| `full_evaluate` | 1 + 2 + 3 | Cycle complet de bout en bout | **Oui** |
+
+
 
 > **Attention :** `full` n'enchaîne **que** la génération et le rendu. Pour le
-> pipeline complet (avec détection + IoU), utiliser **`full_evaluate`**.
+> cycle complet (avec détection + IoU), utiliser **`full_evaluate`**.
 
 Aide intégrée :
 
@@ -44,7 +46,7 @@ py run_pipeline.py <commande> --help # options d'une sous-commande
    chaque scénario, `runs/<generation>/<ICAO_RWY>/` avec `.yaml`,
    `poses_cam_export.json`, et si actifs `fault_profile.json` /
    `weather_profile.json`. Hors ligne, ne touche pas à X-Plane.
-2. **`render`** (Phase 2) — X-Plane 12 rend les images dans `footage/`, les
+2. **`export`** (Phase 2) — X-Plane 12 rend les images dans `footage/`, les
    fautes capteur produisent `degraded/`, puis la **vérité terrain LARD** est
    générée (`*_labels.csv`, projection 3D→2D des coins de piste). Requiert
    X-Plane lancé.
@@ -75,16 +77,16 @@ runs/
 - Si la **même piste** est générée 2× dans le même batch, suffixe automatique :
   `LFPO_24`, `LFPO_24_002`, `LFPO_24_003`, …
 
-### Cibler des runs (`render` / `evaluate`)
+### Cibler des runs (`export` / `evaluate`)
 
 Ces deux commandes prennent **soit** un run précis, **soit** `--all` :
 
 | Forme | Exemple | Effet |
 |-------|---------|-------|
-| Chemin composé | `render generation_01/LFPO_24` | Cible exactement ce run |
-| Nom + `--generation` | `render LFPO_24 --generation generation_01` | Idem, autre syntaxe |
-| Nom seul | `render LFPO_24` | Cherche dans toutes les générations ; **erreur** si le nom existe dans plusieurs |
-| `--all --generation` | `render --all --generation generation_01` | Tous les runs de cette génération |
+| Chemin composé | `export generation_01/LFPO_24` | Cible exactement ce run |
+| Nom + `--generation` | `export LFPO_24 --generation generation_01` | Idem, autre syntaxe |
+| Nom seul | `export LFPO_24` | Cherche dans toutes les générations ; **erreur** si le nom existe dans plusieurs |
+| `--all --generation` | `export --all --generation generation_01` | Tous les runs de cette génération |
 
 > **`--all` exige `--generation`** en ligne de commande, pour éviter de mélanger
 > plusieurs batchs par inadvertance.
@@ -116,10 +118,10 @@ py run_pipeline.py generate -n 100 --name pluie --clean
 
 ---
 
-### `render` — Phase 2
+### `export` — Phase 2
 
 ```bash
-py run_pipeline.py render (<run> | --all --generation NOM) [--xplane-dir CHEMIN]
+py run_pipeline.py export (<run> | --all --generation NOM) [--xplane-dir CHEMIN]
 ```
 
 Rend les images sous X-Plane 12, applique les fautes capteur, puis génère la
@@ -134,9 +136,9 @@ doit être lancé** (mode fenêtré, scaling 100 %).
 | `--xplane-dir CHEMIN` | `xplane_dir` de `settings.xml` (= `C:/X-Plane 12`) | **Optionnel.** Surcharge ponctuelle du répertoire X-Plane 12. Sert uniquement à localiser le plugin météo ; sans météo, sa valeur n'a aucun effet. À renseigner de préférence dans `settings.xml`. |
 
 ```bash
-py run_pipeline.py render generation_01/LFPO_24
-py run_pipeline.py render --all --generation generation_01
-py run_pipeline.py render --all --generation pluie_01 --xplane-dir "D:/X-Plane 12"
+py run_pipeline.py export generation_01/LFPO_24
+py run_pipeline.py export --all --generation generation_01
+py run_pipeline.py export --all --generation pluie_01 --xplane-dir "D:/X-Plane 12"
 ```
 
 ---
@@ -180,7 +182,7 @@ py run_pipeline.py evaluate --all --generation generation_01 --conf 0.4 --iou-me
 py run_pipeline.py full [-n N] [--name NOM] [--clean] [--xplane-dir CHEMIN]
 ```
 
-Enchaîne `generate` puis `render` sur les runs créés. **Sans évaluation.**
+Enchaîne `generate` puis `export` sur les runs créés. **Sans évaluation.**
 X-Plane 12 doit être lancé.  C'est la commande à utiliser pour un cycle complet sans l'évaluation.
 
 
@@ -199,7 +201,7 @@ py run_pipeline.py full_evaluate [-n N] [--name NOM] [--clean] \
     [--xplane-dir CHEMIN] [--conf C] [--imgsz S] [--iou-thresh T] [--iou-method M]
 ```
 
-**Pipeline complet de bout en bout** : génération + rendu + détection + IoU,
+**Cycle complet de bout en bout** : génération + rendu + détection + IoU,
 zéro intervention. C'est la commande à utiliser pour un cycle complet avec évaluation.
 X-Plane 12 doit être lancé.
 
@@ -213,7 +215,7 @@ py run_pipeline.py full_evaluate -n 100 --name nuage_et_pluie
 
 ## Tableau récapitulatif des options
 
-| Option | `generate` | `render` | `evaluate` | `full` | `full_evaluate` |
+| Option | `generate` | `export` | `evaluate` | `full` | `full_evaluate` |
 |--------|:--:|:--:|:--:|:--:|:--:|
 | `-n / --nb-scenarios` | ✓ | | | ✓ | ✓ |
 | `--name`              | ✓ | | | ✓ | ✓ |
@@ -248,7 +250,7 @@ py run_pipeline.py full_evaluate -n 5
 
 ```bash
 py run_pipeline.py generate -n 5 --name test
-py run_pipeline.py render   --all --generation test_01
+py run_pipeline.py export   --all --generation test_01
 py run_pipeline.py evaluate --all --generation test_01
 ```
 
@@ -264,15 +266,15 @@ py run_pipeline.py evaluate --all --generation test_01 --conf 0.4 --iou-method D
 
 ## Équivalents dans le notebook
 
-Deux notebooks : `notebook_generation.ipynb` reproduit les 3 phases (Setup,
-Generate, Render, Evaluate — exécutables séparément) ; `notebook_features.ipynb`
+Deux notebooks : `notebook/generation.ipynb` reproduit les 3 phases (Setup,
+Generate, Export, Evaluate — exécutables séparément) ; `notebook/features.ipynb`
 ajoute les outils à la demande. Lancer les cellules dans l'ordre après la
 section **Setup**.
 
 | Notebook (fonction)       | CLI équivalent | Rôle |
 |---------------------------|----------------|------|
 | `generate_runs(...)`      | `generate`     | Phase 1 |
-| `render_runs(...)`        | `render`       | Phase 2 |
+| `render_runs(...)`        | `export`       | Phase 2 |
 | `evaluate_runs(...)`      | `evaluate`     | Phase 3 |
 | `build_yolo_box(...)`     | —              | Images annotées avec les bbox YOLO (`yolo_box/`) |
 | `build_lard_box(...)`     | —              | Images annotées avec la vérité terrain LARD (`lard_box/`) |

@@ -113,7 +113,7 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
     source = str(src) if all_in_dir else [str(img) for img in images]
 
     # Workspace temporaire pour ultralytics : on ne garde que les .txt labels.
-    # Les bbox annotees sont produites a la demande depuis notebook.ipynb
+    # Les bbox annotees sont produites a la demande depuis notebook/features.ipynb
     # (build_yolo_box / show_sanity) — pas besoin d'images annotees ici.
     yolo_tmp = (out / "_yolo_tmp").resolve()
     model.predict(
