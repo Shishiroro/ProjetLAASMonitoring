@@ -15,7 +15,7 @@ applique les erreurs frame par frame.
 Il y a 4 fichiers à toucher (3 obligatoires + 1 optionnel).
 
 ### Étape 1 — Implémenter la fonction OpenCV
-Fichier : [yolo/camera_sensor_errors/camera_sensor_errors.py](yolo/camera_sensor_errors/camera_sensor_errors.py)
+Fichier : [yolo/camera_sensor_errors/camera_sensor_errors.py](../yolo/camera_sensor_errors/camera_sensor_errors.py)
 
 La fonction prend une image BGR `uint8` + `severity ∈ [0, 1]` et retourne une
 image BGR `uint8`. `severity` module l'intensité.
@@ -38,7 +38,7 @@ ERROR_REGISTRY: dict[str, Callable] = {
 ```
 
 ### Étape 3 — Déclarer le type connu
-Fichier : [project/export/sensor_faults.py](project/export/sensor_faults.py)
+Fichier : [sources/export/sensor_faults.py](../sources/export/sensor_faults.py)
 
 Ajouter le nom dans `KNOWN_FAULT_TYPES` (set utilisé pour la validation et
 le parcours de lecture du XML par `Export.py`) :
@@ -53,7 +53,7 @@ KNOWN_FAULT_TYPES = {
 > Le nom doit être identique dans `ERROR_REGISTRY` et `KNOWN_FAULT_TYPES`.
 
 ### Étape 4 — Ajouter le nœud XML
-Fichier : [project/templates/base.xml](project/templates/base.xml),
+Fichier : [sources/templates/base.xml](../sources/templates/base.xml),
 sous `<node name="faults">`.
 
 ```xml

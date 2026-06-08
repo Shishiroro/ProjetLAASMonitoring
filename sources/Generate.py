@@ -2,12 +2,12 @@
 Generate.py — Lance TAF pour generer des scenarios d'approche
 =============================================================
 Utilisation :
-    python project/Generate.py          (depuis la racine)
-    python Generate.py                  (depuis project/)
+    python sources/Generate.py          (depuis la racine)
+    python Generate.py                  (depuis sources/)
 
 Ce script :
-    1. Se place dans project/ (CWD requis par TAF pour settings.xml)
-    2. Insere project/export/ en tete de sys.path (notre Export.py)
+    1. Se place dans sources/ (CWD requis par TAF pour settings.xml)
+    2. Insere sources/export/ en tete de sys.path (notre Export.py)
     3. Insere taf/src/ dans sys.path (modules TAF)
     4. Lance TAF : parse template → z3 solve → export()
 """
@@ -52,7 +52,7 @@ def _sync_taf_settings():
     sur scenario_N/scenario_N.xml).
 
     On reapplique donc le contenu de settings.xml dans le dict vivant de
-    SETTINGS (CWD = project/, deja en place via os.chdir).
+    SETTINGS (CWD = sources/, deja en place via os.chdir).
     """
     import Taf
     params = Taf.SETTINGS.get_setting_parameters()
@@ -70,7 +70,7 @@ def run(nb_test_cases=None, verbose=True):
     """
     project_dir = Path(__file__).resolve().parent
 
-    # CWD = project/ (TAF lit ./settings.xml depuis le CWD)
+    # CWD = sources/ (TAF lit ./settings.xml depuis le CWD)
     os.chdir(project_dir)
 
     # sys.path : centralise via _paths + taf/src/ (specifique TAF)

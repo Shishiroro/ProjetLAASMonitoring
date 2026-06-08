@@ -18,7 +18,7 @@ API publique :
 import sys
 from pathlib import Path
 
-# Centralise les sys.path via project/_paths.py (sibling de ce fichier).
+# Centralise les sys.path via sources/_paths.py (sibling de ce fichier).
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))

@@ -1,6 +1,6 @@
 # DocumentationWeather.md — Paramètres météo XML
 
-Documentation des paramètres météo des templates (`project/templates/`), de leur
+Documentation des paramètres météo des templates (`sources/templates/`), de leur
 effet et de leurs dépendances (quels paramètres doivent être réunis pour
 qu'un effet — pluie, neige, accumulation au sol — fonctionne réellement).
 
@@ -8,7 +8,7 @@ qu'un effet — pluie, neige, accumulation au sol — fonctionne réellement).
 > rendu via le plugin XPPython3). Les fautes capteur (post-traitement OpenCV)
 > ne sont pas couvertes ici.
 
-Code de référence : `project/export/xplane_weather.py`
+Code de référence : `sources/export/xplane_weather.py`
 (`build_plugin_command`, `inject_weather`).
 
 ---

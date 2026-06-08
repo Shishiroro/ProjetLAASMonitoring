@@ -7,7 +7,7 @@ templates/<profil>/. Chaque variante = base.xml dont le bloc des
 est remplace par les valeurs du preset.
 
 C'est du tooling BUILD-TIME : rien ici ne tourne pendant la generation TAF.
-Au runtime, TAF lit simplement le XML pointe par project/settings.xml
+Au runtime, TAF lit simplement le XML pointe par sources/settings.xml
 (parametre template_file_name, ex: value="rain/rain_heavy.xml").
 
 Usage (depuis la racine du projet) :
@@ -20,9 +20,9 @@ NE PAS editer les XML generes a la main : ils seront ecrases.
 
 from pathlib import Path
 
-# Ce script vit dans scripts/ ; les templates sont dans project/templates/.
+# Ce script vit dans scripts/ ; les templates sont dans sources/templates/.
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATES_DIR = ROOT / "project" / "templates"
+TEMPLATES_DIR = ROOT / "sources" / "templates"
 BASE_FILE = TEMPLATES_DIR / "base.xml"
 
 START_MARKER = "<!-- @@WEATHER_BLOCK_START@@ -->"

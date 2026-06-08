@@ -21,7 +21,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import asdict
 
-# Bootstrap sys.path via project/_paths.py (parent de project/export/)
+# Bootstrap sys.path via sources/_paths.py (parent de sources/export/)
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))

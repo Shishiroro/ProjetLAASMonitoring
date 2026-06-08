@@ -24,22 +24,7 @@ en interactif.
 
 ## Aperçu de l'outil
 
-```
-  base.xml  /  templates/<profil>/*.xml      (contraintes utilisateur)
-          │
-          ▼
-   generate   ──►  TAF échantillonne N scénarios valides (solveur z3)
-          │
-          ▼
-   export     ──►  X-Plane 12 rend les images
-                   + fautes capteur + vérité terrain (GT) LARD
-          │
-          ▼
-   evaluate   ──►  Le modèle détecte la piste + calcul IoU vs GT
-          │
-          ▼
-   runs/pipeline_report.json   (métriques : IoU, AP, F1, P, R)
-```
+![Aperçu du pipeline](pipeline.png)
 
 ---
 
@@ -58,8 +43,8 @@ en interactif.
 ### 1. Cloner le projet
 
 ```bash
-git clone https://github.com/Shishiroro/ProjetLAASMonitoring
-cd ProjetLAASMonitoring
+git clone https://gitlab.laas.fr/trust_ml_safety/LARDON
+cd LARDON
 ```
 
 ### 2. Récupérer LARD
@@ -70,10 +55,10 @@ LARD n'est **pas** inclus dans le dépôt. Depuis la racine du projet :
 git clone https://github.com/deel-ai/LARD
 ```
 
-Le dossier `LARD/` doit se trouver à la racine, à côté de `project/`.
+Le dossier `LARD/` doit se trouver à la racine, à côté de `sources/`.
 
 > Vous avez déjà LARD installé ailleurs ? Inutile de le re-cloner : renseignez son
-> chemin absolu dans `project/settings.xml` via le paramètre `lard_dir`.
+> chemin absolu dans `sources/settings.xml` via le paramètre `lard_dir`.
 
 ### 3. Récupérer TAF
 
@@ -86,13 +71,13 @@ git clone https://redmine.laas.fr/laas/taf.git
 *Plus de détails sur TAF : <https://wp.laas.fr/taf/download/>*
 
 > Vous avez déjà TAF installé ailleurs ? Renseignez son chemin absolu dans
-> `project/settings.xml` via le paramètre `taf_dir`.
+> `sources/settings.xml` via le paramètre `taf_dir`.
 
 Après les étapes 1 à 3, la racine doit contenir :
 
 ```
 ProjetLAASMonitoring/
-├── project/
+├── sources/
 ├── scripts/
 ├── yolo/
 ├── XPlanePlugin/
@@ -139,13 +124,13 @@ Deux éléments distincts à installer :
    py scripts/install_weather_plugin.py
    ```
 
-   Le script lit `xplane_dir` depuis `project/settings.xml`.
+   Le script lit `xplane_dir` depuis `sources/settings.xml`.
    *(Installation manuelle équivalente : créer le dossier
    `X-Plane 12/Resources/plugins/PythonPlugins/` puis y copier
    `XPlanePlugin/PI_weather.py`.)*
 
 Puis **recharger les scripts depuis le simulateur** : une fois X-Plane 12 lancé,
-utiliser la barre de menu en haut de la fenêtre du simulateur :
+utiliser la barre de menu en haut de la fenêtre du simulateur après avoir lancé le simulateur sur une piste aléatoire :
 **Plugins → XPPython3 → Reload Scripts**.
 
 ---
@@ -157,7 +142,7 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
   directement sur la fenêtre du simulateur : **laisser l'écran allumé** et la
   fenêtre X-Plane visible pendant tout le rendu (ne pas la minimiser ni la
   recouvrir d'une autre fenêtre).
-- Régler la **mise à l'échelle de l'affichage (scaling) à 100 % sur l'OS**.
+- Régler la **mise à l'échelle de l'affichage (scaling) à 100 % sur l'OS (Windows ou Linux)**.
   La capture est ensuite recadrée à une résolution fixe. Si le scaling de l'OS
   n'est pas à 100 %, les pixels capturés ne correspondent plus aux coordonnées
   attendues : la **bounding box de la vérité terrain (GT LARD)** se retrouve
@@ -169,22 +154,19 @@ utiliser la barre de menu en haut de la fenêtre du simulateur :
 
 C'est la seule partie à éditer pour définir ses propres scénarios.
 
-### Choisir le profil actif — `project/settings.xml`
+### Choisir le profil actif — `sources/settings.xml`
 
 ```xml
 <parameter name="template_path"      type="path" value="templates/rain/" />
 <parameter name="template_file_name" type="file" value="rain_heavy.xml" />
-<parameter name="nb_test_cases"      type="integer" value="1" />
 ```
 
 - `template_path` + `template_file_name` : le template XML utilisé pour la génération.
-- `nb_test_cases` : nombre de scénarios à générer (peut être surchargé par `-n` en
-  ligne de commande).
 
 ### Templates pré-générées
 
-- `project/templates/base.xml` — template de base (trajectoire + météo + 26 fautes).
-- `project/templates/<profil>/*.xml` — variantes météo pré-générées, profils
+- `sources/templates/base.xml` — template de base (trajectoire + météo + 26 fautes).
+- `sources/templates/<profil>/*.xml` — variantes météo pré-générées, profils
   `clear`, `fog`, `clouds`, `rain`, `snow`, chacun en intensités
   *light / moderate / heavy*.
 
@@ -201,7 +183,7 @@ py scripts/build_weather_templates.py
 Pour **ajouter un scénario / dossier**, éditer la table `PRESETS` dans
 `scripts/build_weather_templates.py` (clé `(sous_dossier, nom_fichier)` →
 surcharges des paramètres météo), puis relancer le script : il (re)crée les XML
-correspondants dans `project/templates/<profil>/`. Les fichiers générés ne
+correspondants dans `sources/templates/<profil>/`. Les fichiers générés ne
 doivent **pas** être édités à la main — ils seront écrasés au prochain build.
 
 ### Explication des templates
@@ -266,10 +248,10 @@ une phase précise.
 
 **Référence complète des commandes** (toutes les sous-commandes, toutes les
 options, workflows types et équivalents notebook) : voir
-[COMMANDES.md](COMMANDES.md).
+[COMMANDES.md](docs/COMMANDES.md).
 
 Le chemin d'installation X-Plane 12 est renseigné une seule fois dans
-`project/settings.xml` via le paramètre `xplane_dir` :
+`sources/settings.xml` via le paramètre `xplane_dir` :
 
 ```xml
 <parameter name="xplane_dir" type="path" value="C:/X-Plane 12" />

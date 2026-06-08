@@ -11,7 +11,7 @@
     Les variantes meteo (brouillard, nuages, pluie, neige, ciel clair) sont
     des XML autonomes generes dans templates/<profil>/ par :
         py scripts/build_weather_templates.py
-    Choisir le XML actif dans project/settings.xml (parametre template_file_name,
+    Choisir le XML actif dans sources/settings.xml (parametre template_file_name,
     ex: value="rain/rain_heavy.xml").
 
     Conventions :

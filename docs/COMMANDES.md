@@ -4,7 +4,7 @@ Référence complète du CLI `run_pipeline.py` (toutes les sous-commandes et leu
 options) et de ses équivalents notebook.
 
 - Pour l'**installation**, les **prérequis** et la **configuration des scénarios
-  (XML)** → voir [README.md](README.md).
+  (XML)** → voir [README.md](../README.md).
 - Pour le **mode interactif** → voir `notebook/generation.ipynb` (les 3 phases)
   et `notebook/features.ipynb` (outils annexes : dataset, regroup, sanity,
   exports, vidéo). Chaque section est documentée en tête de cellule.
@@ -289,7 +289,7 @@ Les fonctions du notebook acceptent les mêmes formes de ciblage que le CLI (voi
 
 ## Où vont les résultats
 
-Voir la section **Résultats** du [README.md](README.md) pour le détail de
+Voir la section **Résultats** du [README.md](../README.md) pour le détail de
 l'arborescence `runs/<generation>/<ICAO_RWY>/`. 
 
 En résumé :

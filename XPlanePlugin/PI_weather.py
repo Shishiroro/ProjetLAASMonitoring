@@ -2,7 +2,7 @@
 PI_weather.py  —  XPPython3 plugin for LARD weather injection
 ========================================================================
 Uses the official XPLMWeather API (X-Plane 12.0+) to inject weather.
-Communicates with the LARD pipeline (project/export/xplane_weather.py)
+Communicates with the LARD pipeline (sources/export/xplane_weather.py)
 via JSON files exchanged in Resources/plugins/PythonPlugins/lard_exchange/.
 
 Key implementation notes (XPLMWeather quirks discovered while building this):

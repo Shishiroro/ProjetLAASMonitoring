@@ -2,10 +2,10 @@
 run_pipeline.py — CLI orchestrateur LARD-LAAS-TAF
 ==================================================
 Entry point CLI minimal. Toute la logique vit dans :
-  - Phase 1            : project/Generate.generate_runs
-  - Phase 2            : project/export/Export.render_run
-  - Phase 3            : project/Detection_Evaluation.evaluate_run
-  - Modes batch        : project/runs.render_runs / evaluate_runs /
+  - Phase 1            : sources/Generate.generate_runs
+  - Phase 2            : sources/export/Export.render_run
+  - Phase 3            : sources/Detection_Evaluation.evaluate_run
+  - Modes batch        : sources/runs.render_runs / evaluate_runs /
                          full_pipeline / full_evaluate_pipeline
                          (boucles + agregation + cleanup meteo)
 
@@ -25,9 +25,9 @@ import argparse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# Bootstrap sys.path via project/_paths.py
+# Bootstrap sys.path via sources/_paths.py
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT / "project"))
+sys.path.insert(0, str(ROOT / "sources"))
 import _paths  # noqa: F401
 
 from Generate import generate_runs
@@ -101,7 +101,7 @@ Structure runs/ :
 
     xplane_args = argparse.ArgumentParser(add_help=False)
     _settings = {p.attrib["name"]: p.attrib["value"]
-                 for p in ET.parse(ROOT / "project" / "settings.xml").getroot()}
+                 for p in ET.parse(ROOT / "sources" / "settings.xml").getroot()}
     _default_xp = _settings["xplane_dir"]
     xplane_args.add_argument("--xplane-dir", type=str, default=_default_xp,
                              help=f"Repertoire X-Plane 12 (defaut: {_default_xp})")

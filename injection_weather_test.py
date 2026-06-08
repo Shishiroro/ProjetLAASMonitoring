@@ -1,11 +1,11 @@
 """injection_weather_test.py — Test rapide d'injection meteo X-Plane 12
 ======================================================================
 Injecte UNIQUEMENT la meteo definie dans le XML actuellement selectionne
-(project/settings.xml -> template_file_name), sans lancer aucun scenario
+(sources/settings.xml -> template_file_name), sans lancer aucun scenario
 ni rendre d'images.
 
 Comportement :
-  - Lit project/settings.xml pour resoudre le XML actif.
+  - Lit sources/settings.xml pour resoudre le XML actif.
   - Lit le XML TAF (par defaut moyenne (min+max)/2 par parametre).
   - Pause la sim + vue externe (pas de cockpit) via setup_view().
   - Teleporte l'avion / camera 100m au-dessus de la pose initiale stockee
@@ -29,7 +29,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT / "project" / "export"))
+sys.path.insert(0, str(ROOT / "sources" / "export"))
 
 from xplane_bridge import XPlaneConnection, XPlaneConfig, load_poses_json  # noqa: E402
 from xplane_weather import (  # noqa: E402
@@ -80,10 +80,10 @@ def read_weather_from_template(template_path: Path) -> WeatherConfig:
 
 
 def resolve_template_path() -> Path:
-    settings_path = ROOT / "project" / "settings.xml"
+    settings_path = ROOT / "sources" / "settings.xml"
     params = {p.attrib["name"]: p.attrib["value"]
               for p in ET.parse(settings_path).getroot()}
-    return ROOT / "project" / params["template_path"].rstrip("/") / params["template_file_name"]
+    return ROOT / "sources" / params["template_path"].rstrip("/") / params["template_file_name"]
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _settings = {p.attrib["name"]: p.attrib["value"]
-                 for p in ET.parse(ROOT / "project" / "settings.xml").getroot()}
+                 for p in ET.parse(ROOT / "sources" / "settings.xml").getroot()}
     default_xp = _settings["xplane_dir"]
     parser.add_argument("--xplane-dir", type=str, default=default_xp,
                         help=f"Repertoire X-Plane 12 (defaut: {default_xp})")

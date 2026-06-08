@@ -27,11 +27,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_SRC = ROOT / "XPlanePlugin" / "PI_weather.py"
-SETTINGS = ROOT / "project" / "settings.xml"
+SETTINGS = ROOT / "sources" / "settings.xml"
 
 
 def _xplane_dir_from_settings():
-    """Lit xplane_dir depuis project/settings.xml (chaine vide si absent)."""
+    """Lit xplane_dir depuis sources/settings.xml (chaine vide si absent)."""
     if not SETTINGS.exists():
         return ""
     try:
@@ -74,7 +74,7 @@ def main():
         description="Installe PI_weather.py dans X-Plane 12 (PythonPlugins/)")
     parser.add_argument(
         "--xplane-dir", type=str, default=None,
-        help="Repertoire X-Plane 12 (defaut: xplane_dir de project/settings.xml)")
+        help="Repertoire X-Plane 12 (defaut: xplane_dir de sources/settings.xml)")
     args = parser.parse_args()
 
     xplane_dir = args.xplane_dir or _xplane_dir_from_settings()

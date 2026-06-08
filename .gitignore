@@ -38,10 +38,12 @@ rapport_trace.txt
 tutoArtemis.txt
 
 # Sweep scenarios
-project/sweep/
+sources/sweep/
 
 # Claude Code
 .claude/
 
 # Tests (locaux, non versionnes)
 tests/
+
+

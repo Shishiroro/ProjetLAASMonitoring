@@ -15,14 +15,14 @@ YOLO_DIR = Path(__file__).resolve().parent
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
 
-# Bootstrap sys.path via project/_paths.py
-_PROJECT_DIR = YOLO_DIR.parent / "project"
+# Bootstrap sys.path via sources/_paths.py
+_PROJECT_DIR = YOLO_DIR.parent / "sources"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
 import _paths  # noqa: F401
 from runs import list_images, pick_image_source
 
-# Lit le nom du modele YOLO depuis project/settings.xml
+# Lit le nom du modele YOLO depuis sources/settings.xml
 _settings = {p.attrib["name"]: p.attrib["value"]
              for p in ET.parse(_PROJECT_DIR / "settings.xml").getroot()}
 MODEL_PATH = YOLO_DIR / _settings["yolo_model"]

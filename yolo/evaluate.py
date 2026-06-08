@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-# Bootstrap sys.path via project/_paths.py
-_PROJECT_DIR = Path(__file__).resolve().parent.parent / "project"
+# Bootstrap sys.path via sources/_paths.py
+_PROJECT_DIR = Path(__file__).resolve().parent.parent / "sources"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
 import _paths  # noqa: F401

@@ -22,7 +22,7 @@ import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# Bootstrap sys.path via project/_paths.py (parent dossier de project/export/)
+# Bootstrap sys.path via sources/_paths.py (parent dossier de sources/export/)
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
@@ -188,7 +188,7 @@ def export(root_node, path):
         weather=weather_arg,
     )
 
-    # Nom du template XML actif (lu depuis settings.xml, CWD = project/).
+    # Nom du template XML actif (lu depuis settings.xml, CWD = sources/).
     # Sauvegarde dans poses_cam_export.json pour que le notebook puisse
     # remplir la colonne `weather` du metadata.csv.
     template_file_name = ""

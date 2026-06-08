@@ -827,7 +827,7 @@ def render_xplane_run(run_dir, xplane_dir):
         print(f"  [XPLANE] Pas de poses_cam_export.json pour {run_dir.name}")
         return False
 
-    # project/ est ajoute en sys.path par run_pipeline.py et Export.py
+    # sources/ est ajoute en sys.path par run_pipeline.py et Export.py
     from runs import list_images
     imgs = list_images(footage_dir)
     if imgs:

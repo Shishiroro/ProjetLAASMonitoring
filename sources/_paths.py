@@ -13,7 +13,7 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# project/_paths.py -> project/ -> racine
+# sources/_paths.py -> sources/ -> racine
 PROJECT_DIR = Path(__file__).resolve().parent
 ROOT = PROJECT_DIR.parent
 EXPORT_DIR = PROJECT_DIR / "export"
@@ -28,7 +28,7 @@ def _resolve_dir(value, default):
     return p if p.is_absolute() else (ROOT / p)
 
 
-# Chemins LARD/ et taf/ : surcharges optionnelles via project/settings.xml
+# Chemins LARD/ et taf/ : surcharges optionnelles via sources/settings.xml
 # (parametres lard_dir / taf_dir). Vide => clones a la racine (./LARD, ./taf).
 _lard_dir, _taf_dir = "", ""
 _settings = PROJECT_DIR / "settings.xml"
