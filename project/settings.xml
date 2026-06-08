@@ -10,18 +10,16 @@
 
     <parameter name="xplane_dir" type="path" value="C:/X-Plane 12" />
 
-    <!-- Chemins LARD/ et taf/ : laisser vide pour utiliser les clones a la
-         racine du projet (./LARD et ./taf). Renseigner un chemin absolu pour
-         pointer vers une installation existante ailleurs sur la machine. -->
-    <parameter name="lard_dir" type="path" value="" />
-    <parameter name="taf_dir" type="path" value="" />
+    
+    <parameter name="lard_dir" type="path" value="C:\Users\Sr-Sh\Desktop\XD\LARD" />
+    <parameter name="taf_dir" type="path" value="C:\Users\Sr-Sh\Desktop\XD\taf" />
 
     
     <parameter name="experiment_path" type="path" value="../" />
     <parameter name="experiment_folder_name" type="folder" value="output" />
 
     
-    <parameter name="nb_test_cases" type="integer" value="10" />
+    <parameter name="nb_test_cases" type="integer" value="1" />
 
     
     <parameter name="test_case_folder_name" type="folder" value="scenario" />
