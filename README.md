@@ -83,10 +83,19 @@ ProjetLAASMonitoring/
 ├── XPlanePlugin/
 ├── notebook/
 ├── run_pipeline.py
-└── requirements.txt
+└── docs/
+    ├── requirements.txt
+    └── requirements-eval.txt
 ```
 
 ### 4. Installer les dépendances Python
+
+Les dépendances sont séparées en **deux batchs** pour ne pas imposer PyTorch
+
+| Batch | Fichier | Phases couvertes |
+|-------|---------|------------------|
+| **base** | `docs/requirements.txt` | `generate` + `export` (rendu X-Plane, fautes capteur, vérité terrain LARD) |
+| **eval** | `docs/requirements-eval.txt` | base **+** détection YOLO / IoU (Phase 3, tire PyTorch) |
 
 ```bash
 # Créer l'environnement (une seule fois)
@@ -96,12 +105,13 @@ py -m venv .venv
 .venv\Scripts\activate        # Windows (PowerShell / cmd)
 source .venv/bin/activate     # Linux / macOS
 
-# Installer les dépendances
-pip install -r requirements.txt
+# Installer le batch voulu
+pip install -r docs/requirements.txt          # base : generate + export
+pip install -r docs/requirements-eval.txt     # complet : + évaluation YOLO/IoU
 ```
 
-À chaque nouvelle session, il suffit de ré-activer l'environnement
-(`.venv\Scripts\activate`) avant de lancer l'outil.
+> Installeur plus rapide ? Voir l'alternative **uv** :
+> [docs/INSTALLATION_UV.md](docs/INSTALLATION_UV.md).
 
 ### 5. Installer le plugin météo dans X-Plane 12
 

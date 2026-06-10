@@ -14,6 +14,9 @@ __pycache__/
 venv/
 .ruff_cache/
 
+# Jupyter (notebook/)
+.ipynb_checkpoints/
+
 # Outils locaux non versionnes
 tools/
 
@@ -32,13 +35,6 @@ yolo/datasetsGES/
 
 # Docs internes
 CLAUDE.md
-DOCUMENTATION.txt
-historique.txt
-rapport_trace.txt
-tutoArtemis.txt
-
-# Sweep scenarios
-sources/sweep/
 
 # Claude Code
 .claude/

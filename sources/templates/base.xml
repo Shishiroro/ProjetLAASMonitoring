@@ -33,7 +33,7 @@
 
             <parameter name="fps"                          type="integer" min="12"   max="12"/>
 
-            <parameter name="along_track_distance_start"   type="real"    min="2800" max="3200"/>
+            <parameter name="along_track_distance_start"   type="real"    min="3000" max="3000"/>
             <parameter name="along_track_distance_end"     type="real"    min="0"  max="0"/>
             <parameter name="ground_speed_kts"             type="real"    min="145"  max="145"/>
 
