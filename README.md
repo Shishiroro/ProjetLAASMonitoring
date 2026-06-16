@@ -30,6 +30,7 @@ en interactif.
 
 ## Prérequis
 
+| Composant   | Détail |
 |-------------|--------|
 | **OS**      | Compatible Windows et Linux. |
 | **Python**  | Python 3.10.10. |
