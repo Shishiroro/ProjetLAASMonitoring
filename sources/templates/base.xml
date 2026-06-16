@@ -90,7 +90,7 @@
 
             <!-- Precipitation : 0 = pas de pluie/neige.
                  Si > 0 ET cloud_type=-1 : Cumulonimbus force auto (sinon pas de source) -->
-            <parameter name="precip_rate"             type="real" min="0"   max="0"/>
+            <parameter name="precip_rate"             type="real" min="1"   max="1"/>
 
             <!-- cloud_type :
                   -1 = pas de nuages manuels (avec precip=0 -> ciel degage)
@@ -107,12 +107,12 @@
             <parameter name="fog_visibility"          type="real" min="20000" max="50000"/>
 
             <!-- Temperature (°C) : pluie vs neige -->
-            <parameter name="temperature_c"           type="real" min="-15"   max="45"/>
+            <parameter name="temperature_c"           type="real" min="-15"   max="0"/>
 
             <!-- Taille gouttes (visuel uniquement, dataref privé XP12, susceptible
                  d'être cassé dans de futures versions).
                  1.0=defaut, 0.1=fines, 5.0=grosses. Ignore si precip=0. -->
-            <parameter name="rain_scale"              type="real" min="1"     max="5"/>
+            <parameter name="rain_scale"              type="real" min="5"     max="5"/>
   
             <!-- Marge nuages (m) au-dessus de l'avion pour la base nuages -->
             <parameter name="cloud_margin_m"          type="real" min="500"  max="5000"/>
@@ -125,7 +125,7 @@
                  Délai accumulation effets sol : flaques de pluie / couche de
                  neige. Ignoré si precip_rate=0. Mettre 0 pour de la pluie
                  SANS accumulation. -->
-            <parameter name="weather_effect_duration" type="real" min="5"     max="15"/>
+            <parameter name="weather_effect_duration" type="real" min="15"     max="15"/>
 
         </node>
 
@@ -139,11 +139,11 @@
         <node name="settings">
 
             <!-- Heure du jour locale (conversion UTC via fuseau politique) -->
-            <parameter name="time_of_day_h"           type="real" min="8"    max="18"/>
+            <parameter name="time_of_day_h"           type="real" min="12"    max="12"/>
 
             <!-- Délai chargement textures de la zone + stabilisation nuages GPU
                  (vitesse sim normale). Appliqué à TOUS les scénarios. -->
-            <parameter name="load_texture_duration"   type="real" min="30"     max="30"/>
+            <parameter name="load_texture_duration"   type="real" min="15"     max="15"/>
 
             <!-- Délai stabilisation pose APRES chaque téléportation caméra (s). -->
             <parameter name="screenshot_duration"     type="real" min="0.07"  max="0.07"/>

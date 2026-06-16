@@ -24,7 +24,7 @@ en interactif.
 
 ## Aperçu de l'outil
 
-![Aperçu du pipeline](pipeline.png)
+![Aperçu du pipeline](docs/pipeline.png)
 
 ---
 
