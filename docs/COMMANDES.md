@@ -66,10 +66,11 @@ regroupe tous les scénarios du batch :
 
 ```
 runs/
-└── generation_01/            ← une génération = un batch
-    ├── LFPO_24/              ← un dossier par scénario (format ICAO_RWY)
+└── generation_01/                  ← une génération = un batch
+    ├── LFPO_24/                    ← un dossier par scénario (format ICAO_RWY)
+    │   └── eval/yolo/predictions.csv   ← sorties d'éval namespacées par SUT
     ├── KLAX_25R/
-    └── pipeline_report.json  ← rapport agrégé (après evaluate)
+    └── eval/yolo/pipeline_report.json  ← rapport agrégé (après evaluate)
 ```
 
 - Sans `--name` : `generation_01`, `generation_02`, … (auto-incrément).
@@ -171,8 +172,9 @@ py run_pipeline.py evaluate --all --generation pluie_01
 py run_pipeline.py evaluate --all --generation generation_01 --conf 0.4 --iou-method GIOU
 ```
 
-> Le modèle YOLO utilisé est défini par `yolo_model` dans `settings.xml`
-> (défaut : `yolov8nTest.pt`).
+> Le modèle YOLO utilisé est défini par le champ `model` dans
+> `evaluation/yolo/yolo.json` (poids dans `evaluation/yolo/weights/`,
+> défaut : `yolov8nTest.pt`).
 
 ---
 
@@ -295,5 +297,6 @@ l'arborescence `runs/<generation>/<ICAO_RWY>/`.
 En résumé :
 
 - `footage/` — images brutes X-Plane ; `degraded/` — images avec fautes capteur
-- `*_labels.csv` — vérité terrain LARD ; `predictions.csv` — détections YOLO
-- `pipeline_report.json` — métriques agrégées (IoU, AP, F1, P, R) par batch
+- `*_labels.csv` — vérité terrain LARD (racine du run, produite par l'usine)
+- `eval/<sut>/predictions.csv` — détections du SUT (ex `eval/yolo/`), namespacé par SUT
+- `eval/<sut>/pipeline_report.json` — métriques agrégées (IoU, AP, F1, P, R) par batch

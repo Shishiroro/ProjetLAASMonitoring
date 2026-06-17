@@ -121,8 +121,8 @@ def apply_faults_to_directory(input_dir, output_dir, faults, n_frames):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    project_root = Path(__file__).resolve().parent.parent.parent
-    cse_dir = str(project_root / "yolo" / "camera_sensor_errors")
+    # camera_sensor_errors/ est cote usine (sous-dossier de export/)
+    cse_dir = str(Path(__file__).resolve().parent / "camera_sensor_errors")
     if cse_dir not in sys.path:
         sys.path.insert(0, cse_dir)
 

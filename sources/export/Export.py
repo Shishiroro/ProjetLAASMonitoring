@@ -314,7 +314,8 @@ def render_run(run_dir, xplane_dir):
       2. step_faults          -> degraded/*.jpg         (si fault_profile.json)
       3. step_ground_truth    -> <name>_labels.csv      (GT LARD)
 
-    Phase 3 (Detection_Evaluation) consomme ces sorties et ne genere plus de GT.
+    Le banc d'evaluation (evaluation/) consomme ces sorties (images + GT) ;
+    il ne genere plus de GT lui-meme.
 
     :param run_dir: dossier du run dans runs/
     :param xplane_dir: chemin vers X-Plane 12

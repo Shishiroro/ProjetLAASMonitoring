@@ -10,11 +10,9 @@ Layout :
   - creation des dossiers a partir de la sortie TAF (Phase 1)
   - agregation d'un rapport multi-run (dans la generation)
 
-Orchestration (3 phases independantes) :
-  - render_runs           : mode "render"        (Phase 2 : X-Plane + fautes)
-  - evaluate_runs         : mode "evaluate"      (Phase 3 : YOLO + IoU)
-  - full_pipeline         : mode "full"          (Phase 1 + 2 enchainees)
-  - full_evaluate_pipeline: mode "full_evaluate" (Phase 1 + 2 + 3 enchainees)
+Orchestration usine (l'evaluation Phase 3 vit dans evaluation/) :
+  - render_runs   : mode "render" (Phase 2 : X-Plane + fautes)
+  - full_pipeline : mode "full"   (Phase 1 + 2 enchainees)
 """
 
 import json
@@ -269,45 +267,14 @@ def create_runs_from_taf_output(generation_dir):
     return created_runs
 
 
-def aggregate_report(results, generation_dir=None):
-    """Affiche le rapport agrege et sauve dans <generation_dir>/pipeline_report.json.
-
-    Si generation_dir est None, deduit depuis le parent du premier run_dir.
-    """
-    if not results:
-        return
-    print(f"\n{'=' * 60}")
-    print(f" RAPPORT FINAL ({len(results)} run(s))")
-    print(f"{'=' * 60}")
-    print(f"{'Run':<20} {'AP':>6} {'F1':>6} {'P':>6} {'R':>6} {'TP':>5} {'FP':>5} {'FN':>5}")
-    print(f"{'-' * 60}")
-    for r in results:
-        print(f"{r['run']:<20} {r.get('ap', 0):>6.3f} {r.get('f1', 0):>6.3f} "
-              f"{r.get('p', 0):>6.3f} {r.get('r', 0):>6.3f} "
-              f"{r.get('tp', 0):>5} {r.get('fp', 0):>5} {r.get('fn', 0):>5}")
-
-    if generation_dir is None:
-        first_run = Path(results[0].get("run_dir", "")) if results[0].get("run_dir") else None
-        if first_run and first_run.parent.parent == RUNS_DIR:
-            generation_dir = first_run.parent
-        else:
-            generation_dir = RUNS_DIR
-    generation_dir = Path(generation_dir)
-    generation_dir.mkdir(parents=True, exist_ok=True)
-    report_file = generation_dir / "pipeline_report.json"
-
-    with open(report_file, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"\nRapport sauvegarde : {report_file.relative_to(PROJECT_ROOT)}")
-
-
 # ===========================================================================
-# Orchestration : 3 phases independantes
+# Orchestration usine (Phase 1 + 2)
 # ---------------------------------------------------------------------------
-# render_runs            : Phase 2 (X-Plane + fautes) sur N runs filtres
-# evaluate_runs          : Phase 3 (YOLO + IoU)       sur N runs filtres
-# full_pipeline          : Phase 1 + 2     enchainees (mode "full" du CLI)
-# full_evaluate_pipeline : Phase 1 + 2 + 3 enchainees (mode "full_evaluate")
+# render_runs   : Phase 2 (X-Plane + fautes) sur N runs filtres
+# full_pipeline : Phase 1 + 2 enchainees (mode "full" du CLI)
+#
+# L'evaluation (Phase 3) vit dans evaluation/ (banc d'eval + interface SUT) ;
+# l'agregation du rapport y est faite par evaluation.runner.aggregate_report.
 # ===========================================================================
 
 def _render_loop(runs, xplane_dir):
@@ -331,24 +298,6 @@ def _render_loop(runs, xplane_dir):
     return rendered
 
 
-def _evaluate_loop(runs, runway=None, conf=0.25, imgsz=512,
-                   iou_thresh=0.5, iou_method="CIOU"):
-    """Boucle Phase 3 partagee par evaluate_runs et full_evaluate_pipeline."""
-    from Detection_Evaluation import evaluate_run
-
-    all_results = []
-    for run_dir in runs:
-        print(f"\n{'-' * 50}")
-        print(f" Run : {run_dir.parent.name}/{run_dir.name}")
-        print(f"{'-' * 50}")
-        result = evaluate_run(run_dir, runway=runway, conf=conf, imgsz=imgsz,
-                              iou_thresh=iou_thresh, iou_method=iou_method)
-        if result:
-            result.setdefault("run_dir", str(run_dir))
-            all_results.append(result)
-    return all_results
-
-
 def render_runs(run_name=None, all_runs=False, generation=None, xplane_dir=None):
     """Mode "render" : Phase 2 (X-Plane + fautes) sur les runs filtres.
 
@@ -367,32 +316,6 @@ def render_runs(run_name=None, all_runs=False, generation=None, xplane_dir=None)
     return _render_loop(runs, xplane_dir)
 
 
-def evaluate_runs(run_name=None, all_runs=False, generation=None, runway=None,
-                  conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
-                  xplane_dir=None):
-    """Mode "evaluate" : Phase 3 (YOLO + IoU) sur les runs filtres.
-
-    `xplane_dir` est conserve pour compat de signature mais inutilise
-    (Phase 3 ne touche pas a X-Plane).
-    """
-    print("=" * 60)
-    print(" PHASE 3 : Detection YOLO + IoU")
-    print("=" * 60)
-
-    runs = find_runs(run_name, all_runs, generation=generation)
-    if not runs:
-        print("[Pipeline] Aucun run valide trouve.")
-        print(f"  Verifier que runs/<generation>/<nom>/ contient un .yaml et "
-              f"poses_cam_export.json ou footage/")
-        return []
-
-    print(f"\n[Pipeline] {len(runs)} run(s) a evaluer")
-    all_results = _evaluate_loop(runs, runway=runway, conf=conf, imgsz=imgsz,
-                                 iou_thresh=iou_thresh, iou_method=iou_method)
-    aggregate_report(all_results, generation_dir=runs[0].parent)
-    return all_results
-
-
 def full_pipeline(nb_scenarios=None, name=None, clean=False,
                   xplane_dir=None):
     """Mode "full" : Phase 1 + Phase 2 enchainees (sans evaluation YOLO)."""
@@ -408,35 +331,3 @@ def full_pipeline(nb_scenarios=None, name=None, clean=False,
     print(" PHASE 2 : Rendu X-Plane + fautes capteur")
     print(f"{'=' * 60}")
     return _render_loop(created_runs, xplane_dir)
-
-
-def full_evaluate_pipeline(nb_scenarios=None, name=None, clean=False,
-                           conf=0.25, imgsz=512, iou_thresh=0.5, iou_method="CIOU",
-                           xplane_dir=None):
-    """Mode "full_evaluate" : Phase 1 + 2 + 3 enchainees sur les runs crees."""
-    from Generate import generate_runs
-
-    created_runs = generate_runs(nb_scenarios=nb_scenarios,
-                                 name=name, clean=clean)
-    if not created_runs:
-        print("[Pipeline] Aucun scenario genere, arret.")
-        return []
-
-    generation_dir = created_runs[0].parent
-
-    print(f"\n{'=' * 60}")
-    print(" PHASE 2 : Rendu X-Plane + fautes capteur")
-    print(f"{'=' * 60}")
-    rendered = _render_loop(created_runs, xplane_dir)
-
-    if not rendered:
-        print("[Pipeline] Aucun rendu reussi, arret avant Phase 3.")
-        return []
-
-    print(f"\n{'=' * 60}")
-    print(" PHASE 3 : Detection YOLO + IoU")
-    print(f"{'=' * 60}")
-    all_results = _evaluate_loop(rendered, conf=conf, imgsz=imgsz,
-                                 iou_thresh=iou_thresh, iou_method=iou_method)
-    aggregate_report(all_results, generation_dir=generation_dir)
-    return all_results

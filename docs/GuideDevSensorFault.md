@@ -15,7 +15,7 @@ applique les erreurs frame par frame.
 Il y a 4 fichiers à toucher (3 obligatoires + 1 optionnel).
 
 ### Étape 1 — Implémenter la fonction OpenCV
-Fichier : [yolo/camera_sensor_errors/camera_sensor_errors.py](../yolo/camera_sensor_errors/camera_sensor_errors.py)
+Fichier : [sources/export/camera_sensor_errors/camera_sensor_errors.py](../sources/export/camera_sensor_errors/camera_sensor_errors.py)
 
 La fonction prend une image BGR `uint8` + `severity ∈ [0, 1]` et retourne une
 image BGR `uint8`. `severity` module l'intensité.

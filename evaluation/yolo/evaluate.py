@@ -1,6 +1,6 @@
 """
 Evaluation IoU : compare les predictions YOLO (predictions.csv) aux ground truths LARD (.csv).
-Calcule AP, F1, Precision, Recall via le module yolo/eval/.
+Calcule AP, F1, Precision, Recall via le module evaluation/yolo/eval/.
 """
 
 import sys
@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-# Bootstrap sys.path via sources/_paths.py
-_PROJECT_DIR = Path(__file__).resolve().parent.parent / "sources"
+# Bootstrap sys.path via sources/_paths.py (evaluation/yolo -> racine -> sources)
+_PROJECT_DIR = Path(__file__).resolve().parent.parent.parent / "sources"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
 import _paths  # noqa: F401
@@ -160,16 +160,21 @@ def evaluate(predictions_csv: Path, csv_path: Path, iou_thresh: float = 0.5, iou
 
 
 def evaluate_run(run_dir, runway: str | None = None,
-                 iou_thresh: float = 0.5, iou_method: str = "CIOU"):
+                 iou_thresh: float = 0.5, iou_method: str = "CIOU",
+                 predictions_csv: Path | None = None):
     """Evalue IoU sur un run.
 
-    Auto-trouve run_dir/predictions.csv et run_dir/<stem>_labels.csv.
+    Cherche les predictions (predictions_csv, defaut run_dir/predictions.csv)
+    et la GT run_dir/<stem>_labels.csv (toujours a la racine du run).
     Le runway est extrait du nom du run (ex: LFPG_09L_002 -> 09L) si non fourni.
 
+    :param predictions_csv: chemin des predictions (namespacing par SUT,
+        ex run_dir/eval/yolo/predictions.csv). Defaut : run_dir/predictions.csv.
     :return: dict de metriques (ou None si erreur/pas de donnees)
     """
     run_dir = Path(run_dir)
-    predictions_csv = run_dir / "predictions.csv"
+    if predictions_csv is None:
+        predictions_csv = run_dir / "predictions.csv"
 
     csv_candidates = list(run_dir.glob("*_labels.csv"))
     if not csv_candidates:

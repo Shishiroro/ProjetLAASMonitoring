@@ -77,9 +77,9 @@ Après les étapes 1 à 3, la racine doit contenir :
 
 ```
 ProjetLAASMonitoring/
-├── sources/
+├── sources/         # usine à données (génération + rendu X-Plane + GT)
+├── evaluation/      # banc d'évaluation (SUT : YOLO, futurs moniteurs)
 ├── scripts/
-├── yolo/
 ├── XPlanePlugin/
 ├── notebook/
 ├── run_pipeline.py
@@ -289,10 +289,11 @@ runs/
     │   ├── weather_profile.json     profil météo X-Plane (si actif)
     │   ├── footage/                 images rendues par X-Plane
     │   ├── degraded/                images avec fautes capteur (si actives)
-    │   ├── LFPO_24_labels.csv       vérité terrain LARD
-    │   ├── predictions.csv          détections du modèle
-    │   └── predictions_txt/         labels bruts du modèle
-    └── pipeline_report.json         rapport agrégé : IoU, AP, F1, P, R par scénario
+    │   ├── LFPO_24_labels.csv       vérité terrain LARD (usine)
+    │   └── eval/yolo/               sorties d'éval, namespacées par SUT
+    │       ├── predictions.csv      détections du SUT
+    │       └── predictions_txt/     labels bruts du SUT
+    └── eval/yolo/pipeline_report.json   rapport agrégé : IoU, AP, F1, P, R par scénario
 ```
 
 ### Aller plus loin avec les notebooks

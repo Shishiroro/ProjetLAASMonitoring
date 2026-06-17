@@ -4,9 +4,9 @@ _paths.py — Bootstrap sys.path centralise pour LARD-LAAS-TAF
 Import simple : `import _paths` ajoute tous les dossiers necessaires au
 sys.path (idempotent).
 
-Modules entry-points (run_pipeline, Generate, predict, evaluate, Export
-copie par TAF) ont juste a inserer ce fichier en tete de leurs imports.
-Les modules feuilles n'ont alors rien a faire eux-memes.
+Modules entry-points cote usine (run_pipeline, Generate, Export copie par TAF)
+inserent ce fichier en tete de leurs imports. Le banc d'evaluation (evaluation/)
+le reutilise via son propre bootstrap (evaluation/__init__.py).
 """
 
 import sys
@@ -17,7 +17,6 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent
 ROOT = PROJECT_DIR.parent
 EXPORT_DIR = PROJECT_DIR / "export"
-YOLO_DIR = ROOT / "yolo"
 
 
 def _resolve_dir(value, default):
@@ -47,7 +46,10 @@ LARD_ROOT = _resolve_dir(_lard_dir, ROOT / "LARD")
 TAF_ROOT = _resolve_dir(_taf_dir, ROOT / "taf")
 TAF_SRC = TAF_ROOT / "src"
 
-_PATHS = (ROOT, PROJECT_DIR, EXPORT_DIR, YOLO_DIR, YOLO_DIR / "eval", LARD_ROOT)
+# NB : l'evaluation (yolo/eval) n'est PAS ajoutee ici — c'est le bootstrap du
+# package evaluation/ (evaluation/__init__.py) qui s'en charge. sources/ ne
+# connait pas evaluation/ (dependance unidirectionnelle evaluation -> sources).
+_PATHS = (ROOT, PROJECT_DIR, EXPORT_DIR, LARD_ROOT)
 
 for _p in _PATHS:
     _sp = str(_p)

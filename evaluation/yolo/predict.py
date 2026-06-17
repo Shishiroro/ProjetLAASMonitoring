@@ -4,28 +4,29 @@ Genere les predictions (CSV avec bbox) et les images annotees.
 """
 
 import csv
+import json
 import shutil
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from ultralytics import YOLO
 
 # --- Chemins ---
-YOLO_DIR = Path(__file__).resolve().parent
+YOLO_DIR = Path(__file__).resolve().parent       # evaluation/yolo/
+WEIGHTS_DIR = YOLO_DIR / "weights"               # poids .pt (plusieurs modeles OOD)
 IMAGES_DIR = YOLO_DIR / "test_images" / "test"
 OUTPUT_DIR = YOLO_DIR / "output"
 
-# Bootstrap sys.path via sources/_paths.py
-_PROJECT_DIR = YOLO_DIR.parent / "sources"
+# Bootstrap sys.path via sources/_paths.py (evaluation/yolo -> racine -> sources)
+_PROJECT_DIR = YOLO_DIR.parent.parent / "sources"
 if str(_PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(_PROJECT_DIR))
 import _paths  # noqa: F401
 from runs import list_images, pick_image_source
 
-# Lit le nom du modele YOLO depuis sources/settings.xml
-_settings = {p.attrib["name"]: p.attrib["value"]
-             for p in ET.parse(_PROJECT_DIR / "settings.xml").getroot()}
-MODEL_PATH = YOLO_DIR / _settings["yolo_model"]
+# Config locale du SUT YOLO (poids choisi). Decouple de sources/settings.xml :
+# le banc d'eval possede sa propre config, l'usine ne connait pas le modele.
+_CONFIG = json.loads((YOLO_DIR / "yolo.json").read_text())
+MODEL_PATH = WEIGHTS_DIR / _CONFIG["model"]
 
 
 
@@ -145,12 +146,15 @@ def predict(start: int = 0, n_images: int | None = None, conf: float = 0.25, img
     return predictions_csv
 
 
-def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512):
+def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512, output_dir=None):
     """Lance YOLO sur un run.
 
     Utilise run_dir/degraded/ si present (fautes capteur deja appliquees),
-    sinon run_dir/footage/. Sortie : run_dir/predictions.csv + run_dir/predictions_txt/.
+    sinon run_dir/footage/. Sortie : output_dir/predictions.csv +
+    output_dir/predictions_txt/ (output_dir defaut = run_dir).
 
+    :param output_dir: dossier de sortie des predictions (namespacing par SUT,
+        ex run_dir/eval/yolo/). Defaut : run_dir.
     :return: Path du predictions.csv genere (ou None si pas d'images)
     """
     run_dir = Path(run_dir)
@@ -162,7 +166,7 @@ def predict_run(run_dir, conf: float = 0.25, imgsz: int = 512):
         images_dir=images_dir,
         conf=conf,
         imgsz=imgsz,
-        output_dir=run_dir,
+        output_dir=output_dir if output_dir is not None else run_dir,
     )
 
     if predictions_csv and predictions_csv.exists():

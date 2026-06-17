@@ -30,7 +30,7 @@ import cv2
 import yaml
 
 from lard_bridge import annotate_gt, load_gt_corners
-from predict import MODEL_PATH
+from evaluation.yolo.predict import MODEL_PATH  # SUT YOLO (banc d'eval)
 from runs import find_runs, list_images, pick_image_source
 from runway import runway_from_run_name
 
@@ -372,7 +372,7 @@ def build_yolo_box(run_name: str | None = None,
                    line_width: int = 2, conf: float = 0.25, imgsz: int = 512):
     """Trace les bbox YOLO (trait fin) dans run_dir/yolo_box/. None = tous les runs.
 
-    Meme appel que yolo/predict.py (model.predict + save=True), seul `line_width`
+    Meme appel que evaluation/yolo/predict.py (model.predict + save=True), seul `line_width`
     est ajoute (non expose par predict()).
     """
     from ultralytics import YOLO

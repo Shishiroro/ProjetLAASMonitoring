@@ -28,10 +28,9 @@ tools/
 .DS_Store
 Thumbs.db
 
-# YOLOv8
-yolo/output/
-yolo/test_images/
-yolo/datasetsGES/
+# Banc d'evaluation (SUT YOLOv8)
+evaluation/yolo/output/
+evaluation/yolo/test_images/
 
 # Docs internes
 CLAUDE.md

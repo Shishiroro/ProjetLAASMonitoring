@@ -3,12 +3,12 @@
     <parameter name="template_path" type="path" value="templates/" />
     <parameter name="template_file_name" type="file" value="base.xml" />
 
-    <parameter name="yolo_model" type="file" value="yolov8nTest.pt" />
+    
 
     <parameter name="xplane_dir" type="path" value="C:/X-Plane 12" />
     <parameter name="lard_dir" type="path" value="C:\Users\Sr-Sh\Desktop\XD\LARD" />
     <parameter name="taf_dir" type="path" value="C:\Users\Sr-Sh\Desktop\XD\taf" />
-     #
+     
     
 
 

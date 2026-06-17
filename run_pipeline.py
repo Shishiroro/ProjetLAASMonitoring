@@ -4,10 +4,9 @@ run_pipeline.py — CLI orchestrateur LARD-LAAS-TAF
 Entry point CLI minimal. Toute la logique vit dans :
   - Phase 1            : sources/Generate.generate_runs
   - Phase 2            : sources/export/Export.render_run
-  - Phase 3            : sources/Detection_Evaluation.evaluate_run
-  - Modes batch        : sources/runs.render_runs / evaluate_runs /
-                         full_pipeline / full_evaluate_pipeline
-                         (boucles + agregation + cleanup meteo)
+  - Phase 3 (eval)     : evaluation/ (banc d'eval + interface SUT)
+  - Modes batch usine  : sources/runs.render_runs / full_pipeline
+  - Modes batch eval   : evaluation.runner.evaluate_runs / full_evaluate_pipeline
 
 Modes :
     python run_pipeline.py generate -n 5
@@ -31,7 +30,8 @@ sys.path.insert(0, str(ROOT / "sources"))
 import _paths  # noqa: F401
 
 from Generate import generate_runs
-from runs import render_runs, evaluate_runs, full_pipeline, full_evaluate_pipeline
+from runs import render_runs, full_pipeline               # usine (Phase 1/2)
+from evaluation.runner import evaluate_runs, full_evaluate_pipeline  # banc d'eval (Phase 3)
 
 
 def _add_generate_args(parser):
