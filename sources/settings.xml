@@ -1,7 +1,7 @@
 <settings>
      #
-    <parameter name="template_path" type="path" value="templates/" />
-    <parameter name="template_file_name" type="file" value="base.xml" />
+    <parameter name="template_path" type="path" value="templates/clear/" />
+    <parameter name="template_file_name" type="file" value="clear.xml" />
 
     
 
@@ -16,7 +16,7 @@
     <parameter name="experiment_folder_name" type="folder" value="output" />
 
     
-    <parameter name="nb_test_cases" type="integer" value="1" />
+    <parameter name="nb_test_cases" type="integer" value="2" />
 
     
     <parameter name="test_case_folder_name" type="folder" value="scenario" />

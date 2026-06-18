@@ -32,6 +32,9 @@ Thumbs.db
 evaluation/yolo/output/
 evaluation/yolo/test_images/
 
+# Outil d'analyse local (sweep robustesse YOLO) — non versionne
+evaluation/fault_sweep.py
+
 # Docs internes
 CLAUDE.md
 

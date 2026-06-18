@@ -411,12 +411,14 @@ def channel_swap(img: np.ndarray, severity: float = 0.5,
 
     severity < 0.5 : permutation dans l'espace BGR natif.
     severity >= 0.5 : permutation dans l'espace HSV (decalage de teinte plus violent).
-    `order` : permutation explicite [c0, c1, c2] (ex: [0, 2, 1]). Si None, tiree au
-    hasard parmi les 5 non-identites.
+    `order` : permutation explicite [c0, c1, c2] (ex: [0, 2, 1]). Si None, on utilise
+    une permutation fixe (inversion BGR<->RGB). PAS de tirage aleatoire : le swap doit
+    rester constant sur toute la duree de l'erreur (sinon il change frame a frame, la
+    fonction etant appelee independamment par image). La variete entre scenarios vient
+    du sampling TAF de c0/c1/c2 (cf. Export.py), pas d'un hasard par frame.
     """
     if order is None:
-        perms = [(0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)]
-        order = list(perms[np.random.randint(len(perms))])
+        order = [2, 1, 0]
     if severity < 0.5:
         return img[:, :, list(order)].copy()
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
