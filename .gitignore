@@ -35,6 +35,13 @@ evaluation/yolo/test_images/
 # Outil d'analyse local (sweep robustesse YOLO) — non versionne
 evaluation/fault_sweep.py
 
+# Etude moniteurs (travail local non versionne)
+moniteursEtude/
+
+# Poids YOLO : ne versionner que best.pt
+evaluation/yolo/weights/yolov8nTest.pt
+evaluation/yolo/weights/last.pt
+
 # Docs internes
 CLAUDE.md
 

@@ -69,8 +69,8 @@ MARGIN_CB      = (600, 1400)
 # Tout param absent garde sa valeur DEFAULTS.
 PRESETS = {
     # --- Brouillard 
-    ("fog", "fog_light"):    {"fog_visibility": (10000, 15000)},
-    ("fog", "fog_moderate"): {"fog_visibility": (4000, 10000)},
+    ("fog", "fog_light"):    {"fog_visibility": (7000, 10000)},
+    ("fog", "fog_moderate"): {"fog_visibility": (4000, 7000)},
     ("fog", "fog_heavy"):    {"fog_visibility": (1000, 4000)},
 
     # --- Nuages : precip=0, cloud_type fixe, coverage/thickness par intensite ---
@@ -93,14 +93,14 @@ PRESETS = {
 
 
     # --- Pluie : precip + Cumulonimbus auto (cloud_type=-1) ---
-    ("rain", "rain_light"):    {"precip_rate": (1.0, 1.0), "cloud_type": (1, -3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (15, 15), "rain_scale": (1.0, 2.0), "cloud_margin_m": (2000, 5000)},
+    ("rain", "rain_light"):    {"precip_rate": (1.0, 1.0), "cloud_type": (1, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (15, 15), "rain_scale": (1.0, 2.0), "cloud_margin_m": (2000, 5000)},
     ("rain", "rain_moderate"): {"precip_rate": (1.0, 1.0), "cloud_type": (1, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (15, 15), "rain_scale": (2.0, 4.0), "cloud_margin_m": (500, 1800)},
     ("rain", "rain_heavy"):    {"precip_rate": (1.0, 1.0), "cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "temperature_c": (15, 15), "rain_scale": (4.0, 5.0), "cloud_margin_m": (300, 500)},
 
 
     # --- Neige : precip + T < 0 (XP12 bascule les particules en neige) ---
     # NB : temperature plafonnee a -2 C (et non 0) pour garantir la neige.
-    ("snow", "snow_light"):    {"precip_rate": (1.0, 1.0), "cloud_type": (1, -3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (-15, -15), "rain_scale": (1.0, 2.0), "cloud_margin_m": (2000, 5000)},
+    ("snow", "snow_light"):    {"precip_rate": (1.0, 1.0), "cloud_type": (1, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (-15, -15), "rain_scale": (1.0, 2.0), "cloud_margin_m": (2000, 5000)},
     ("snow", "snow_moderate"): {"precip_rate": (1.0, 1.0), "cloud_type": (1, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (500, 500), "temperature_c": (-15, -15), "rain_scale": (2.0, 4.0), "cloud_margin_m": (500, 1800)},
     ("snow", "snow_heavy"):    {"precip_rate": (1.0, 1.0), "cloud_type": (3, 3), "cloud_coverage": (1.0, 1.0), "cloud_thickness_m": (10000, 10000), "temperature_c": (-15, -15), "rain_scale": (4.0, 5.0), "cloud_margin_m": (300, 500)},
 

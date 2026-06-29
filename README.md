@@ -228,6 +228,24 @@ Le paramètre `airport_runway` utilise le format `ICAO_RWY` (exemple : `LFPO_24`
 `KPDX_10L`). La liste des pistes disponibles se trouve dans :
 `LARD/data/runways_db_V2_XPlane.json`.
 
+#### Cas particulier : démo X-Plane 12
+
+La version **démo** de X-Plane 12 ne charge le décor (terrain réel) que sur
+quelques zones limitées — notamment **Portland (KPDX)**. Pour essayer l'outil
+sans la version complète, remplacer la valeur de `airport_runway` dans le
+template par les pistes de la démo présentes dans la DB LARD XP12 :
+
+```xml
+<!-- Aeroport + piste cibles (pour la demo X-Plane 12) -->
+<parameter name="airport_runway" type="string"
+           values="KPDX_3;KPDX_10L;KPDX_10R;KPDX_21;KPDX_28L;KPDX_28R"/>
+```
+
+> Ces 6 pistes sont vérifiées présentes dans `LARD/data/runways_db_V2_XPlane.json`.
+> Hors de ces zones, la démo n'affiche que de l'eau / un terrain générique : la
+> vérité terrain reste correcte (géométrie connue), mais les images n'ont pas de
+> décor exploitable.
+
 ---
 
 ## Lancer l'outil
