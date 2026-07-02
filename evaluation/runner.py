@@ -155,8 +155,8 @@ def evaluate_runs(run_name=None, all_runs=False, generation=None, sut="yolo", **
     return results
 
 
-def full_evaluate_pipeline(nb_scenarios=None, name=None, clean=False, sut="yolo",
-                           xplane_dir=None, **cfg):
+def full_evaluate_pipeline(nb_scenarios=None, name=None, clean=False, runway=None,
+                           sut="yolo", xplane_dir=None, **cfg):
     """Mode "full_evaluate" : Phase 1 + 2 (usine) + evaluation enchainees.
 
     Genere les scenarios (TAF), rend les images (X-Plane), puis evalue avec le
@@ -165,7 +165,8 @@ def full_evaluate_pipeline(nb_scenarios=None, name=None, clean=False, sut="yolo"
     from Generate import generate_runs
     from runs import _render_loop
 
-    created_runs = generate_runs(nb_scenarios=nb_scenarios, name=name, clean=clean)
+    created_runs = generate_runs(nb_scenarios=nb_scenarios, name=name,
+                                 clean=clean, runway=runway)
     if not created_runs:
         print("[Pipeline] Aucun scenario genere, arret.")
         return []

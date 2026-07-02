@@ -316,13 +316,13 @@ def render_runs(run_name=None, all_runs=False, generation=None, xplane_dir=None)
     return _render_loop(runs, xplane_dir)
 
 
-def full_pipeline(nb_scenarios=None, name=None, clean=False,
+def full_pipeline(nb_scenarios=None, name=None, clean=False, runway=None,
                   xplane_dir=None):
     """Mode "full" : Phase 1 + Phase 2 enchainees (sans evaluation YOLO)."""
     from Generate import generate_runs
 
     created_runs = generate_runs(nb_scenarios=nb_scenarios,
-                                 name=name, clean=clean)
+                                 name=name, clean=clean, runway=runway)
     if not created_runs:
         print("[Pipeline] Aucun scenario genere, arret.")
         return []

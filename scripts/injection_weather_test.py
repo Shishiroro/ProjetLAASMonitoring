@@ -19,7 +19,7 @@ Comportement :
 
 Usage :
   py injection_weather_test.py
-  py injection_weather_test.py --run KPDX_10L
+  py injection_weather_test.py --run generation_01/LFPO_24
   py injection_weather_test.py --xplane-dir "C:/X-Plane 12" --alt-offset 200
 """
 
@@ -28,12 +28,13 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "sources" / "export"))
 
 from xplane_bridge import XPlaneConnection, XPlaneConfig, load_poses_json  # noqa: E402
 from xplane_weather import (  # noqa: E402
     WeatherConfig, set_exchange_dir, check_plugin, inject_weather,
+
 )
 
 
@@ -63,9 +64,12 @@ def read_weather_from_template(template_path: Path) -> WeatherConfig:
     settings_node = root.find(".//node[@name='settings']")
     if weather_node is None or settings_node is None:
         raise ValueError(f"node 'weather' ou 'settings' manquant dans {template_path}")
+    # cloud_type est un enum (0..3) : on arrondit le milieu de plage a l'entier
+    # le plus proche pour previsualiser un vrai type. Sinon une plage [0,3]
+    # donne 1.5 -> affiche "2" (arrondi) mais injecte int(1.5)=1 (Stratus).
     return WeatherConfig(
         precip_rate=_param_mid(weather_node, "precip_rate"),
-        cloud_type=_param_mid(weather_node, "cloud_type"),
+        cloud_type=round(_param_mid(weather_node, "cloud_type")),
         cloud_coverage=_param_mid(weather_node, "cloud_coverage"),
         cloud_thickness_m=_param_mid(weather_node, "cloud_thickness_m"),
         fog_visibility=_param_mid(weather_node, "fog_visibility"),
@@ -91,8 +95,12 @@ def resolve_template_path() -> Path:
 # ---------------------------------------------------------------------------
 
 def find_latest_run(runs_dir: Path) -> Path:
-    candidates = [d for d in runs_dir.iterdir()
-                  if d.is_dir() and (d / "poses_cam_export.json").exists()]
+    """Trouve le run le plus recent (structure runs/<generation>/<ICAO_RWY>/).
+
+    Recherche recursive : poses_cam_export.json vit desormais sous
+    runs/<generation>/<run>/ (un dossier par batch, sous-dossier par scenario).
+    """
+    candidates = [p.parent for p in runs_dir.rglob("poses_cam_export.json")]
     if not candidates:
         raise FileNotFoundError(f"Aucun run avec poses_cam_export.json dans {runs_dir}")
     return max(candidates, key=lambda d: (d / "poses_cam_export.json").stat().st_mtime)
@@ -113,7 +121,8 @@ def main():
     parser.add_argument("--xplane-dir", type=str, default=default_xp,
                         help=f"Repertoire X-Plane 12 (defaut: {default_xp})")
     parser.add_argument("--run", type=str, default=None,
-                        help="Nom du run (defaut: le plus recent dans runs/)")
+                        help="Chemin compose <generation>/<run> (ex: generation_01/LFPO_24) "
+                             "ou le plus recent dans runs/ par defaut")
     parser.add_argument("--alt-offset", type=float, default=100.0,
                         help="Offset altitude au-dessus de la pose initiale (m, defaut: 100)")
     args = parser.parse_args()

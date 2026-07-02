@@ -99,7 +99,7 @@ Ces deux commandes prennent **soit** un run précis, **soit** `--all` :
 ### `generate` — Phase 1
 
 ```bash
-py run_pipeline.py generate [-n N] [--name NOM] [--clean]
+py run_pipeline.py generate [-n N] [--name NOM] [--clean] [--runway PISTE]
 ```
 
 Échantillonne les scénarios via TAF et crée la génération sous `runs/`.
@@ -109,13 +109,20 @@ py run_pipeline.py generate [-n N] [--name NOM] [--clean]
 | `-n`, `--nb-scenarios` | `nb_test_cases` de `settings.xml` (= 3) | Nombre de scénarios à générer |
 | `--name NOM` | `generation` | Préfixe du dossier de génération (`<NOM>_NN/`) |
 | `--clean` | désactivé | Vide **tout** `runs/` avant de générer |
+| `--runway PISTE` | aucune (TAF échantillonne) | Force **tous** les scénarios sur une piste (format `ICAO_RWY`, ex. `LFPO_24`) |
 
 ```bash
 py run_pipeline.py generate -n 5
 py run_pipeline.py generate -n 100 --name pluie --clean
+py run_pipeline.py generate -n 10 --runway LFPO_24
 ```
 
 > `--clean` supprime l'intégralité de `runs/` (toutes les générations).
+>
+> `--runway` réécrit le paramètre `airport_runway` du template avec la seule
+> piste demandée (le reste — trajectoire, météo, fautes — reste échantillonné).
+> La piste doit figurer dans la liste du template, sinon la commande s'arrête
+> avec une erreur explicite. Disponible aussi sur `full` et `full_evaluate`.
 
 ---
 
@@ -181,7 +188,7 @@ py run_pipeline.py evaluate --all --generation generation_01 --conf 0.4 --iou-me
 ### `full` — Phases 1 + 2
 
 ```bash
-py run_pipeline.py full [-n N] [--name NOM] [--clean] [--xplane-dir CHEMIN]
+py run_pipeline.py full [-n N] [--name NOM] [--clean] [--runway PISTE] [--xplane-dir CHEMIN]
 ```
 
 Enchaîne `generate` puis `export` sur les runs créés. **Sans évaluation.**
@@ -199,7 +206,7 @@ py run_pipeline.py full -n 100 --name pluie --clean
 ### `full_evaluate` — Phases 1 + 2 + 3
 
 ```bash
-py run_pipeline.py full_evaluate [-n N] [--name NOM] [--clean] \
+py run_pipeline.py full_evaluate [-n N] [--name NOM] [--clean] [--runway PISTE] \
     [--xplane-dir CHEMIN] [--conf C] [--imgsz S] [--iou-thresh T] [--iou-method M]
 ```
 
@@ -226,7 +233,8 @@ py run_pipeline.py full_evaluate -n 100 --name nuage_et_pluie
 | `--all`               | | ✓ | ✓ | | |
 | `--generation`        | | ✓ | ✓ | | |
 | `--xplane-dir` *(opt.)* | | ✓ | | ✓ | ✓ |
-| `--runway`            | | | ✓ | | |
+| `--runway` *(génère sur la piste)* | ✓ | | | ✓ | ✓ |
+| `--runway` *(filtre la GT)* | | | ✓ | | |
 | `--conf`              | | | ✓ | | ✓ |
 | `--imgsz`             | | | ✓ | | ✓ |
 | `--iou-thresh`        | | | ✓ | | ✓ |
@@ -286,6 +294,34 @@ section **Setup**.
 | `build_video(...)`        | —              | Assemble les images d'un/des run en MP4 |
 
 Les fonctions du notebook acceptent les mêmes formes de ciblage que le CLI (voir Notebook)
+
+---
+
+## Test d'injection météo (`scripts/injection_weather_test.py`)
+
+Outil de **prévisualisation** : injecte la météo du XML actif dans X-Plane et
+laisse la sim en pause pour observer la scène, **sans** générer ni rendre de
+scénario.
+
+```bash
+py scripts/injection_weather_test.py
+```
+
+> ⚠️ **Ce script n'échantillonne pas via TAF** : pour chaque paramètre il prend
+> le **milieu** de la plage `[min, max]` du XML (`(min + max) / 2`). Il injecte
+> donc une seule météo déterministe, pas un tirage aléatoire.
+>
+> **Conséquence pour `cloud_type`** (enum 0=Cirrus, 1=Stratus, 2=Cumulus,
+> 3=Cumulonimbus) : 
+> Pour prévisualiser un type, fige-le dans le XML avec `min = max` :
+>
+> ```xml
+> <parameter name="cloud_type" type="integer" min="3" max="3"/>  <!-- Cumulonimbus -->
+> ```
+>
+> Les autres paramètres (épaisseur, visibilité, couverture…) peuvent rester en
+> plage : leur milieu est une valeur d'aperçu raisonnable. La variété réelle des
+> 4 types de nuages n'apparaît que via `generate` (tirage TAF/z3 par scénario).
 
 ---
 
