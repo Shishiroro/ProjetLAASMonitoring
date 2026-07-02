@@ -29,7 +29,7 @@ from xml.etree import ElementTree as ET
 import cv2
 import yaml
 
-from lard_bridge import annotate_gt, load_gt_corners
+from lard_bridge import annotate_gt, load_gt_corners, generate_frame_times, _lard_cwd
 from evaluation.yolo.predict import MODEL_PATH  # SUT YOLO (banc d'eval)
 from runs import find_runs, list_images, pick_image_source
 from runway import runway_from_run_name
@@ -561,6 +561,64 @@ def build_params_trace(run_name: str | None = None):
         xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
         (run / "params_trace.xml").write_text(xml_str, encoding="utf-8")
         print(f"  {run.name} -> params_trace.xml")
+
+
+# ---------------------------------------------------------------------------
+# Export .esp (Google Earth Studio)
+# ---------------------------------------------------------------------------
+
+def build_esp(run_name: str | None = None, fov_vertical: float = 30.0):
+    """Genere run_dir/<run>.esp (projet Google Earth Studio) depuis les poses.
+
+    Pont renderer-agnostique -> GES : relit poses_cam_export.json et reconstruit
+    le .esp via LARD GEODataset.create_scenario (charge data/template.json,
+    normalise chaque canal dans [0,1] via min/maxValueRange, empile les keyframes).
+    On ne reimplemente pas le format GES : on reutilise le code LARD.
+
+    Convention pitch : poses_cam_export.json stocke deja le pitch en convention
+    GES (90 deg = horizontal), donc transmis tel quel a create_scenario.
+
+    :param run_name: chemin compose '<gen>/<run>' ; None = tous les runs.
+    :param fov_vertical: FOV vertical en degres (GES historique LARD = 30).
+    """
+    from src.geo.geo_dataset import GEODataset  # LARD (sys.path via _paths)
+
+    targets = find_runs(run_name=run_name, all_runs=run_name is None)
+    for run in targets:
+        poses_file = run / "poses_cam_export.json"
+        if not poses_file.exists():
+            print(f"  [skip] {run.name} : pas de poses_cam_export.json")
+            continue
+
+        data = json.loads(poses_file.read_text())
+        poses = data.get("poses", [])
+        if not poses:
+            print(f"  [skip] {run.name} : poses vides")
+            continue
+
+        # poses -> flight_data (lon, lat, alt, yaw, pitch, roll) attendu par LARD.
+        flight_data = [
+            (p["lon"], p["lat"], p["alt_m"], p["heading"], p["pitch"], p["roll"])
+            for p in poses
+        ]
+        fps = int(data.get("fps", 25))
+        n_frames = len(flight_data)
+        times = generate_frame_times(n_frames, fps)
+
+        dataset = GEODataset(str(run), run.name)
+        with _lard_cwd():  # CWD = LARD_ROOT pour data/template.json
+            scenario, _ = dataset.create_scenario(
+                flight_data,
+                fov_vertical=fov_vertical,
+                width=1024, height=1024,
+                nb_frames=n_frames, fps=fps,
+                times=times,
+            )
+
+        out = run / f"{run.name}.esp"
+        with open(out, "w") as f:
+            json.dump(scenario, f, indent=2)
+        print(f"  {run.name} -> {out.name}  ({n_frames} frames @ {fps}fps, fov={fov_vertical} deg)")
 
 
 # ---------------------------------------------------------------------------

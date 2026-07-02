@@ -43,6 +43,9 @@ def _add_generate_args(parser):
                              "au lieu de runs/generation_NN/)")
     parser.add_argument("--clean", action="store_true",
                         help="Vider runs/ avant la generation")
+    parser.add_argument("--runway", type=str, default=None,
+                        help="Forcer toutes les generations sur une piste "
+                             "(format ICAO_RWY, ex LFPO_24)")
 
 
 def _add_target_args(parser):
@@ -134,7 +137,8 @@ Structure runs/ :
 
     if args.mode == "generate":
         created = generate_runs(nb_scenarios=args.nb_scenarios,
-                                name=args.name, clean=args.clean)
+                                name=args.name, clean=args.clean,
+                                runway=args.runway)
         if created:
             gen = created[0].parent.name
             print(f"  Prochaine etape : run_pipeline.py export --all --generation {gen}")
@@ -172,14 +176,14 @@ Structure runs/ :
     elif args.mode == "full":
         full_pipeline(
             nb_scenarios=args.nb_scenarios,
-            name=args.name, clean=args.clean,
+            name=args.name, clean=args.clean, runway=args.runway,
             xplane_dir=args.xplane_dir,
         )
 
     elif args.mode == "full_evaluate":
         full_evaluate_pipeline(
             nb_scenarios=args.nb_scenarios,
-            name=args.name, clean=args.clean,
+            name=args.name, clean=args.clean, runway=args.runway,
             conf=args.conf, imgsz=args.imgsz,
             iou_thresh=args.iou_thresh, iou_method=args.iou_method,
             xplane_dir=args.xplane_dir,

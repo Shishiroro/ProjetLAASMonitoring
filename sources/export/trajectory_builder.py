@@ -60,8 +60,8 @@ class OUParams:
     dist_ap_m: float = 300.0        # distance aiming point depuis LTP, ou l'avion vise (touchdown ~300m apres seuil)
 
     # Offset initial (degrade avec la convergence finale)
-    alpha_h_offset_deg: float = 0.0   # ex: 2.0 = 2° lateral au start
-    alpha_v_offset_deg: float = 0.0   # ex: 0.5 = 0.5° au-dessus du glide
+    alpha_h_offset_deg: float = 5.0   # ex: 2.0 = 2° lateral au start
+    alpha_v_offset_deg: float = 5.0   # ex: 0.5 = 0.5° au-dessus du glide
 
 # ---------------------------------------------------------------------------
 # Timeline spatiale

@@ -262,6 +262,9 @@ py run_pipeline.py evaluate --all --generation generation_01
 
 # Tout enchaîner d'un coup (cycle complet avec évaluation)
 py run_pipeline.py full_evaluate -n 5
+
+# Forcer une piste précise (sinon TAF échantillonne parmi les ~980 du template)
+py run_pipeline.py generate -n 10 --runway LFPO_24
 ```
 
 **Pour une utilisation normale, la commande `full_evaluate` suffit** : elle
