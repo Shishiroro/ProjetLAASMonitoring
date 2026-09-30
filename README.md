@@ -2,7 +2,7 @@
 
 # SI VOUS SOUHAITEZ CONSULTER LA VERSION OFFICIELLE DE L'OUTIL  https://gitlab.laas.fr/mdario/lardon
 
-L'ACTUEL LIEN EST LA VERSION NON-OFFICIELLE.
+L'ACTUEL LIEN EST LA VERSION NON-OFFICIELLE ET N'EST PLUS MIS à JOUR.
 
 Outil de génération de **trajectoires d'approche réalistes aériennes** , rendues sous **X-Plane 12**, avec dégradation capteur et évaluation d'un
 modèle de détection de piste.
